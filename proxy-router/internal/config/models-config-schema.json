@@ -28,13 +28,13 @@
           },
           "apiStack": {
             "title": "API Stack",
-            "description": "Optional backend API preset advertised in the model's api block (/healthcheck and pong models); it never selects the adapter. Its transport must match apiType: openai for every preset except anthropic, which requires claudeai. Trimmed and lowercased on load; an unknown preset or a mismatch is logged and ignored for that model (served without an api block)",
+            "description": "Optional backend API preset advertised in the model's api block (/healthcheck and pong models); it never selects the adapter. Its transport must match apiType: openai for every preset except anthropic, which requires claudeai. Trimmed and lowercased on load; an unknown preset or a mismatch is logged and ignored for that model (served without an api block). When omitted, the backend API is detected at runtime by probing the backend's service endpoints (never inference requests; one hop through LiteLLM) and reported with source: detected; MODEL_API_DETECT_ENABLED=false turns detection off.",
             "type": "string",
             "enum": ["openai", "vllm", "sglang", "llamacpp", "ollama", "venice", "openrouter", "litellm", "anthropic"]
           },
           "modelFamily": {
             "title": "Model Family",
-            "description": "Optional canonical model family used to pick reasoning-control bindings. Families with bindings: qwen3, qwq, deepseek-v3.1, deepseek-r1, gpt-oss, glm, granite, hunyuan, seed-oss, nemotron, claude, o-series, gemini, gemma (Gemma 4 members only), kimi (K2.5 / K2.6 hybrid; K2 Thinking, K2.7-Code and K3 always-on), minimax (MiniMax-M2 and M2.x always-on; MiniMax-M3 hybrid via thinking_mode; Text-01 and M1 none), exaone (EXAONE 4.x hybrid; EXAONE Deep always-on). For gemma, kimi, minimax and exaone the member is detected from modelName, so modelFamily alone does not select those bindings. Any other value (or an inferred label such as llama, mistral, phi) is accepted and reported as modelFamily without reasoning bindings; inferred from modelName when omitted",
+            "description": "Optional canonical model family used to pick reasoning-control bindings. Families with bindings: qwen3, qwq, deepseek-v3.1, deepseek-r1, gpt-oss, glm, granite, hunyuan, seed-oss, nemotron, claude, o-series, gemini, gemma (Gemma 4 members only), kimi (K2.5 / K2.6 hybrid; K2 Thinking, K2.7-Code and K3 always-on), minimax (MiniMax-M2 and M2.x always-on; MiniMax-M3 hybrid via thinking_mode; Text-01 and M1 none), exaone (EXAONE 4.x hybrid; EXAONE Deep always-on). For gemma, kimi, minimax and exaone the member is detected from modelName, so modelFamily alone does not select those bindings. Any other value (or an inferred label such as llama, mistral, phi) is accepted and reported as modelFamily without reasoning bindings; inferred from modelName when omitted. Runtime detection never overrides an explicit value; it only fills an empty one.",
             "type": "string"
           },
           "apiUrl": {

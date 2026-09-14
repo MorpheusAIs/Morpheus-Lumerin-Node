@@ -4933,8 +4933,12 @@
                         "type": "string"
                     }
                 },
+                "source": {
+                    "description": "Source says how the block was obtained: declared (models-config\napiStack preset) or detected (runtime probing of the backend's service\nendpoints, never inference requests). A detected block reports only\nwhat this struct carries — no upstream model id, api_base or hostname.",
+                    "type": "string"
+                },
                 "stack": {
-                    "description": "Stack is the serving stack / vendor preset: vllm | sglang | llamacpp |\nollama | venice | openrouter | litellm | anthropic | openai.",
+                    "description": "Stack is the serving stack / vendor preset: vllm | sglang | llamacpp |\nollama | venice | openrouter | litellm | anthropic | openai. A detected\nblock may also report engines that are not presets (tgi, lmstudio,\nkoboldcpp) or a hosted vendor recognised by hostname (together,\nfireworks, groq, deepinfra, hyperbolic, mistral, gemini, xai, deepseek,\nmoonshot, nvidia-nim, cerebras, sambanova); those carry no bindings table.",
                     "type": "string"
                 },
                 "thinking": {
@@ -4951,7 +4955,7 @@
             "type": "object",
             "properties": {
                 "api": {
-                    "description": "Api is the provider-declared API spec for this model (see internal/apispec): serving stack preset, model family and the request-param bindings a consumer needs to translate canonical fields. Derived from models-config presets only — never the backend URL, key or private model string.",
+                    "description": "Api is the API spec for this model (see internal/apispec and internal/apidetect): serving stack, model family and the request-param bindings a consumer needs to translate canonical fields. Composed from models-config presets (source: declared) or from probing the backend's service endpoints (source: detected) — never the backend URL, key, hostnames or the private model string.",
                     "allOf": [
                         {
                             "$ref": "#/definitions/system.ModelApiSpec"

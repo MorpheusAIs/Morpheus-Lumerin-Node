@@ -1150,10 +1150,21 @@ definitions:
         items:
           type: string
         type: array
+      source:
+        description: |-
+          Source says how the block was obtained: declared (models-config
+          apiStack preset) or detected (runtime probing of the backend's service
+          endpoints, never inference requests). A detected block reports only
+          what this struct carries — no upstream model id, api_base or hostname.
+        type: string
       stack:
         description: |-
           Stack is the serving stack / vendor preset: vllm | sglang | llamacpp |
-          ollama | venice | openrouter | litellm | anthropic | openai.
+          ollama | venice | openrouter | litellm | anthropic | openai. A detected
+          block may also report engines that are not presets (tgi, lmstudio,
+          koboldcpp) or a hosted vendor recognised by hostname (together,
+          fireworks, groq, deepinfra, hyperbolic, mistral, gemini, xai, deepseek,
+          moonshot, nvidia-nim, cerebras, sambanova); those carry no bindings table.
         type: string
       thinking:
         allOf:
@@ -1166,10 +1177,12 @@ definitions:
       api:
         allOf:
         - $ref: '#/definitions/system.ModelApiSpec'
-        description: 'Api is the provider-declared API spec for this model (see internal/apispec):
-          serving stack preset, model family and the request-param bindings a consumer
-          needs to translate canonical fields. Derived from models-config presets
-          only — never the backend URL, key or private model string.'
+        description: 'Api is the API spec for this model (see internal/apispec and
+          internal/apidetect): serving stack, model family and the request-param bindings
+          a consumer needs to translate canonical fields. Composed from models-config
+          presets (source: declared) or from probing the backend''s service endpoints
+          (source: detected) — never the backend URL, key, hostnames or the private
+          model string.'
       bidId:
         type: string
       errorKind:

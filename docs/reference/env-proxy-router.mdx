@@ -186,6 +186,7 @@ On provider nodes the proxy-router periodically probes every model from `models-
 | `MODEL_HEALTH_CHECK_TIMEOUT` | `60s` | Per-model probe timeout |
 | `MODEL_HEALTH_CHECK_PROBE_DELAY` | `2s` | Pause between per-model probes so many-model providers don't burst their upstream into a rate limit |
 | `MODEL_HEALTH_MAX_CONSECUTIVE_ERRORS` | `3` | Consecutive real-session prompt failures after which the model is reported `unhealthy` (`errorKind: session_errors`) immediately, without waiting for the next scheduled probe |
+| `MODEL_API_DETECT_ENABLED` | `true` | Auto-detect the backend API of models without `apiStack` (service-endpoint probes, never inference requests, one hop through LiteLLM); `false` disables all probing and such models report no `api` block. Per-model budget: 10 s, capped by `MODEL_HEALTH_CHECK_TIMEOUT` |
 
 ## Session health policy (consumer)
 
