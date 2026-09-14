@@ -2,7 +2,9 @@ package apidetect
 
 import (
 	"context"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -129,6 +131,10 @@ func (d *Detector) litellmUpstream(ctx context.Context, base, modelName, apiKey 
 	}
 
 	// (c) one anonymous hop, under its own budget, into a scratch Evidence.
+	if !hopAllowed(apiBase) {
+		tracef(ctx, "litellm api_base %s refused for the second hop (scheme/address)", RedactURL(apiBase))
+		return
+	}
 	hopCtx, cancel := context.WithTimeout(ctx, hopTimeout)
 	defer cancel()
 	bases := baseCandidates(apiBase)
@@ -195,4 +201,32 @@ func (d *Detector) litellmUpstream(ctx context.Context, base, modelName, apiKey 
 		ev.GatewayReasoning = true
 		tracef(ctx, "upstream %s listing reports reasoning support for %q (bindings stay in litellm's vocabulary)", kind, upstreamID)
 	}
+}
+
+// hopAllowed reports whether apiBase is safe to dial for the second hop.
+// The URL must parse with an http or https scheme and a non-empty hostname;
+// when the hostname is a literal IP, the unspecified, link-local (unicast
+// or multicast) and multicast ranges are refused — classic SSRF targets
+// (cloud metadata, mDNS/link-local discovery, ...) that a third-party
+// api_base should never be able to point this hop at. Loopback and private
+// (RFC1918 and equivalent) addresses stay allowed: self-hosted vLLM/Ollama
+// upstreams legitimately live there.
+func hopAllowed(apiBase string) bool {
+	u, err := url.Parse(apiBase)
+	if err != nil {
+		return false
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return false
+	}
+	host := u.Hostname()
+	if host == "" {
+		return false
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		if ip.IsUnspecified() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() {
+			return false
+		}
+	}
+	return true
 }

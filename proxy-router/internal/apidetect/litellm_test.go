@@ -19,9 +19,10 @@ import (
 
 // requestLog records every request a fake server saw.
 type requestLog struct {
-	mu    sync.Mutex
-	paths []string
-	auth  []string
+	mu      sync.Mutex
+	paths   []string
+	auth    []string
+	headers []http.Header
 }
 
 func (l *requestLog) record(r *http.Request) {
@@ -29,6 +30,7 @@ func (l *requestLog) record(r *http.Request) {
 	defer l.mu.Unlock()
 	l.paths = append(l.paths, r.URL.Path)
 	l.auth = append(l.auth, r.Header.Get("Authorization"))
+	l.headers = append(l.headers, r.Header.Clone())
 }
 
 func (l *requestLog) sawPath(p string) bool {
@@ -55,6 +57,9 @@ func (l *requestLog) requireAnonymous(t *testing.T) {
 	require.NotEmpty(t, l.paths, "the upstream was expected to be probed")
 	for i, a := range l.auth {
 		require.Equal(t, "", a, "request %d (%s) carried a credential", i, l.paths[i])
+		for _, h := range []string{"Cookie", "X-Api-Key", "Api-Key"} {
+			require.Equal(t, "", l.headers[i].Get(h), "request %d (%s) carried a %s header", i, l.paths[i], h)
+		}
 	}
 }
 
@@ -280,9 +285,8 @@ func TestDetectLiteLLMTwoHopDocumentedCloudPrefixIsNotProbed(t *testing.T) {
 // identifies it by its liveliness endpoint and stops there: its model group
 // and deployments are never read, no credential is ever sent.
 func TestDetectLiteLLMTwoHopUpstreamLiteLLMIsNotFollowed(t *testing.T) {
-	upstream, upLog := litellmServer(t, noReasoningGroup, []map[string]any{deployment("qwen3-32b", "openai/qwen3-32b", "", nil)})
-
 	t.Run("openai prefix at an unrecognised host", func(t *testing.T) {
+		upstream, upLog := litellmServer(t, noReasoningGroup, []map[string]any{deployment("qwen3-32b", "openai/qwen3-32b", "", nil)})
 		front, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "openai/qwen3-32b", upstream.URL+"/v1", nil)})
 		api, trace := detectVia(t, front.URL, "my-chat", DefaultOptions())
 		require.Equal(t, "litellm", api.Stack)
@@ -298,6 +302,7 @@ func TestDetectLiteLLMTwoHopUpstreamLiteLLMIsNotFollowed(t *testing.T) {
 	})
 
 	t.Run("hosted_vllm prefix pointing at a LiteLLM", func(t *testing.T) {
+		upstream, upLog := litellmServer(t, noReasoningGroup, []map[string]any{deployment("qwen3-32b", "openai/qwen3-32b", "", nil)})
 		front, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "hosted_vllm/qwen3-32b", upstream.URL, nil)})
 		api, _ := detectVia(t, front.URL, "my-chat", DefaultOptions())
 		require.Equal(t, "litellm", api.Stack)
@@ -387,6 +392,25 @@ func TestDetectLiteLLMTwoHopTraceRedaction(t *testing.T) {
 	require.NotContains(t, trace, "sk-UPSTREAMSECRET")
 	require.NotContains(t, trace, "sk-litellm")
 	require.Contains(t, trace, RedactURL(withCreds))
+}
+
+// Same credentialed api_base form as above, but the host is not mapped to
+// any vendor: the second hop takes the "unrecognised host" fingerprint
+// branch, whose "fingerprinting engines at …" line prints parsed base
+// candidates rather than going through RedactURL directly — this pins that
+// it still carries no userinfo either.
+func TestDetectLiteLLMTwoHopTraceRedactionUnrecognisedHost(t *testing.T) {
+	dead, _ := loggingServer(t, http.NewServeMux())
+	withCreds := strings.Replace(dead.URL, "http://", "http://user:URLSECRET@", 1) + "/v1?key=QUERYSECRET"
+	litellm, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "openai/qwen3-32b", withCreds, map[string]any{"api_key": "sk-UPSTREAMSECRET"})})
+
+	_, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
+	require.NotContains(t, trace, "URLSECRET")
+	require.NotContains(t, trace, "QUERYSECRET")
+	require.NotContains(t, trace, "sk-UPSTREAMSECRET")
+	require.NotContains(t, trace, "sk-litellm")
+	require.Contains(t, trace, RedactURL(withCreds))
+	require.Contains(t, trace, "fingerprinting engines at", "the unrecognised-host branch line itself must be exercised")
 }
 
 func TestDetectLiteLLMTwoHopDisabled(t *testing.T) {
@@ -550,4 +574,81 @@ func TestDetectLiteLLMTwoHopKeepsSupportedReasoningEfforts(t *testing.T) {
 	require.Equal(t, "low", api.Bindings[system.IntentReasoningEnable].Value, "first supported effort other than none")
 	require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
 	require.True(t, llLog.sawPath("/model/info"))
+}
+
+// Controller ruling: hopAllowed gates the second hop's target by scheme and
+// address before any request is sent. Non-http(s) schemes and the classic
+// SSRF literal-IP ranges (unspecified, link-local unicast/multicast,
+// multicast — cloud metadata, mDNS, ...) are refused. Loopback and private
+// (RFC1918 and equivalent) addresses stay allowed: self-hosted vLLM/Ollama
+// upstreams legitimately live there.
+func TestHopAllowed(t *testing.T) {
+	cases := []struct {
+		name    string
+		apiBase string
+		allowed bool
+	}{
+		{"non-http scheme (file)", "file:///x", false},
+		{"non-http scheme (ftp)", "ftp://h", false},
+		{"ipv4 link-local (cloud metadata)", "http://169.254.169.254/v1", false},
+		{"ipv4 unspecified", "http://0.0.0.0:8000", false},
+		{"ipv6 link-local unicast", "http://[fe80::1]:11434", false},
+		{"ipv6 link-local multicast", "http://[ff02::1]", false},
+		{"loopback", "http://127.0.0.1:11434", true},
+		{"private rfc1918", "http://10.0.0.5:8000", true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			require.Equal(t, c.allowed, hopAllowed(c.apiBase), c.apiBase)
+		})
+	}
+}
+
+// End-to-end: the gate is actually wired into the second hop. A refused
+// api_base never reaches baseCandidates/fingerprintEngines — the refusal is
+// traced and the bare upstream id still names the family (hop-1 evidence is
+// unaffected) — while a loopback or private-address api_base still runs the
+// hop as before.
+func TestDetectLiteLLMTwoHopHopTargetGate(t *testing.T) {
+	refused := []struct{ name, apiBase string }{
+		{"non-http scheme (file)", "file:///x"},
+		{"non-http scheme (ftp)", "ftp://h"},
+		{"ipv4 link-local (cloud metadata)", "http://169.254.169.254/v1"},
+		{"ipv4 unspecified", "http://0.0.0.0:8000"},
+		{"ipv6 link-local unicast", "http://[fe80::1]:11434"},
+		{"ipv6 link-local multicast", "http://[ff02::1]"},
+	}
+	for _, c := range refused {
+		t.Run(c.name, func(t *testing.T) {
+			litellm, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "openai/qwen3-32b", c.apiBase, nil)})
+			api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
+			require.Equal(t, "litellm", api.Stack)
+			require.Equal(t, "qwen3", api.ModelFamily, "bare-id family evidence still applies")
+			require.Nil(t, api.Thinking, "the hop never ran")
+			require.Contains(t, trace, "refused for the second hop (scheme/address)")
+			require.Contains(t, trace, RedactURL(c.apiBase))
+			require.NotContains(t, trace, "litellm openai-compatible upstream at an unrecognised host", "no probe may start")
+		})
+	}
+
+	t.Run("allowed: loopback (httptest server)", func(t *testing.T) {
+		vllm, vllmLog := vllmServer(t, "deepseek-ai/DeepSeek-R1")
+		litellm, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "hosted_vllm/local-model", vllm.URL, nil)})
+		api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
+		require.Equal(t, "deepseek-r1", api.ModelFamily, "the hop reached the loopback upstream")
+		require.NotContains(t, trace, "refused for the second hop")
+		vllmLog.requireAnonymous(t)
+	})
+
+	t.Run("allowed: private RFC1918 address", func(t *testing.T) {
+		prev := hopTimeout
+		hopTimeout = 300 * time.Millisecond
+		t.Cleanup(func() { hopTimeout = prev })
+
+		litellm, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "openai/qwen3-32b", "http://10.0.0.5:8000", nil)})
+		api, trace := detectVia(t, litellm.URL, "my-chat", Options{TwoHop: true, ProbeTimeout: 100 * time.Millisecond})
+		require.Equal(t, "qwen3", api.ModelFamily, "bare-id family: unreachable in the test sandbox, but not gated off")
+		require.NotContains(t, trace, "refused for the second hop")
+		require.Contains(t, trace, "litellm openai-compatible upstream at an unrecognised host", "the hop was attempted")
+	})
 }

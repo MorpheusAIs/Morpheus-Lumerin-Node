@@ -56,7 +56,9 @@ type Options struct {
 	// IgnoreHostVendors disables hostname recognition so hosted vendors are
 	// identified purely by their endpoints and model-listing shape, as an
 	// unknown custom domain would be. Diagnostics only (cmd/apidetect
-	// -ignore-host); leave false in the sweep path.
+	// -ignore-host); leave false in the sweep path. Does not apply to the
+	// LiteLLM second hop, where recognising api_base's host is the point of
+	// the hop.
 	IgnoreHostVendors bool
 	// ProbeTimeout overrides the 2 s per-probe timeout (tests only; 0 keeps
 	// the default).
@@ -205,7 +207,11 @@ func (d *Detector) detect(ctx context.Context, cfg config.ModelConfig) *system.M
 
 	switch ev.Stack {
 	case "":
-		tracef(ctx, "host of %s is not a known hosted vendor; fingerprinting engines at %v", RedactURL(cfg.ApiURL), bases)
+		apiURLText := "(no apiUrl)"
+		if cfg.ApiURL != "" {
+			apiURLText = RedactURL(cfg.ApiURL)
+		}
+		tracef(ctx, "host of %s is not a known hosted vendor; fingerprinting engines at %v", apiURLText, bases)
 		// Self-hosted or unrecognized host: fingerprint the engine, and when
 		// that yields nothing, check for a registry-shaped model listing
 		// (OpenRouter-compatible proxies on custom domains).

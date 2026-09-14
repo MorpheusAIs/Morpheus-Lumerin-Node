@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apispec"
@@ -89,7 +90,7 @@ func (d *Detector) requestJSON(ctx context.Context, method, urlStr, apiKey strin
 		}
 		return nil
 	}
-	tracef(ctx, "%s %s -> HTTP %d, JSON object with keys %v", method, urlStr, resp.StatusCode, mapKeys(out))
+	tracef(ctx, "%s %s -> HTTP %d, JSON object with keys %s", method, urlStr, resp.StatusCode, tracedKeys(mapKeys(out)))
 	return out
 }
 
@@ -114,6 +115,31 @@ func mapKeys(m map[string]any) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// maxTracedKeys caps how many JSON object keys a trace line prints: a
+// third-party response (the LiteLLM second hop reads unauthenticated JSON)
+// may carry an unbounded number of keys, and the trace must stay bounded.
+const maxTracedKeys = 20
+
+// tracedKeys renders keys for a trace line: each key quoted, so control
+// characters or stray formatting verbs in a third-party key are never
+// echoed raw, and the list capped at maxTracedKeys with a trailing "…" when
+// truncated.
+func tracedKeys(keys []string) string {
+	truncated := len(keys) > maxTracedKeys
+	if truncated {
+		keys = keys[:maxTracedKeys]
+	}
+	quoted := make([]string, len(keys))
+	for i, k := range keys {
+		quoted[i] = strconv.Quote(k)
+	}
+	joined := strings.Join(quoted, " ")
+	if truncated {
+		joined += " …"
+	}
+	return "[" + joined + "]"
 }
 
 // fingerprintEngines identifies a self-hosted serving stack by probing each
