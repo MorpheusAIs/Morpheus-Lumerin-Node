@@ -70,11 +70,24 @@ type TeeStatusProvider interface {
 	ReattestBackend(ctx context.Context, modelID string, endpoint string) error
 }
 
+// ApiDetector identifies the API serving a configured model backend at
+// runtime (implemented by apidetect.Detector, which caches internally).
+// Optional dependency; results are attached to the health report so they
+// surface on /healthcheck and in the morrpc pong models list.
+type ApiDetector interface {
+	Detect(ctx context.Context, cfg config.ModelConfig) *system.ModelApiSpec
+}
+
 // DefaultMaxConsecutiveErrors is the number of consecutive real-session
 // prompt failures after which a model is flipped to unhealthy (or degraded,
 // when the whole streak is upstream rate limiting) without waiting for the
 // next scheduled probe sweep.
 const DefaultMaxConsecutiveErrors = 3
+
+// detectBudget caps API detection per model inside a sweep so a cold
+// detector cache (many probes per unknown backend) cannot consume the
+// whole model-health timeout before any probe result lands.
+const detectBudget = 10 * time.Second
 
 // modelMeta caches the public on-chain facts about a model so each sweep
 // only pays one registry call per previously unseen model.
@@ -159,6 +172,11 @@ type Deps struct {
 	// first sweep relies on the startup attestation), and models whose
 	// attestation does not pass are reported as tee_unverified.
 	TeeStatus TeeStatusProvider
+	// ApiDetect is optional; when set, every configured model without an
+	// apiStack has its backend API detected on each sweep (cached by the
+	// detector) and reported with source: detected. Nil (kill switch
+	// MODEL_API_DETECT_ENABLED=false) means such models report no api block.
+	ApiDetect ApiDetector
 }
 
 func NewChecker(deps Deps, interval, timeout, probeDelay time.Duration, maxConsecutiveErrors int, log lib.ILogger) *Checker {
@@ -396,12 +414,25 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 		c.log.Warnf("model %s: unknown modelFamily %q — no family bindings will be advertised", lib.Short(modelID), cfg.ModelFamily)
 	}
 
-	// Provider-declared API spec: advertised only for models that declare
-	// apiStack in models-config (Build returns nil otherwise) so consumers
-	// can shape requests before a session. DeclaredAt is only refreshed when
-	// the composed spec actually changed, so it reflects when the declaration
-	// last changed rather than every sweep.
-	if api := apispec.Build(cfg); api != nil {
+	// API spec: a declared apiStack is composed statically (explicit
+	// declaration wins, no probing); otherwise the detector identifies the
+	// backend within a bounded budget, for every configured model, bid or
+	// not. DeclaredAt is only refreshed when the composed spec actually
+	// changed, so it reflects when the spec last changed rather than every
+	// sweep.
+	var api *system.ModelApiSpec
+	if apispec.StackFor(cfg.ApiStack) != "" {
+		api = apispec.Build(cfg)
+	} else if c.deps.ApiDetect != nil && (cfg.ApiURL != "" || cfg.ModelName != "") {
+		budget := c.timeout
+		if budget <= 0 || budget > detectBudget {
+			budget = detectBudget
+		}
+		detectCtx, cancel := context.WithTimeout(ctx, budget)
+		api = c.deps.ApiDetect.Detect(detectCtx, cfg)
+		cancel()
+	}
+	if api != nil {
 		api.DeclaredAt = time.Now().Unix()
 		if hasPrev && prev.Api != nil && sameApiSpecIgnoringDeclaredAt(prev.Api, api) {
 			api.DeclaredAt = prev.Api.DeclaredAt
