@@ -244,3 +244,31 @@ func TestBuildThinkingNameOverridesFamilyDefault(t *testing.T) {
 	require.Equal(t, system.ThinkingModeAlwaysOn, api.Thinking.Mode)
 	require.Nil(t, api.Bindings[system.IntentReasoningDisable])
 }
+
+// TestBuildNameAwareFamilies covers families whose bindings depend on the
+// member: the inferred family is reported for every member, but only the
+// documented reasoning members get a thinking mode.
+func TestBuildNameAwareFamilies(t *testing.T) {
+	g4 := build("vllm", "google/gemma-4-31B-it", "")
+	require.Equal(t, "gemma", g4.ModelFamily)
+	require.Equal(t, system.ThinkingModeControllable, g4.Thinking.Mode)
+	require.Equal(t, "chat_template_kwargs.enable_thinking", g4.Bindings[system.IntentReasoningDisable].Param)
+
+	g3 := build("vllm", "google/gemma-3-27b-it", "")
+	require.Equal(t, "gemma", g3.ModelFamily)
+	require.Nil(t, g3.Thinking)
+	require.Nil(t, g3.Bindings[system.IntentReasoningDisable])
+
+	m2 := build("sglang", "MiniMaxAI/MiniMax-M2.1", "")
+	require.Equal(t, "minimax", m2.ModelFamily)
+	require.Equal(t, system.ThinkingModeAlwaysOn, m2.Thinking.Mode)
+
+	k26 := build("vllm", "moonshotai/Kimi-K2.6", "")
+	require.Equal(t, "kimi", k26.ModelFamily)
+	require.Equal(t, system.ThinkingModeControllable, k26.Thinking.Mode)
+	require.Equal(t, "chat_template_kwargs.thinking", k26.Bindings[system.IntentReasoningDisable].Param)
+
+	ex := build("llamacpp", "LGAI-EXAONE/EXAONE-3.5-7.8B-Instruct", "exaone")
+	require.Equal(t, "exaone", ex.ModelFamily)
+	require.Nil(t, ex.Thinking)
+}

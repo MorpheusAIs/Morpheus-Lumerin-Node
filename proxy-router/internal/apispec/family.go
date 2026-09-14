@@ -56,6 +56,17 @@ var familyRules = []familyRule{
 // oSeriesRe matches OpenAI reasoning-series basenames: o1, o3-mini, o4-mini...
 var oSeriesRe = regexp.MustCompile(`^o[0-9]+(-|$)`)
 
+// knownFamilies is every label FamilyFromName can produce: the familyRules
+// table plus o-series (matched by oSeriesRe). Built from the table so the
+// two can't drift.
+var knownFamilies = func() map[string]bool {
+	m := map[string]bool{"o-series": true}
+	for _, r := range familyRules {
+		m[r.family] = true
+	}
+	return m
+}()
+
 // FamilyFromName infers the canonical model family from a model name or
 // registry id (e.g. "Qwen/Qwen3-235B-A22B", "deepseek-r1:70b").
 func FamilyFromName(name string) string {
@@ -110,8 +121,10 @@ func budgetKwargBindings() bindingSet {
 // bindingsForFamily returns the family's default reasoning bindings, used
 // when the backend exposes no direct evidence (no chat template, no
 // capability list). The model name refines the family answer: a "-thinking"
-// variant of a hybrid family reasons unconditionally. alwaysOn is reported
-// separately since it is a mode with no bindings at all.
+// variant of a hybrid family reasons unconditionally, and gemma, kimi,
+// minimax and exaone only bind for the members whose official docs describe
+// a reasoning mode. alwaysOn is reported separately since it is a mode with
+// no bindings at all.
 func bindingsForFamily(family, modelName string) (alwaysOn bool, b bindingSet) {
 	if strings.Contains(strings.ToLower(modelName), "thinking") {
 		return true, nil
@@ -145,32 +158,123 @@ func bindingsForFamily(family, modelName string) (alwaysOn bool, b bindingSet) {
 			system.IntentReasoningBudget:  {Kind: system.BindingKindBodyParam, Param: param, ParamType: "number"},
 			system.IntentReasoningDisable: {Kind: system.BindingKindBodyParam, Param: param, ParamType: "number", Value: 0},
 		}
+	case "gemma":
+		return gemmaBindings(modelName)
+	case "kimi":
+		return kimiBindings(modelName)
+	case "minimax":
+		return minimaxBindings(modelName)
+	case "exaone":
+		return exaoneBindings(modelName)
 	}
 	return false, nil
 }
 
-// IsKnownFamily reports whether name is one of the model families
-// bindingsForFamily has dedicated bindings for (the documented set: qwen3,
-// deepseek-v3.1, deepseek-r1, gpt-oss, glm, granite, seed-oss, nemotron,
-// claude, o-series, gemini — plus qwq and hunyuan, which share a case with a
-// documented family in the same switch and get real bindings too). Mirrors
-// bindingsForFamily's switch rather than a second hand-written list so the
-// two can't drift; comparison is case-insensitive to match Build's own
-// normalization of ModelFamily.
-func IsKnownFamily(name string) bool {
-	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "qwen3", "glm", "hunyuan",
-		"deepseek-v3.1", "granite",
-		"qwq", "deepseek-r1",
-		"gpt-oss",
-		"seed-oss",
-		"nemotron",
-		"claude",
-		"o-series",
-		"gemini":
-		return true
+// containsAny reports whether the lowercased name contains any of subs.
+func containsAny(name string, subs ...string) bool {
+	n := strings.ToLower(name)
+	for _, sub := range subs {
+		if strings.Contains(n, sub) {
+			return true
+		}
 	}
 	return false
+}
+
+// gemmaBindings: only Gemma 4 has a thinking mode, and it is off unless the
+// enable_thinking chat-template kwarg is passed. Verified against the Google
+// model card https://huggingface.co/google/gemma-4-31B-it ("To enable
+// reasoning, set `enable_thinking=True`"), its chat template
+// https://huggingface.co/google/gemma-4-31B-it/raw/main/chat_template.jinja
+// (`enable_thinking | default(false)`),
+// https://ai.google.dev/gemma/docs/capabilities/thinking and the vLLM note at
+// https://docs.vllm.ai/en/latest/features/reasoning_outputs/ ("Gemma 4
+// reasoning is disabled by default; to enable it, pass enable_thinking=True
+// in your chat_template_kwargs"). Gemma 3 and older have no thinking mode
+// (the Gemma 4 card's own comparison column is "Gemma 3 27B (no think)" and
+// https://ai.google.dev/gemma/docs/core/model_card_3 documents none), so
+// they get no bindings.
+func gemmaBindings(modelName string) (alwaysOn bool, b bindingSet) {
+	if containsAny(modelName, "gemma-4", "gemma4", "gemma_4") {
+		return false, kwargBoolBindings("enable_thinking")
+	}
+	return false, nil
+}
+
+// kimiBindings covers Moonshot's Kimi K2 line, per the official model cards:
+//   - Kimi-K2-Thinking (https://huggingface.co/moonshotai/Kimi-K2-Thinking):
+//     a thinking model whose template and deploy guide expose no toggle —
+//     always on; the generic "thinking" name rule above already handles it.
+//   - Kimi-K2.7-Code (https://huggingface.co/moonshotai/Kimi-K2.7-Code):
+//     "forces thinking and preserve_thinking as True. [...] Instant mode is
+//     not supported." — always on.
+//   - Kimi-K2.5 / Kimi-K2.6 (https://huggingface.co/moonshotai/Kimi-K2.5,
+//     https://huggingface.co/moonshotai/Kimi-K2.6): thinking on by default;
+//     "To use instant mode, you need to pass {'chat_template_kwargs':
+//     {"thinking": False}}" — the same boolean kwarg shape as deepseek-v3.1.
+//   - Kimi-K2-Instruct (https://huggingface.co/moonshotai/Kimi-K2-Instruct):
+//     "a reflex-grade model without long thinking" — no bindings.
+func kimiBindings(modelName string) (alwaysOn bool, b bindingSet) {
+	switch {
+	case containsAny(modelName, "k2.7-code"):
+		return true, nil
+	case containsAny(modelName, "k2.5", "k2.6"):
+		return false, kwargBoolBindings("thinking")
+	}
+	return false, nil
+}
+
+// minimaxBindings: MiniMax-M2 and every M2.x (M2.1, M2.5, M2.7, -highspeed)
+// are interleaved-thinking models with no off switch. Verified against
+// https://huggingface.co/MiniMaxAI/MiniMax-M2 ("MiniMax-M2 is an interleaved
+// thinking model [...] Do not remove the <think>...</think> part"; its chat
+// template pre-fills "<think>\n" unconditionally and reads no kwarg) and
+// https://platform.minimax.io/docs/api-reference/text-chat-openai ("For M2.x
+// models, thinking cannot be disabled"). MiniMax-Text-01
+// (https://huggingface.co/MiniMaxAI/MiniMax-Text-01) has no thinking mode.
+// MiniMax-M1 (https://huggingface.co/MiniMaxAI/MiniMax-M1-80k) emits <think>
+// blocks, but no official source says whether that can be turned off, so it
+// is deliberately left without bindings rather than guessed.
+func minimaxBindings(modelName string) (alwaysOn bool, b bindingSet) {
+	if containsAny(modelName, "minimax-m2") {
+		return true, nil
+	}
+	return false, nil
+}
+
+// exaoneBindings covers LG AI Research's EXAONE line, per the official
+// LGAI-EXAONE model cards:
+//   - EXAONE Deep (https://huggingface.co/LGAI-EXAONE/EXAONE-Deep-32B): the
+//     template unconditionally opens <thought> ("Ensure the model starts
+//     with `<thought>\n` for reasoning steps") and documents no toggle —
+//     always on.
+//   - EXAONE 4.0 / 4.0.1 (https://huggingface.co/LGAI-EXAONE/EXAONE-4.0-32B,
+//     https://huggingface.co/LGAI-EXAONE/EXAONE-4.0.1-32B): "You can activate
+//     reasoning mode by using the `enable_thinking=True` argument"; the chat
+//     template emits a closed, empty <think> block unless enable_thinking is
+//     true, so the default is off.
+//   - EXAONE 3.5 and older
+//     (https://huggingface.co/LGAI-EXAONE/EXAONE-3.5-32B-Instruct): no
+//     reasoning mode.
+func exaoneBindings(modelName string) (alwaysOn bool, b bindingSet) {
+	switch {
+	case containsAny(modelName, "exaone-deep"):
+		return true, nil
+	case containsAny(modelName, "exaone-4"):
+		return false, kwargBoolBindings("enable_thinking")
+	}
+	return false, nil
+}
+
+// IsKnownFamily reports whether name is a family label FamilyFromName can
+// produce (the familyRules table plus o-series), so an explicit modelFamily
+// never warns when the inferred value would not. Labels without bindings
+// (llama, mistral, phi...) are known too: Build accepts any value and
+// reports it as modelFamily, the warning only flags labels that no name
+// would ever infer. Comparison is case-insensitive to match Build's own
+// normalization of ModelFamily.
+func IsKnownFamily(name string) bool {
+	return knownFamilies[strings.ToLower(strings.TrimSpace(name))]
 }
 
 // claudeVersionRe extracts the first major[.minor] number pair from a Claude
