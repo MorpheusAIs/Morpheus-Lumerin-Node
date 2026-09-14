@@ -2,10 +2,14 @@ package apidetect
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apispec"
@@ -130,12 +134,13 @@ func (d *Detector) litellmUpstream(ctx context.Context, base, modelName, apiKey 
 		kind = stackFromHost(apiBase)
 	}
 
-	// (c) one anonymous hop, under its own budget, into a scratch Evidence.
+	// (c) one anonymous hop, under its own budget and through the hop
+	// client (gated dialer), into a scratch Evidence.
 	if !hopAllowed(apiBase) {
 		tracef(ctx, "litellm api_base %s refused for the second hop (scheme/address)", RedactURL(apiBase))
 		return
 	}
-	hopCtx, cancel := context.WithTimeout(ctx, hopTimeout)
+	hopCtx, cancel := context.WithTimeout(context.WithValue(ctx, hopCtxKey{}, true), hopTimeout)
 	defer cancel()
 	bases := baseCandidates(apiBase)
 	var up apispec.Evidence
@@ -205,12 +210,11 @@ func (d *Detector) litellmUpstream(ctx context.Context, base, modelName, apiKey 
 
 // hopAllowed reports whether apiBase is safe to dial for the second hop.
 // The URL must parse with an http or https scheme and a non-empty hostname;
-// when the hostname is a literal IP, the unspecified, link-local (unicast
-// or multicast) and multicast ranges are refused — classic SSRF targets
-// (cloud metadata, mDNS/link-local discovery, ...) that a third-party
-// api_base should never be able to point this hop at. Loopback and private
-// (RFC1918 and equivalent) addresses stay allowed: self-hosted vLLM/Ollama
-// upstreams legitimately live there.
+// when the hostname is a literal IP (zoned IPv6 and v4-mapped forms
+// included) it must pass hopAddrAllowed. A hostname passes this gate: what
+// it resolves to is checked again at dial time by the hop client's dialer
+// (hopDialControl), so a name pointing at a refused range — DNS rebinding,
+// 169.254.169.254.nip.io and the like — is stopped there.
 func hopAllowed(apiBase string) bool {
 	u, err := url.Parse(apiBase)
 	if err != nil {
@@ -223,10 +227,59 @@ func hopAllowed(apiBase string) bool {
 	if host == "" {
 		return false
 	}
-	if ip := net.ParseIP(host); ip != nil {
-		if ip.IsUnspecified() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() {
-			return false
-		}
+	if addr, err := netip.ParseAddr(host); err == nil && !hopAddrAllowed(addr) {
+		return false
 	}
 	return true
+}
+
+// hopAddrAllowed is the one address predicate behind both gates (the URL
+// gate on api_base and the dial-time gate on what a hostname resolves to):
+// the unspecified, link-local (unicast or multicast) and multicast ranges
+// are refused — classic SSRF targets (cloud metadata, mDNS/link-local
+// discovery, ...) that a third-party api_base should never be able to point
+// this hop at. Loopback and private (RFC1918 and equivalent) addresses stay
+// allowed: self-hosted vLLM/Ollama upstreams legitimately live there.
+// v4-mapped IPv6 addresses are judged as the IPv4 address they carry.
+func hopAddrAllowed(addr netip.Addr) bool {
+	addr = addr.Unmap()
+	return !(addr.IsUnspecified() || addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast() || addr.IsMulticast())
+}
+
+// errHopAddrRefused is the dial-time gate's refusal, wrapped into the dial
+// error the probe sees.
+var errHopAddrRefused = errors.New("second hop refused: address is unspecified, link-local or multicast")
+
+// hopDialControl is the hop client's net.Dialer.Control: it sees the
+// resolved ip:port every connection is about to be made to and refuses what
+// hopAddrAllowed refuses, so DNS answers are covered, not just literals.
+// Anything that is not an ip:port is refused too (fail closed).
+func hopDialControl(network, address string, _ syscall.RawConn) error {
+	ap, err := netip.ParseAddrPort(address)
+	if err != nil {
+		return fmt.Errorf("second hop refused: %s address %q is not an ip:port", network, address)
+	}
+	if !hopAddrAllowed(ap.Addr()) {
+		return fmt.Errorf("%w (%s)", errHopAddrRefused, address)
+	}
+	return nil
+}
+
+// hopCtxKey marks a context as the LiteLLM second hop: requests under it go
+// through Detector.hopClient (clientFor) rather than the probe client.
+type hopCtxKey struct{}
+
+// newHopClient builds the second hop's own client: the probe client's
+// per-request timeout and same-host redirect policy, over a transport whose
+// dialer runs hopDialControl on every resolved address. Everything else
+// mirrors the default transport (proxy from the environment, TLS, pool
+// limits), so the hop behaves like the first one except for the gate.
+func newHopClient(timeout time.Duration) *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DialContext = (&net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+		Control:   hopDialControl,
+	}).DialContext
+	return &http.Client{Timeout: timeout, CheckRedirect: refuseCrossHostRedirect, Transport: transport}
 }

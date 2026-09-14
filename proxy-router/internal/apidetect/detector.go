@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -43,7 +44,8 @@ const (
 	// has no earlier deadline.
 	detectTimeout = 10 * time.Second
 	// cacheSweepAt is the cache size at which expired entries are evicted on
-	// insert, bounding growth from key rotation or config churn.
+	// insert; when that frees nothing the oldest entries go down to half of
+	// it, so key rotation or config churn cannot grow the cache unbounded.
 	cacheSweepAt = 256
 )
 
@@ -79,10 +81,16 @@ type cacheEntry struct {
 
 // Detector performs cached runtime API detection for model backends.
 type Detector struct {
-	log    lib.ILogger
-	client *http.Client
-	opts   Options
-	ttl    time.Duration
+	log lib.ILogger
+	// client serves the probes against the configured backend (own host,
+	// provider key). hopClient serves the LiteLLM second hop only: same
+	// timeout and redirect policy, but its dialer refuses the addresses
+	// hopAddrAllowed refuses, so a third-party api_base whose hostname
+	// resolves to a link-local or multicast address is stopped at dial time.
+	client    *http.Client
+	hopClient *http.Client
+	opts      Options
+	ttl       time.Duration
 
 	mu    sync.Mutex
 	cache map[string]cacheEntry
@@ -94,12 +102,22 @@ func NewDetector(log lib.ILogger, opts Options) *Detector {
 		timeout = probeTimeout
 	}
 	return &Detector{
-		log:    log.Named("API_DETECT"),
-		client: &http.Client{Timeout: timeout, CheckRedirect: refuseCrossHostRedirect},
-		opts:   opts,
-		ttl:    cacheTTL,
-		cache:  make(map[string]cacheEntry),
+		log:       log.Named("API_DETECT"),
+		client:    &http.Client{Timeout: timeout, CheckRedirect: refuseCrossHostRedirect},
+		hopClient: newHopClient(timeout),
+		opts:      opts,
+		ttl:       cacheTTL,
+		cache:     make(map[string]cacheEntry),
 	}
+}
+
+// clientFor returns the client a request under ctx goes through: the hop
+// client for the LiteLLM second hop (hopCtxKey), the probe client otherwise.
+func (d *Detector) clientFor(ctx context.Context) *http.Client {
+	if ctx.Value(hopCtxKey{}) != nil {
+		return d.hopClient
+	}
+	return d.client
 }
 
 // refuseCrossHostRedirect is the probe client's redirect policy: probes may
@@ -151,17 +169,30 @@ func (d *Detector) Detect(ctx context.Context, cfg config.ModelConfig) *system.M
 
 	api := d.detect(ctx, cfg)
 	if ctx.Err() != nil {
-		d.log.Debugf("model %q: detection cut short (%v); result not cached", cfg.ModelName, ctx.Err())
+		d.log.Debugf("backend %s: detection cut short (%v); result not cached", RedactURL(cfg.ApiURL), ctx.Err())
 		return api
 	}
 	if api != nil {
-		d.log.Debugf("model %q: detected api stack=%q family=%q", cfg.ModelName, api.Stack, api.ModelFamily)
+		d.log.Debugf("backend %s: detected api stack=%q family=%q", RedactURL(cfg.ApiURL), api.Stack, api.ModelFamily)
 	}
 
 	d.mu.Lock()
 	if len(d.cache) >= cacheSweepAt {
 		for k, e := range d.cache {
 			if time.Since(e.at) >= d.ttl {
+				delete(d.cache, k)
+			}
+		}
+		if len(d.cache) >= cacheSweepAt {
+			// Still full of fresh entries (keys rotating faster than the
+			// TTL): evict the oldest down to half the threshold so the cache
+			// stays bounded whatever the churn.
+			keys := make([]string, 0, len(d.cache))
+			for k := range d.cache {
+				keys = append(keys, k)
+			}
+			sort.Slice(keys, func(i, j int) bool { return d.cache[keys[i]].at.Before(d.cache[keys[j]].at) })
+			for _, k := range keys[:len(keys)-cacheSweepAt/2] {
 				delete(d.cache, k)
 			}
 		}
@@ -230,6 +261,30 @@ func (d *Detector) detect(ctx context.Context, cfg config.ModelConfig) *system.M
 	api, lines := apispec.ComposeWithTrace(ev)
 	for _, line := range lines {
 		tracef(ctx, "%s", line)
+	}
+	if api == nil {
+		return nil
+	}
+
+	// A detected stack must be one the model's transport adapter can speak
+	// to: a preset whose transport (config.StackTransport) is not cfg.ApiType
+	// cannot be what serves this model, so the stack and everything in its
+	// vocabulary (bindings, parameters) go, exactly as for an undetermined
+	// stack (R4). The family and an always_on thinking mode are facts about
+	// the model, not the wire, and stay; when neither is known there is no
+	// api block, as the composer would have decided.
+	if transport, ok := config.StackTransport[api.Stack]; ok && transport != cfg.ApiType {
+		tracef(ctx, "detected stack %q speaks %q but apiType is %q — stack dropped", api.Stack, transport, cfg.ApiType)
+		api.Stack = ""
+		api.Bindings = nil
+		api.Parameters = nil
+		if api.Thinking != nil && api.Thinking.Mode != system.ThinkingModeAlwaysOn {
+			api.Thinking = nil
+		}
+		if api.ModelFamily == "" && api.Thinking == nil {
+			tracef(ctx, "nothing known about this backend: no api block")
+			return nil
+		}
 	}
 	return api
 }

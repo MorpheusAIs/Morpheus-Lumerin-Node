@@ -3,11 +3,13 @@ package apidetect
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
@@ -1090,4 +1092,84 @@ func TestDetectLiteLLMSupportedReasoningEfforts(t *testing.T) {
 	require.Equal(t, []string{"low", "medium", "high"}, api.Bindings[system.IntentReasoningEffort].EnumValues)
 	require.Nil(t, api.Bindings[system.IntentReasoningDisable])
 	require.NotNil(t, api.Bindings[system.IntentReasoningEnable])
+}
+
+// A detected stack whose transport (config.StackTransport) is not the
+// model's apiType cannot be what the proxy-router actually speaks to: the
+// stack and everything in its vocabulary (bindings, parameters) are dropped,
+// while the family and an always_on thinking mode — facts about the model,
+// not the wire — stay.
+func TestDetectDropsStackContradictingTransport(t *testing.T) {
+	t.Run("claudeai model whose backend fingerprints as vllm", func(t *testing.T) {
+		vllm, _ := vllmServer(t, "Qwen/Qwen3-32B")
+		d := newTestDetector()
+		api, lines := d.DetectWithTrace(context.Background(), config.ModelConfig{ModelName: "Qwen/Qwen3-32B", ApiType: "claudeai", ApiURL: vllm.URL + "/v1/chat/completions"})
+		require.NotNil(t, api)
+		require.Equal(t, "", api.Stack)
+		require.Equal(t, system.ApiSpecSourceDetected, api.Source)
+		require.Equal(t, "qwen3", api.ModelFamily, "the family is a fact about the model, not the wire")
+		require.Nil(t, api.Thinking, "no bindings, so nothing is controllable")
+		require.Empty(t, api.Bindings)
+		require.Empty(t, api.Parameters)
+		require.Contains(t, strings.Join(lines, "\n"), `detected stack "vllm" speaks "openai" but apiType is "claudeai" — stack dropped`)
+
+		// the same backend on its own transport keeps everything
+		consistent := d.Detect(context.Background(), config.ModelConfig{ModelName: "Qwen/Qwen3-32B", ApiType: "openai", ApiURL: vllm.URL + "/v1/chat/completions"})
+		require.Equal(t, "vllm", consistent.Stack)
+		require.NotEmpty(t, consistent.Bindings)
+	})
+
+	t.Run("always_on thinking survives the drop", func(t *testing.T) {
+		vllm, _ := vllmServer(t, "deepseek-ai/DeepSeek-R1")
+		api := newTestDetector().Detect(context.Background(), config.ModelConfig{ModelName: "local-alias", ApiType: "claudeai", ApiURL: vllm.URL + "/v1/chat/completions"})
+		require.NotNil(t, api)
+		require.Equal(t, "", api.Stack)
+		require.Equal(t, "deepseek-r1", api.ModelFamily)
+		require.Equal(t, system.ThinkingModeAlwaysOn, api.Thinking.Mode)
+		require.Empty(t, api.Bindings)
+		require.Empty(t, api.Parameters)
+	})
+
+	t.Run("openai model at a claudeai-only vendor host", func(t *testing.T) {
+		api, lines := newTestDetector().DetectWithTrace(context.Background(), config.ModelConfig{ModelName: "claude-sonnet-4-5", ApiType: "openai", ApiURL: "https://api.anthropic.com/v1/messages"})
+		require.NotNil(t, api)
+		require.Equal(t, "", api.Stack)
+		require.Equal(t, "claude", api.ModelFamily)
+		require.Nil(t, api.Thinking)
+		require.Empty(t, api.Bindings)
+		require.Empty(t, api.Parameters)
+		require.Contains(t, strings.Join(lines, "\n"), `detected stack "anthropic" speaks "claudeai" but apiType is "openai" — stack dropped`)
+	})
+}
+
+// The cache stays bounded under fresh-key churn (key rotation or config
+// edits faster than the TTL): when the expiry sweep frees nothing, the
+// oldest entries are evicted down to half the sweep threshold.
+func TestDetectCacheBoundedUnderFreshKeyChurn(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/props", jsonHandler(map[string]any{"total_slots": 1, "chat_template": qwen3Template}))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	d := newTestDetector()
+	const seeded = 299
+	base := time.Now().Add(-time.Minute) // all fresh: well within the TTL
+	d.mu.Lock()
+	for i := 0; i < seeded; i++ {
+		d.cache[fmt.Sprintf("k%03d", i)] = cacheEntry{at: base.Add(time.Duration(i) * time.Millisecond)}
+	}
+	d.mu.Unlock()
+
+	cfg := config.ModelConfig{ModelName: "qwen3-32b", ApiType: "openai", ApiURL: srv.URL + "/v1/chat/completions"}
+	require.NotNil(t, d.Detect(context.Background(), cfg)) // the 300th fresh key
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	require.LessOrEqual(t, len(d.cache), cacheSweepAt)
+	require.Len(t, d.cache, cacheSweepAt/2+1, "evicted down to half the threshold, then the new entry")
+	require.Contains(t, d.cache, cacheKey(cfg), "the fresh result is cached")
+	require.NotContains(t, d.cache, "k000", "the oldest entries go first")
+	require.NotContains(t, d.cache, fmt.Sprintf("k%03d", seeded-cacheSweepAt/2-1))
+	require.Contains(t, d.cache, fmt.Sprintf("k%03d", seeded-cacheSweepAt/2), "the newest seeded entries survive")
+	require.Contains(t, d.cache, fmt.Sprintf("k%03d", seeded-1))
 }

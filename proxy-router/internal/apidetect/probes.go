@@ -69,7 +69,7 @@ func (d *Detector) requestJSON(ctx context.Context, method, urlStr, apiKey strin
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
 
-	resp, err := d.client.Do(req)
+	resp, err := d.clientFor(ctx).Do(req)
 	if err != nil {
 		tracef(ctx, "%s %s -> %v", method, urlStr, err)
 		return nil
@@ -278,7 +278,7 @@ func (d *Detector) getText(ctx context.Context, urlStr, apiKey string) string {
 	if apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
-	resp, err := d.client.Do(req)
+	resp, err := d.clientFor(ctx).Do(req)
 	if err != nil {
 		tracef(ctx, "GET %s -> %v", urlStr, err)
 		return ""

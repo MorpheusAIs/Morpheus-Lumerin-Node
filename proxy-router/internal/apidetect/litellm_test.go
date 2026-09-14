@@ -2,6 +2,8 @@ package apidetect
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -579,9 +581,11 @@ func TestDetectLiteLLMTwoHopKeepsSupportedReasoningEfforts(t *testing.T) {
 // Controller ruling: hopAllowed gates the second hop's target by scheme and
 // address before any request is sent. Non-http(s) schemes and the classic
 // SSRF literal-IP ranges (unspecified, link-local unicast/multicast,
-// multicast — cloud metadata, mDNS, ...) are refused. Loopback and private
-// (RFC1918 and equivalent) addresses stay allowed: self-hosted vLLM/Ollama
-// upstreams legitimately live there.
+// multicast — cloud metadata, mDNS, ...) are refused, zoned IPv6 literals
+// and v4-mapped IPv6 forms included. Loopback and private (RFC1918 and
+// equivalent) addresses stay allowed: self-hosted vLLM/Ollama upstreams
+// legitimately live there. A hostname passes the URL gate — what it resolves
+// to is checked at dial time (TestHopDialControl).
 func TestHopAllowed(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -593,14 +597,100 @@ func TestHopAllowed(t *testing.T) {
 		{"ipv4 link-local (cloud metadata)", "http://169.254.169.254/v1", false},
 		{"ipv4 unspecified", "http://0.0.0.0:8000", false},
 		{"ipv6 link-local unicast", "http://[fe80::1]:11434", false},
+		{"ipv6 link-local unicast with zone", "http://[fe80::1%25eth0]:11434", false},
 		{"ipv6 link-local multicast", "http://[ff02::1]", false},
+		{"v4-mapped ipv6 link-local (cloud metadata)", "http://[::ffff:169.254.169.254]/v1", false},
 		{"loopback", "http://127.0.0.1:11434", true},
 		{"private rfc1918", "http://10.0.0.5:8000", true},
+		{"hostname: localhost (DNS is checked at dial time)", "http://localhost:1", true},
+		{"hostname resolving to link-local (DNS is checked at dial time)", "http://169.254.169.254.nip.io/", true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			require.Equal(t, c.allowed, hopAllowed(c.apiBase), c.apiBase)
 		})
+	}
+}
+
+// The dial-time gate: the second hop's dialer runs hopDialControl on the
+// resolved address, so a hostname that resolves to a refused range (DNS
+// rebinding, 169.254.169.254.nip.io and the like) is stopped before the
+// connection is made. Exercised on address strings only — no DNS, no
+// network.
+func TestHopDialControl(t *testing.T) {
+	refused := []string{"169.254.169.254:80", "[fe80::1%eth0]:80", "0.0.0.0:80", "[ff02::1]:80", "[::ffff:169.254.169.254]:80"}
+	for _, addr := range refused {
+		t.Run("refused "+addr, func(t *testing.T) {
+			err := hopDialControl("tcp", addr, nil)
+			require.ErrorIs(t, err, errHopAddrRefused, addr)
+		})
+	}
+	allowed := []string{"127.0.0.1:80", "10.0.0.5:80", "[::1]:80"}
+	for _, addr := range allowed {
+		t.Run("allowed "+addr, func(t *testing.T) {
+			require.NoError(t, hopDialControl("tcp", addr, nil), addr)
+		})
+	}
+	// fail closed on anything that is not an ip:port
+	require.Error(t, hopDialControl("tcp", "not-an-address", nil))
+	require.Error(t, hopDialControl("unix", "/var/run/x.sock", nil))
+}
+
+// The hop client is wired with the gate and the detector client's policies:
+// its transport dials through hopDialControl (a literal refused address is
+// rejected before any connection is attempted), and it keeps the per-probe
+// timeout and the same-host redirect policy.
+func TestHopClientIsGatedAndKeepsClientPolicies(t *testing.T) {
+	d := NewDetector(lib.NewTestLogger(), Options{TwoHop: true, ProbeTimeout: 123 * time.Millisecond})
+	require.NotSame(t, d.client, d.hopClient)
+	require.Equal(t, d.client.Timeout, d.hopClient.Timeout)
+	require.NotNil(t, d.hopClient.CheckRedirect)
+
+	tr, ok := d.hopClient.Transport.(*http.Transport)
+	require.True(t, ok, "the hop client needs its own transport to carry the gated dialer")
+	require.NotNil(t, tr.DialContext)
+	_, err := tr.DialContext(context.Background(), "tcp", "169.254.169.254:1")
+	require.ErrorIs(t, err, errHopAddrRefused)
+}
+
+// roundTripperFunc adapts a function to http.RoundTripper.
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// Every request of the second hop goes through the hop client (and so
+// through its gated dialer); the first hop's requests to the LiteLLM host
+// never do.
+func TestDetectLiteLLMTwoHopUsesHopClient(t *testing.T) {
+	venice, veniceLog := registryServer(t, veniceEntry("qwen3-235b", true), 0)
+	mapHostToVendor(t, venice.URL, "venice")
+	litellm, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "openai/qwen3-235b", venice.URL+"/api/v1", nil)})
+
+	d := NewDetector(lib.NewTestLogger(), DefaultOptions())
+	var mu sync.Mutex
+	var viaHopClient []string
+	inner := d.hopClient.Transport
+	d.hopClient.Transport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		mu.Lock()
+		viaHopClient = append(viaHopClient, r.URL.Host)
+		mu.Unlock()
+		return inner.RoundTrip(r)
+	})
+
+	api, _ := d.DetectWithTrace(context.Background(), config.ModelConfig{ModelName: "my-chat", ApiType: "openai", ApiURL: litellm.URL + "/v1/chat/completions", ApiKey: "sk-litellm"})
+	require.NotNil(t, api)
+	require.Equal(t, "qwen3", api.ModelFamily)
+	require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode, "the hop ran and its evidence arrived")
+	veniceLog.requireAnonymous(t)
+
+	litellmHost := strings.TrimPrefix(litellm.URL, "http://")
+	veniceHost := strings.TrimPrefix(venice.URL, "http://")
+	mu.Lock()
+	defer mu.Unlock()
+	require.NotEmpty(t, viaHopClient, "the upstream must be reached through the hop client")
+	for _, host := range viaHopClient {
+		require.Equal(t, veniceHost, host, "only the upstream is dialled through the hop client")
+		require.NotEqual(t, litellmHost, host)
 	}
 }
 
@@ -639,16 +729,69 @@ func TestDetectLiteLLMTwoHopHopTargetGate(t *testing.T) {
 		require.NotContains(t, trace, "refused for the second hop")
 		vllmLog.requireAnonymous(t)
 	})
+}
 
-	t.Run("allowed: private RFC1918 address", func(t *testing.T) {
-		prev := hopTimeout
-		hopTimeout = 300 * time.Millisecond
-		t.Cleanup(func() { hopTimeout = prev })
+// The other side of the hop budget: when the whole detection deadline
+// expires while the hop is in flight, the trace attributes the cut to the
+// detection deadline (not to the hop's own timeout) and hop-1 evidence
+// still stands.
+func TestDetectLiteLLMTwoHopCutShortByDetectionDeadline(t *testing.T) {
+	prev := hopTimeout
+	hopTimeout = 10 * time.Second // never the binding limit here
+	t.Cleanup(func() { hopTimeout = prev })
 
-		litellm, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "openai/qwen3-32b", "http://10.0.0.5:8000", nil)})
-		api, trace := detectVia(t, litellm.URL, "my-chat", Options{TwoHop: true, ProbeTimeout: 100 * time.Millisecond})
-		require.Equal(t, "qwen3", api.ModelFamily, "bare-id family: unreachable in the test sandbox, but not gated off")
-		require.NotContains(t, trace, "refused for the second hop")
-		require.Contains(t, trace, "litellm openai-compatible upstream at an unrecognised host", "the hop was attempted")
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/models", func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+		case <-time.After(5 * time.Second):
+		}
 	})
+	slow, slowLog := loggingServer(t, mux)
+	mapHostToVendor(t, slow.URL, "venice")
+	litellm, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "openai/qwen3-235b", slow.URL+"/api/v1", nil)})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	defer cancel()
+	d := NewDetector(lib.NewTestLogger(), DefaultOptions())
+	api, lines := d.DetectWithTrace(ctx, config.ModelConfig{ModelName: "my-chat", ApiType: "openai", ApiURL: litellm.URL + "/v1/chat/completions", ApiKey: "sk-litellm"})
+	trace := strings.Join(lines, "\n")
+	require.NotNil(t, api)
+	require.Equal(t, "litellm", api.Stack)
+	require.Equal(t, "qwen3", api.ModelFamily, "family from the bare upstream id")
+	require.Nil(t, api.Thinking, "no upstream evidence arrived in time")
+	require.Equal(t, []string{"reasoning_effort", "temperature", "tools"}, api.Parameters, "hop-1 evidence stands")
+	require.Contains(t, trace, "second hop cut short by the detection deadline; hop-1 evidence stands")
+	require.NotContains(t, trace, "second hop timed out after")
+	slowLog.requireAnonymous(t)
+}
+
+// /model/info is read under the probe body cap like every service
+// endpoint: a listing larger than maxProbeBody is ignored (traced), so no
+// deployment is found and the hop is skipped — the upstream is never
+// dialled and the family comes from the configured name alone.
+func TestDetectLiteLLMTwoHopModelInfoOverBodyCapSkipsHop(t *testing.T) {
+	upstream, upLog := registryServer(t, veniceEntry("deepseek-r1", true), 0)
+	mapHostToVendor(t, upstream.URL, "venice")
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health/liveliness", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(`"I'm alive!"`)) })
+	mux.HandleFunc("/model_group/info", jsonHandler(map[string]any{"data": []map[string]any{noReasoningGroup}}))
+	mux.HandleFunc("/model/info", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		dep, err := json.Marshal(deployment("my-chat", "openai/deepseek-r1", upstream.URL+"/api/v1", nil))
+		require.NoError(t, err)
+		_, _ = w.Write([]byte(`{"data":[` + string(dep) + `],"pad":"` + strings.Repeat("p", maxProbeBody+1024) + `"}`))
+	})
+	litellm, _ := loggingServer(t, mux)
+
+	api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
+	require.NotNil(t, api)
+	require.Equal(t, "litellm", api.Stack)
+	require.Equal(t, "", api.ModelFamily, "the bare upstream id was never read; the alias names no family")
+	require.Nil(t, api.Thinking)
+	require.Equal(t, []string{"reasoning_effort", "temperature", "tools"}, api.Parameters, "hop-1 evidence stands")
+	require.Contains(t, trace, fmt.Sprintf("/model/info -> HTTP 200, but the body exceeds the %d-byte limit; ignored", maxProbeBody))
+	require.NotContains(t, trace, "litellm /model/info: deployment")
+	require.Empty(t, upLog.seen(), "the hop never ran")
 }
