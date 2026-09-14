@@ -18,6 +18,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -60,10 +61,14 @@ type Options struct {
 	// ProbeTimeout overrides the 2 s per-probe timeout (tests only; 0 keeps
 	// the default).
 	ProbeTimeout time.Duration
+	// TwoHop follows a LiteLLM proxy to the deployment behind the model
+	// (GET /model/info) and reads its upstream once, without credentials,
+	// for family / reasoning evidence only. Production default: on.
+	TwoHop bool
 }
 
 // DefaultOptions is the production configuration.
-func DefaultOptions() Options { return Options{} }
+func DefaultOptions() Options { return Options{TwoHop: true} }
 
 type cacheEntry struct {
 	api *system.ModelApiSpec
@@ -88,25 +93,44 @@ func NewDetector(log lib.ILogger, opts Options) *Detector {
 	}
 	return &Detector{
 		log:    log.Named("API_DETECT"),
-		client: &http.Client{Timeout: timeout},
+		client: &http.Client{Timeout: timeout, CheckRedirect: refuseCrossHostRedirect},
 		opts:   opts,
 		ttl:    cacheTTL,
 		cache:  make(map[string]cacheEntry),
 	}
 }
 
+// refuseCrossHostRedirect is the probe client's redirect policy: probes may
+// carry the configured bearer key, so a redirect is followed only to the
+// same host (host:port as written) over the same or a better scheme — a
+// trailing-slash 301 and the like. One to another host, a subdomain or
+// another port included, or from https down to http is not followed: the
+// redirect response itself is returned (ErrUseLastResponse), which the
+// probes treat as a non-2xx miss. The standard 10-hop cap is kept.
+func refuseCrossHostRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return errors.New("stopped after 10 redirects")
+	}
+	prev := via[len(via)-1].URL
+	if !strings.EqualFold(req.URL.Host, prev.Host) || (prev.Scheme == "https" && req.URL.Scheme != "https") {
+		return http.ErrUseLastResponse
+	}
+	return nil
+}
+
 // Detect returns the API spec of cfg's backend, or nil when nothing could be
 // determined. A declared apiStack short-circuits to the static apispec.Build
-// (explicit declaration wins; the backend is not probed). Detection results
-// are cached per (apiUrl, modelName, apiStack, modelFamily, apiKey) for the
-// cache TTL; a pass cut short by the caller's deadline is returned but not
-// cached. The returned spec is the caller's own copy. Safe for concurrent use.
+// (explicit declaration wins, before anything else is looked at; the backend
+// is not probed). Detection results are cached per (apiUrl, modelName,
+// apiStack, modelFamily, apiKey) for the cache TTL; a pass cut short by the
+// caller's deadline is returned but not cached. The returned spec is the
+// caller's own copy. Safe for concurrent use.
 func (d *Detector) Detect(ctx context.Context, cfg config.ModelConfig) *system.ModelApiSpec {
-	if cfg.ApiURL == "" && cfg.ModelName == "" {
-		return nil
-	}
 	if apispec.StackFor(cfg.ApiStack) != "" {
 		return apispec.Build(cfg)
+	}
+	if cfg.ApiURL == "" && cfg.ModelName == "" {
+		return nil
 	}
 
 	key := cacheKey(cfg)
@@ -150,11 +174,11 @@ func (d *Detector) Detect(ctx context.Context, cfg config.ModelConfig) *system.M
 // produced it: every probe attempted, what it returned, and which evidence
 // source decided the family and thinking knob. Diagnostics tooling only.
 func (d *Detector) DetectWithTrace(ctx context.Context, cfg config.ModelConfig) (*system.ModelApiSpec, []string) {
-	if cfg.ApiURL == "" && cfg.ModelName == "" {
-		return nil, []string{"nothing to detect: config has neither apiUrl nor modelName"}
-	}
 	if stack := apispec.StackFor(cfg.ApiStack); stack != "" {
 		return apispec.Build(cfg), []string{fmt.Sprintf("apiStack %q declared in models-config: static spec, no probing", stack)}
+	}
+	if cfg.ApiURL == "" && cfg.ModelName == "" {
+		return nil, []string{"nothing to detect: config has neither apiUrl nor modelName"}
 	}
 
 	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
@@ -185,7 +209,7 @@ func (d *Detector) detect(ctx context.Context, cfg config.ModelConfig) *system.M
 		// Self-hosted or unrecognized host: fingerprint the engine, and when
 		// that yields nothing, check for a registry-shaped model listing
 		// (OpenRouter-compatible proxies on custom domains).
-		d.fingerprintEngines(ctx, bases, cfg.ModelName, cfg.ApiKey, &ev)
+		d.fingerprintEngines(ctx, bases, cfg.ModelName, cfg.ApiKey, &ev, true)
 		if ev.Stack == "" {
 			tracef(ctx, "no engine fingerprint matched; checking for a registry-shaped model listing")
 			d.probeRegistryShape(ctx, bases, cfg.ModelName, cfg.ApiKey, &ev)
@@ -213,12 +237,18 @@ func cacheKey(cfg config.ModelConfig) string {
 	return strings.Join([]string{cfg.ApiURL, cfg.ModelName, cfg.ApiStack, cfg.ModelFamily, hex.EncodeToString(sum[:8])}, "|")
 }
 
+// redactedURL replaces a URL that does not parse (or has no host) in logs
+// and traces: the raw input is never echoed, since it may be a pasted
+// secret rather than a URL.
+const redactedURL = "<unparseable url>"
+
 // RedactURL strips userinfo and query from a URL for logs and traces, so
-// credentials embedded in a configured endpoint never surface.
+// credentials embedded in a configured endpoint never surface. Input that
+// is not a URL with a host is replaced by redactedURL, never echoed.
 func RedactURL(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" {
-		return raw
+		return redactedURL
 	}
 	u.User = nil
 	u.RawQuery = ""

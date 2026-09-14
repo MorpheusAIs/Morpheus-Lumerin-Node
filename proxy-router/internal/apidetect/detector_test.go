@@ -523,7 +523,11 @@ func TestTraceNeverContainsApiKeyOrURLCredentials(t *testing.T) {
 
 func TestRedactURL(t *testing.T) {
 	require.Equal(t, "https://h.example/v1", RedactURL("https://u:p@h.example/v1?k=v#f"))
-	require.Equal(t, "not a url", RedactURL("not a url"))
+	// never echo input that could not be parsed (it may be a pasted secret)
+	require.Equal(t, "<unparseable url>", RedactURL("not a url"))
+	require.Equal(t, "<unparseable url>", RedactURL("http://[::1"))
+	require.Equal(t, "<unparseable url>", RedactURL(""))
+	require.Equal(t, "<unparseable url>", RedactURL("/v1/chat/completions?key=SECRET"))
 }
 
 func TestCacheKeyChangesWithApiKeyStackAndFamily(t *testing.T) {
@@ -646,7 +650,7 @@ func TestDetectOllamaGptOssTunesEffortOnly(t *testing.T) {
 }
 
 func TestDetectLiteLLM(t *testing.T) {
-	var sawAuth string
+	var sawAuth, sawGroup string
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health/liveliness", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -654,7 +658,7 @@ func TestDetectLiteLLM(t *testing.T) {
 	})
 	mux.HandleFunc("/model_group/info", func(w http.ResponseWriter, r *http.Request) {
 		sawAuth = r.Header.Get("Authorization")
-		require.Equal(t, "claude-sonnet-4-5", r.URL.Query().Get("model_group"))
+		sawGroup = r.URL.Query().Get("model_group")
 		jsonHandler(map[string]any{"data": []map[string]any{{
 			"model_group":             "claude-sonnet-4-5",
 			"supported_openai_params": []string{"temperature", "tools", "reasoning_effort", "response_format"},
@@ -671,6 +675,7 @@ func TestDetectLiteLLM(t *testing.T) {
 	require.NotNil(t, api)
 	require.Equal(t, "litellm", api.Stack)
 	require.Equal(t, "Bearer sk-litellm", sawAuth)
+	require.Equal(t, "claude-sonnet-4-5", sawGroup)
 	require.Equal(t, []string{"reasoning_effort", "response_format", "temperature", "tools"}, api.Parameters)
 	// claude family defaults describe Anthropic's own API, not a gateway:
 	// litellm's provider-neutral reasoning knobs apply instead
@@ -873,7 +878,9 @@ func TestDetectSetsDetectedSource(t *testing.T) {
 	defer srv.Close()
 	api := detect(t, srv.URL+"/v1/chat/completions", "openai", "qwen3-32b")
 	require.Equal(t, system.ApiSpecSourceDetected, api.Source)
-	unreachable := detect(t, "http://127.0.0.1:1/v1/chat/completions", "openai", "qwen3-32b")
+	closed := httptest.NewServer(http.NotFoundHandler())
+	closed.Close()
+	unreachable := detect(t, closed.URL+"/v1/chat/completions", "openai", "qwen3-32b")
 	require.Equal(t, system.ApiSpecSourceDetected, unreachable.Source)
 }
 
@@ -896,6 +903,101 @@ func TestDetectDeclaredStackSkipsProbing(t *testing.T) {
 	require.Len(t, trace, 1)
 	require.Contains(t, trace[0], "declared")
 	require.Equal(t, int32(0), atomic.LoadInt32(&hits))
+}
+
+// R1 is evaluated first: a declared apiStack composes statically even when
+// the config names neither an endpoint nor a model (nothing to detect, but
+// something to declare).
+func TestDetectDeclaredStackWinsOverEmptyEndpoint(t *testing.T) {
+	d := newTestDetector()
+	cfg := config.ModelConfig{ApiStack: "litellm"}
+	api := d.Detect(context.Background(), cfg)
+	require.NotNil(t, api)
+	require.Equal(t, "litellm", api.Stack)
+	require.Equal(t, system.ApiSpecSourceDeclared, api.Source)
+	traced, trace := d.DetectWithTrace(context.Background(), cfg)
+	require.Equal(t, api, traced)
+	require.Len(t, trace, 1)
+	require.Contains(t, trace[0], "declared")
+	require.Nil(t, d.Detect(context.Background(), config.ModelConfig{}), "nothing declared, nothing to detect")
+	_, trace = d.DetectWithTrace(context.Background(), config.ModelConfig{})
+	require.Contains(t, trace[0], "nothing to detect")
+}
+
+// Probes carry the configured key: a redirect may only be followed to the
+// same host over the same or a better scheme.
+func TestRefuseCrossHostRedirect(t *testing.T) {
+	hop := func(from, to string) (*http.Request, []*http.Request) {
+		prev, err := http.NewRequest(http.MethodGet, from, nil)
+		require.NoError(t, err)
+		next, err := http.NewRequest(http.MethodGet, to, nil)
+		require.NoError(t, err)
+		return next, []*http.Request{prev}
+	}
+	followed := []struct{ from, to string }{
+		{"https://h.example/v1/models", "https://h.example/v1/models/"},
+		{"http://h.example/x", "https://h.example/x"},
+		{"http://h.example:8080/x", "http://H.example:8080/y"},
+	}
+	for _, c := range followed {
+		require.NoError(t, refuseCrossHostRedirect(hop(c.from, c.to)), "%s -> %s", c.from, c.to)
+	}
+	refused := []struct{ from, to string }{
+		{"https://h.example/x", "https://other.example/x"},
+		{"https://h.example/x", "https://api.h.example/x"},
+		{"https://h.example/x", "http://h.example/x"},
+		{"http://h.example:8080/x", "http://h.example:9090/x"},
+		{"https://h.example/x", "https://h.example:8443/x"},
+	}
+	for _, c := range refused {
+		require.ErrorIs(t, refuseCrossHostRedirect(hop(c.from, c.to)), http.ErrUseLastResponse, "%s -> %s", c.from, c.to)
+	}
+	// the standard 10-hop cap is kept
+	next, via := hop("https://h.example/0", "https://h.example/11")
+	for len(via) < 10 {
+		via = append(via, via[0])
+	}
+	err := refuseCrossHostRedirect(next, via)
+	require.Error(t, err)
+	require.NotErrorIs(t, err, http.ErrUseLastResponse)
+}
+
+func TestProbesRefuseCrossHostRedirects(t *testing.T) {
+	listing := jsonHandler(map[string]any{"data": []map[string]any{veniceEntry("qwen3-235b", true)}})
+
+	t.Run("cross-host redirect is not followed", func(t *testing.T) {
+		other := http.NewServeMux()
+		other.HandleFunc("/v1/models", listing)
+		elsewhere, elsewhereLog := loggingServer(t, other)
+		mux := http.NewServeMux()
+		mux.HandleFunc("/v1/models", func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, elsewhere.URL+"/v1/models", http.StatusFound)
+		})
+		srv := httptest.NewServer(mux)
+		defer srv.Close()
+
+		d := newTestDetector()
+		api, trace := d.DetectWithTrace(context.Background(), config.ModelConfig{ModelName: "qwen3-235b", ApiType: "openai", ApiURL: srv.URL + "/v1/chat/completions", ApiKey: "sk-secret"})
+		require.Empty(t, elsewhereLog.seen(), "the other host must not see the request (nor the key)")
+		require.Contains(t, strings.Join(trace, "\n"), "/v1/models -> HTTP 302")
+		require.NotNil(t, api)
+		require.Equal(t, "", api.Stack, "the redirect target's listing was never read")
+	})
+
+	t.Run("same-host redirect is followed", func(t *testing.T) {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/v1/models", func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "/v1/models/", http.StatusMovedPermanently)
+		})
+		mux.HandleFunc("/v1/models/", listing)
+		srv := httptest.NewServer(mux)
+		defer srv.Close()
+
+		api := detect(t, srv.URL+"/v1/chat/completions", "openai", "qwen3-235b")
+		require.NotNil(t, api)
+		require.Equal(t, "venice", api.Stack, "the trailing-slash 301 was followed")
+		require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
+	})
 }
 
 // R4: when nothing answers, a family with default bindings still gets none —

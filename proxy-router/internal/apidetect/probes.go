@@ -118,8 +118,11 @@ func mapKeys(m map[string]any) []string {
 
 // fingerprintEngines identifies a self-hosted serving stack by probing each
 // engine's distinctive service endpoint, most distinctive first. It fills the
-// stack and whatever evidence that engine exposes.
-func (d *Detector) fingerprintEngines(ctx context.Context, bases []string, modelName, apiKey string, ev *apispec.Evidence) {
+// stack and whatever evidence that engine exposes. introspectLiteLLM is
+// false on the second hop through a LiteLLM proxy: an upstream that is
+// itself LiteLLM is then only identified by its liveliness endpoint, never
+// introspected (no model group, no deployments, no third hop).
+func (d *Detector) fingerprintEngines(ctx context.Context, bases []string, modelName, apiKey string, ev *apispec.Evidence, introspectLiteLLM bool) {
 	for _, base := range bases {
 		if d.probeOllama(ctx, base, modelName, apiKey, ev) ||
 			d.probeLlamaCpp(ctx, base, apiKey, ev) ||
@@ -127,7 +130,7 @@ func (d *Detector) fingerprintEngines(ctx context.Context, bases []string, model
 			d.probeLMStudio(ctx, base, modelName, apiKey, ev) ||
 			d.probeKoboldCpp(ctx, base, apiKey, ev) ||
 			d.probeTGI(ctx, base, apiKey, ev) ||
-			d.probeLiteLLM(ctx, base, modelName, apiKey, ev) ||
+			d.probeLiteLLM(ctx, base, modelName, apiKey, ev, introspectLiteLLM) ||
 			d.probeVLLM(ctx, base, modelName, apiKey, ev) {
 			return
 		}
@@ -269,11 +272,15 @@ func (d *Detector) getText(ctx context.Context, urlStr, apiKey string) string {
 }
 
 // probeLiteLLM recognizes a LiteLLM proxy by its unauthenticated liveliness
-// endpoint, whose body is the JSON string "I'm alive!", then imports the
-// model group's declared capabilities (needs the configured key).
+// endpoint, whose body is the JSON string "I'm alive!", then — when
+// introspect is set — imports the model group's declared capabilities (needs
+// the configured key) and, with Options.TwoHop, follows the deployment to
+// its upstream once. With introspect false (the second hop's own
+// fingerprint) recognition is all that happens: nothing is read from an
+// upstream LiteLLM, so there is never a third hop.
 // https://docs.litellm.ai/docs/proxy/health
 // https://docs.litellm.ai/docs/proxy/model_management
-func (d *Detector) probeLiteLLM(ctx context.Context, base, modelName, apiKey string, ev *apispec.Evidence) bool {
+func (d *Detector) probeLiteLLM(ctx context.Context, base, modelName, apiKey string, ev *apispec.Evidence, introspect bool) bool {
 	body := d.getText(ctx, base+"/health/liveliness", apiKey)
 	if body == "" {
 		return false
@@ -285,44 +292,46 @@ func (d *Detector) probeLiteLLM(ctx context.Context, base, modelName, apiKey str
 	ev.Stack = "litellm"
 	tracef(ctx, "identified litellm by /health/liveliness")
 
-	if modelName == "" {
+	if !introspect || modelName == "" {
 		return true
 	}
-	info := d.getJSON(ctx, base+"/model_group/info?model_group="+url.QueryEscape(modelName), apiKey)
-	if info == nil {
-		return true
-	}
-	group := info
-	if data, ok := info["data"].([]any); ok {
-		if len(data) == 0 {
-			return true
-		}
-		if group, ok = data[0].(map[string]any); !ok {
-			return true
-		}
-	}
-	if params, ok := group["supported_openai_params"].([]any); ok {
-		for _, p := range params {
-			if s, ok := p.(string); ok {
-				ev.Parameters = append(ev.Parameters, s)
+	if info := d.getJSON(ctx, base+"/model_group/info?model_group="+url.QueryEscape(modelName), apiKey); info != nil {
+		group := info
+		if data, ok := info["data"].([]any); ok {
+			if len(data) == 0 {
+				group = nil
+			} else if group, ok = data[0].(map[string]any); !ok {
+				group = nil
 			}
 		}
-		sort.Strings(ev.Parameters)
-		tracef(ctx, "litellm /model_group/info lists %d supported_openai_params", len(ev.Parameters))
-	}
-	if reasons, ok := group["supports_reasoning"].(bool); ok && reasons {
-		ev.GatewayReasoning = true
-		tracef(ctx, "litellm /model_group/info reports supports_reasoning")
-	}
-	if efforts, ok := group["supported_reasoning_efforts"].([]any); ok {
-		for _, e := range efforts {
-			if s, ok := e.(string); ok {
-				ev.ReasoningEfforts = append(ev.ReasoningEfforts, s)
+		if group != nil {
+			if params, ok := group["supported_openai_params"].([]any); ok {
+				for _, p := range params {
+					if s, ok := p.(string); ok {
+						ev.Parameters = append(ev.Parameters, s)
+					}
+				}
+				sort.Strings(ev.Parameters)
+				tracef(ctx, "litellm /model_group/info lists %d supported_openai_params", len(ev.Parameters))
+			}
+			if reasons, ok := group["supports_reasoning"].(bool); ok && reasons {
+				ev.GatewayReasoning = true
+				tracef(ctx, "litellm /model_group/info reports supports_reasoning")
+			}
+			if efforts, ok := group["supported_reasoning_efforts"].([]any); ok {
+				for _, e := range efforts {
+					if s, ok := e.(string); ok {
+						ev.ReasoningEfforts = append(ev.ReasoningEfforts, s)
+					}
+				}
+				if len(ev.ReasoningEfforts) > 0 {
+					tracef(ctx, "litellm /model_group/info lists supported_reasoning_efforts %v", ev.ReasoningEfforts)
+				}
 			}
 		}
-		if len(ev.ReasoningEfforts) > 0 {
-			tracef(ctx, "litellm /model_group/info lists supported_reasoning_efforts %v", ev.ReasoningEfforts)
-		}
+	}
+	if d.opts.TwoHop {
+		d.litellmUpstream(ctx, base, modelName, apiKey, ev)
 	}
 	return true
 }
