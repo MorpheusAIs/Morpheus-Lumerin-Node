@@ -5,6 +5,7 @@ type LocalModel struct {
 	Name           string
 	Model          string
 	ApiType        string
+	ApiStack       string // apiStack preset the model advertises; empty when none
 	ApiUrl         string
 	Slots          int
 	CapacityPolicy string

@@ -28,6 +28,9 @@ definitions:
     type: object
   aiengine.LocalModel:
     properties:
+      apiStack:
+        description: apiStack preset the model advertises; empty when none
+        type: string
       apiType:
         type: string
       apiUrl:

@@ -71,7 +71,8 @@ func TestValidateApiStackEmptyIsAcceptedForEveryLegacyApiType(t *testing.T) {
 }
 
 // --- Init()-level coverage: the loader applies ValidateApiStack on both
-// config shapes and never leaves a half-loaded model map behind.
+// config shapes, stores the normalized value, and degrades a model with an
+// invalid apiStack (field cleared, model kept) instead of rejecting the file.
 
 type noopValidator struct{}
 
@@ -105,21 +106,65 @@ func TestInitV2AcceptsApiStackAndLegacyApiTypes(t *testing.T) {
 	require.Equal(t, "", l.ModelConfigFromID("0x03").ApiStack)
 }
 
-func TestInitV2RejectsBadApiStackWithoutStoringAnyModel(t *testing.T) {
+// An invalid apiStack is a mistake in an advertisement-only field: the loader
+// logs it, clears the field for that model and keeps serving every model.
+// Rejecting the file would silently serve nothing, because main.go only
+// warns on an Init error.
+func TestInitV2IgnoresBadApiStackAndKeepsEveryModel(t *testing.T) {
 	l := newTestLoader(t, `{"models":[
 		{"modelId":"0x01","modelName":"ok","apiType":"openai","apiStack":"vllm","apiUrl":"http://h/v1"},
-		{"modelId":"0x02","modelName":"bad","apiType":"openai","apiStack":"anthropic","apiUrl":"http://h/v1"}]}`)
-	err := l.Init()
-	require.ErrorContains(t, err, `model 0x02: apiStack "anthropic" requires apiType "claudeai", got "openai"`)
+		{"modelId":"0x02","modelName":"mismatch","apiType":"openai","apiStack":"anthropic","apiUrl":"http://h/v1"},
+		{"modelId":"0x03","modelName":"unknown","apiType":"openai","apiStack":"bogus","apiUrl":"http://h/v1"}]}`)
+	require.NoError(t, l.Init())
 	ids, _ := l.GetAll()
-	require.Empty(t, ids, "a rejected config must not leave a partially populated model map")
+	require.Len(t, ids, 3, "every model is stored; only the bad apiStack is dropped")
+	require.Equal(t, "vllm", l.ModelConfigFromID("0x01").ApiStack)
+	require.Equal(t, "", l.ModelConfigFromID("0x02").ApiStack, "transport mismatch: apiStack dropped, model kept")
+	require.Equal(t, "mismatch", l.ModelConfigFromID("0x02").ModelName)
+	require.Equal(t, "", l.ModelConfigFromID("0x03").ApiStack, "unknown preset: apiStack dropped, model kept")
+	require.Equal(t, "unknown", l.ModelConfigFromID("0x03").ModelName)
 }
 
-func TestInitLegacyMapRejectsUnknownApiStack(t *testing.T) {
+func TestInitLegacyMapIgnoresUnknownApiStack(t *testing.T) {
 	l := newTestLoader(t, `{"0x01":{"modelName":"m","apiType":"openai","apiStack":"bogus","apiUrl":"http://h/v1"}}`)
-	require.ErrorContains(t, l.Init(), `model 0x01: unknown apiStack "bogus"`)
+	require.NoError(t, l.Init())
 	ids, _ := l.GetAll()
-	require.Empty(t, ids)
+	require.Len(t, ids, 1)
+	require.Equal(t, "", l.ModelConfigFromID("0x01").ApiStack)
+	require.Equal(t, "m", l.ModelConfigFromID("0x01").ModelName)
+}
+
+// apiStack is trimmed and lowercased before validation, so " vLLM " is the
+// vllm preset and a whitespace-only value means unset — a stray space in an
+// existing file must not change what the provider serves.
+func TestValidateApiStackNormalizesWhitespaceAndCase(t *testing.T) {
+	require.Equal(t, "vllm", NormalizeApiStack(" vLLM\t"))
+	require.Equal(t, "", NormalizeApiStack("   "))
+	require.NoError(t, ValidateApiStack("0x01", ModelConfig{ApiType: "openai", ApiStack: " VLLM "}))
+	require.NoError(t, ValidateApiStack("0x01", ModelConfig{ApiType: "claudeai", ApiStack: "Anthropic"}))
+	for _, legacy := range []string{"openai", "claudeai", "prodia-sd", "prodia-sdxl", "prodia-v2", "hyperbolic-sd"} {
+		require.NoError(t, ValidateApiStack("0x01", ModelConfig{ApiType: legacy, ApiStack: " "}), legacy)
+	}
+	// errors report the normalized value
+	require.EqualError(t, ValidateApiStack("0x02", ModelConfig{ApiType: "openai", ApiStack: " Bogus "}), `model 0x02: unknown apiStack "bogus"`)
+	require.EqualError(t, ValidateApiStack("0x03", ModelConfig{ApiType: "openai", ApiStack: "ANTHROPIC"}), `model 0x03: apiStack "anthropic" requires apiType "claudeai", got "openai"`)
+}
+
+func TestInitV2NormalizesApiStack(t *testing.T) {
+	l := newTestLoader(t, `{"models":[
+		{"modelId":"0x01","modelName":"a","apiType":"openai","apiStack":" Vllm ","apiUrl":"http://h/v1"},
+		{"modelId":"0x02","modelName":"b","apiType":"openai","apiStack":" ","apiUrl":"http://h/v1"}]}`)
+	require.NoError(t, l.Init())
+	ids, _ := l.GetAll()
+	require.Len(t, ids, 2)
+	require.Equal(t, "vllm", l.ModelConfigFromID("0x01").ApiStack, "stored normalized")
+	require.Equal(t, "", l.ModelConfigFromID("0x02").ApiStack, "whitespace-only reads as unset")
+}
+
+func TestInitLegacyMapNormalizesApiStack(t *testing.T) {
+	l := newTestLoader(t, `{"0x01":{"modelName":"m","apiType":"claudeai","apiStack":" ANTHROPIC ","apiUrl":"http://h/v1"}}`)
+	require.NoError(t, l.Init())
+	require.Equal(t, "anthropic", l.ModelConfigFromID("0x01").ApiStack)
 }
 
 func TestInitLegacyMapAcceptsApiStack(t *testing.T) {

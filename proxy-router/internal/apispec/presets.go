@@ -244,18 +244,15 @@ var stackParameters = map[string][]string{
 // surface, by definition supported on api.openai.com.
 var openaiChatParameters = []string{"model", "messages", "temperature", "top_p", "n", "stream", "stream_options", "stop", "max_tokens", "max_completion_tokens", "presence_penalty", "frequency_penalty", "logit_bias", "logprobs", "top_logprobs", "user", "seed", "response_format", "tools", "tool_choice", "parallel_tool_calls", "reasoning_effort"}
 
-// TransportFor returns the adapter apiType required by an apiStack preset.
-// The table is config.StackTransport (config cannot import this package),
-// so the loader's validation and this package agree on the nine presets;
-// legacy adapter names are apiType values and are not accepted here.
-func TransportFor(stack string) (string, bool) {
-	adapter, ok := config.StackTransport[stack]
-	return adapter, ok
-}
-
 // StackFor returns the spec stack name for a configured apiStack, or ""
-// when it is empty or not one of the nine presets (no chat API spec).
+// when it is empty or not one of the nine presets (no chat API spec). The
+// preset table is config.StackTransport (config cannot import this package),
+// so the loader's validation and this package agree on the nine presets;
+// legacy adapter names are apiType values and never resolve to a stack. The
+// value is normalized the way the loader stores it (config.NormalizeApiStack)
+// so a ModelConfig built elsewhere with " vLLM " still resolves.
 func StackFor(stack string) string {
+	stack = config.NormalizeApiStack(stack)
 	if _, ok := config.StackTransport[stack]; ok {
 		return stack
 	}

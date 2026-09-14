@@ -8,36 +8,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TransportFor answers only for apiStack presets: legacy adapter names are
-// apiType values, so they are not accepted here (the validation path relies
-// on that to reject `apiStack: claudeai`).
-func TestTransportFor(t *testing.T) {
-	for _, preset := range []string{"vllm", "sglang", "llamacpp", "ollama", "venice", "openrouter", "litellm", "openai"} {
-		adapter, ok := TransportFor(preset)
-		require.True(t, ok, preset)
-		require.Equal(t, "openai", adapter, preset)
-	}
-	adapter, ok := TransportFor("anthropic")
-	require.True(t, ok)
-	require.Equal(t, "claudeai", adapter)
-	for _, legacy := range []string{"claudeai", "prodia-sd", "prodia-sdxl", "prodia-v2", "hyperbolic-sd"} {
-		_, ok = TransportFor(legacy)
-		require.False(t, ok, "legacy adapter %q is an apiType, not an apiStack", legacy)
-	}
-	_, ok = TransportFor("bogus")
-	require.False(t, ok)
-	_, ok = TransportFor("")
-	require.False(t, ok)
-}
-
+// StackFor answers only for the nine apiStack presets (config.StackTransport,
+// whose contents config's TestStackTransportTable pins): legacy adapter names
+// are apiType values and never resolve to a stack, and the value is
+// normalized the way the loader stores it.
 func TestStackFor(t *testing.T) {
-	require.Equal(t, "vllm", StackFor("vllm"))
-	require.Equal(t, "anthropic", StackFor("anthropic"))
-	require.Equal(t, "openai", StackFor("openai"))
-	require.Equal(t, "", StackFor("claudeai"), "no legacy alias: claudeai is a transport, not a stack")
-	require.Equal(t, "", StackFor("prodia-v2"))
+	for stack := range config.StackTransport {
+		require.Equal(t, stack, StackFor(stack))
+	}
+	require.Equal(t, "vllm", StackFor(" VLLM "), "normalized like config.NormalizeApiStack")
+	for _, legacy := range []string{"claudeai", "prodia-sd", "prodia-sdxl", "prodia-v2", "hyperbolic-sd"} {
+		require.Equal(t, "", StackFor(legacy), "legacy adapter %q is an apiType, not an apiStack", legacy)
+	}
 	require.Equal(t, "", StackFor("bogus"))
 	require.Equal(t, "", StackFor(""))
+	require.Equal(t, "", StackFor(" "), "whitespace-only means unset")
 }
 
 // The stack tables here and config.StackTransport must describe the same
@@ -109,7 +94,7 @@ func TestAllTablesWellFormed(t *testing.T) {
 		_, b := bindingsForFamily("claude", name)
 		assertWellFormed(t, "family:claude:"+name, b)
 	}
-	for _, fm := range [][2]string{{"gemma", "gemma-4-31b"}, {"kimi", "kimi-k2.5"}, {"kimi", "kimi-k2.6"}, {"exaone", "exaone-4.0-32b"}} {
+	for _, fm := range [][2]string{{"gemma", "gemma-4-31b"}, {"kimi", "kimi-k2.5"}, {"kimi", "kimi-k2.6"}, {"minimax", "minimax-m3"}, {"exaone", "exaone-4.0-32b"}} {
 		_, b := bindingsForFamily(fm[0], fm[1])
 		require.NotEmpty(t, b, "family:%s:%s", fm[0], fm[1])
 		assertWellFormed(t, "family:"+fm[0]+":"+fm[1], b)
@@ -189,21 +174,26 @@ func requireAlwaysOn(t *testing.T, family, name string) {
 }
 
 // Gemma: only Gemma 4 has a (default-off) thinking mode toggled by
-// enable_thinking; Gemma 3 and older have none.
+// enable_thinking; Gemma 3 and older have none. The generation token must
+// not be confused with a 4B size token: MedGemma 4B is Gemma 3 based.
 func TestBindingsForFamilyGemma(t *testing.T) {
-	for _, name := range []string{"gemma-4-31b", "google/gemma-4-31B-it", "gemma-4-26b-a4b-it", "gemma4-e4b", "gemma_4_12b"} {
+	for _, name := range []string{"gemma-4-31b", "google/gemma-4-31B-it", "gemma-4-26b-a4b-it", "gemma4-e4b", "gemma_4_12b", "gemma4:31b", "gemma-4"} {
 		alwaysOn, b := bindingsForFamily("gemma", name)
 		require.False(t, alwaysOn, name)
 		requireKwargBool(t, b, "enable_thinking", name)
 	}
 	requireNoReasoning(t, "gemma", "gemma-3-27b")
 	requireNoReasoning(t, "gemma", "google/gemma-3-27b-it")
+	requireNoReasoning(t, "gemma", "gemma-3-4b-it")
+	requireNoReasoning(t, "gemma", "google/gemma-3n-E4B-it")
 	requireNoReasoning(t, "gemma", "gemma-2-9b")
+	requireNoReasoning(t, "gemma", "google/medgemma-4b-it")
+	requireNoReasoning(t, "gemma", "medgemma-4b-pt")
 	requireNoReasoning(t, "gemma", "gemma")
 }
 
-// Kimi: K2 Thinking and K2.7-Code always reason, K2.5 / K2.6 are hybrid via
-// the `thinking` chat-template kwarg (on by default), K2 Instruct has no
+// Kimi: K3, K2 Thinking and K2.7-Code always reason, K2.5 / K2.6 are hybrid
+// via the `thinking` chat-template kwarg (on by default), K2 Instruct has no
 // thinking mode.
 func TestBindingsForFamilyKimi(t *testing.T) {
 	requireNoReasoning(t, "kimi", "Kimi-K2-Instruct")
@@ -211,6 +201,8 @@ func TestBindingsForFamilyKimi(t *testing.T) {
 	requireNoReasoning(t, "kimi", "kimi")
 	requireAlwaysOn(t, "kimi", "Kimi-K2-Thinking")
 	requireAlwaysOn(t, "kimi", "moonshotai/Kimi-K2.7-Code")
+	requireAlwaysOn(t, "kimi", "moonshotai/Kimi-K3")
+	requireAlwaysOn(t, "kimi", "kimi_k3")
 	for _, name := range []string{"Kimi-K2.5", "moonshotai/Kimi-K2.6"} {
 		alwaysOn, b := bindingsForFamily("kimi", name)
 		require.False(t, alwaysOn, name)
@@ -219,11 +211,25 @@ func TestBindingsForFamilyKimi(t *testing.T) {
 }
 
 // MiniMax: M2 and every M2.x are interleaved-thinking models with no off
-// switch; Text-01 has no thinking mode; M1 is left without bindings because
-// no official source states whether its thinking can be disabled.
+// switch; M3 is hybrid via the string-valued thinking_mode chat-template
+// kwarg (adaptive when unset); Text-01 has no thinking mode; M1 is left
+// without bindings because no official source states whether its thinking
+// can be disabled.
 func TestBindingsForFamilyMinimax(t *testing.T) {
 	for _, name := range []string{"MiniMax-M2", "MiniMaxAI/MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.7-highspeed"} {
 		requireAlwaysOn(t, "minimax", name)
+	}
+	for _, name := range []string{"MiniMax-M3", "MiniMaxAI/MiniMax-M3"} {
+		alwaysOn, b := bindingsForFamily("minimax", name)
+		require.False(t, alwaysOn, name)
+		for _, intent := range []string{system.IntentReasoningDisable, system.IntentReasoningEnable} {
+			require.NotNil(t, b[intent], name)
+			require.Equal(t, system.BindingKindTemplateKwarg, b[intent].Kind, name)
+			require.Equal(t, "chat_template_kwargs.thinking_mode", b[intent].Param, name)
+			require.Equal(t, "string", b[intent].ParamType, name)
+		}
+		require.Equal(t, "disabled", b[system.IntentReasoningDisable].Value, name)
+		require.Equal(t, "enabled", b[system.IntentReasoningEnable].Value, name)
 	}
 	requireNoReasoning(t, "minimax", "MiniMax-Text-01")
 	requireNoReasoning(t, "minimax", "MiniMaxAI/MiniMax-M1-80k")
@@ -231,9 +237,10 @@ func TestBindingsForFamilyMinimax(t *testing.T) {
 }
 
 // EXAONE: 4.x is hybrid via enable_thinking (default off), Deep always
-// reasons, 3.5 and older have no reasoning mode.
+// reasons, 3.5 and older have no reasoning mode. The 4.x token also matches
+// the hyphen-less Ollama-tag / GGUF-architecture spellings.
 func TestBindingsForFamilyExaone(t *testing.T) {
-	for _, name := range []string{"EXAONE-4.0-32B", "LGAI-EXAONE/EXAONE-4.0.1-32B", "exaone-4.0-1.2b"} {
+	for _, name := range []string{"EXAONE-4.0-32B", "LGAI-EXAONE/EXAONE-4.0.1-32B", "exaone-4.0-1.2b", "exaone4:32b", "exaone4", "exaone_4"} {
 		alwaysOn, b := bindingsForFamily("exaone", name)
 		require.False(t, alwaysOn, name)
 		requireKwargBool(t, b, "enable_thinking", name)

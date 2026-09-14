@@ -47,7 +47,9 @@ type ModelConfig struct {
 	// ApiStack optionally names the backend API preset (vllm, ollama,
 	// anthropic…) that feeds the advertised `api` block of the model's health
 	// report. It never selects the adapter: its transport must match ApiType
-	// (ValidateApiStack). Empty means no api block is advertised.
+	// (ValidateApiStack). Empty means no api block is advertised. The loader
+	// stores it normalized (NormalizeApiStack) and clears an invalid value
+	// for that model with an error log instead of rejecting the file.
 	ApiStack string `json:"apiStack"`
 	// ModelFamily optionally pins the canonical model family (qwen3,
 	// deepseek-v3.1, gpt-oss, claude…) used to pick reasoning-control
@@ -120,14 +122,8 @@ func (e *ModelConfigLoader) Init() error {
 		if err != nil {
 			return fmt.Errorf("invalid models config V2 format: %s", err)
 		}
-		// Validate every model before storing any so a rejected config never
-		// leaves a partially populated map behind (main.go only warns on error).
 		for _, v := range modelConfigsV2.Models {
-			if err := ValidateApiStack(v.ID, v.ModelConfig); err != nil {
-				return fmt.Errorf("invalid models config: %w", err)
-			}
-		}
-		for _, v := range modelConfigsV2.Models {
+			v.ApiStack = e.loadApiStack(v.ID, v.ModelConfig)
 			e.modelConfigs[v.ID] = v.ModelConfig
 			_ = e.Validate(context.Background(), common.HexToHash(v.ID), v.ModelConfig)
 		}
@@ -148,13 +144,27 @@ func (e *ModelConfigLoader) Init() error {
 		return fmt.Errorf("invalid models config: %w", err)
 	}
 	for id, cfg := range modelConfigs {
-		if err := ValidateApiStack(id, cfg); err != nil {
-			return fmt.Errorf("invalid models config: %w", err)
-		}
+		cfg.ApiStack = e.loadApiStack(id, cfg)
+		modelConfigs[id] = cfg
 	}
 
 	e.modelConfigs = modelConfigs
 	return nil
+}
+
+// loadApiStack returns the apiStack value to store for one model: the
+// normalized preset when it is valid, "" otherwise. An unknown preset or a
+// transport mismatch is a mistake in an advertisement-only field, so it
+// degrades that one model rather than rejecting the whole file — main.go
+// only warns on an Init error and would otherwise run with zero models. The
+// error is logged and the model is served without an api block, the same way
+// an unknown modelFamily only warns (modelhealth checker).
+func (e *ModelConfigLoader) loadApiStack(modelID string, cfg ModelConfig) string {
+	if err := ValidateApiStack(modelID, cfg); err != nil {
+		e.log.Errorf("%s — apiStack ignored for this model, no api block will be advertised", err)
+		return ""
+	}
+	return NormalizeApiStack(cfg.ApiStack)
 }
 
 func (e *ModelConfigLoader) ModelConfigFromID(ID string) *ModelConfig {

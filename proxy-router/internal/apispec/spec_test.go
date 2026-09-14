@@ -10,10 +10,10 @@ import (
 )
 
 // build composes the spec for an apiStack preset. apiType is the preset's
-// transport adapter (openai when the preset is unknown) so every case is a
-// config the loader would accept.
+// transport adapter from config.StackTransport (openai when the preset is
+// unknown) so every case is a config the loader would accept.
 func build(stack, name, family string) *system.ModelApiSpec {
-	apiType, ok := TransportFor(stack)
+	apiType, ok := config.StackTransport[stack]
 	if !ok {
 		apiType = "openai"
 	}
@@ -259,14 +259,40 @@ func TestBuildNameAwareFamilies(t *testing.T) {
 	require.Nil(t, g3.Thinking)
 	require.Nil(t, g3.Bindings[system.IntentReasoningDisable])
 
+	// MedGemma 4B is Gemma 3 based: its 4B size token is not a Gemma 4 token.
+	mg := build("vllm", "google/medgemma-4b-it", "")
+	require.Equal(t, "gemma", mg.ModelFamily)
+	require.Nil(t, mg.Thinking)
+	require.Nil(t, mg.Bindings[system.IntentReasoningDisable])
+
 	m2 := build("sglang", "MiniMaxAI/MiniMax-M2.1", "")
 	require.Equal(t, "minimax", m2.ModelFamily)
 	require.Equal(t, system.ThinkingModeAlwaysOn, m2.Thinking.Mode)
+
+	m3 := build("vllm", "MiniMaxAI/MiniMax-M3", "")
+	require.Equal(t, "minimax", m3.ModelFamily)
+	require.Equal(t, system.ThinkingModeControllable, m3.Thinking.Mode)
+	require.Equal(t, "chat_template_kwargs.thinking_mode", m3.Bindings[system.IntentReasoningDisable].Param)
+	require.Equal(t, "disabled", m3.Bindings[system.IntentReasoningDisable].Value)
+	require.Equal(t, "enabled", m3.Bindings[system.IntentReasoningEnable].Value)
+
+	// On Ollama the string-valued kwarg toggle is rewritten onto the /v1
+	// reasoning_effort none/medium pair, like every other template-kwarg toggle.
+	m3o := build("ollama", "minimax-m3", "")
+	require.Equal(t, system.ThinkingModeControllable, m3o.Thinking.Mode)
+	require.Equal(t, system.BindingKindBodyParam, m3o.Bindings[system.IntentReasoningDisable].Kind)
+	require.Equal(t, "reasoning_effort", m3o.Bindings[system.IntentReasoningDisable].Param)
+	require.Equal(t, "none", m3o.Bindings[system.IntentReasoningDisable].Value)
+	require.Equal(t, "medium", m3o.Bindings[system.IntentReasoningEnable].Value)
 
 	k26 := build("vllm", "moonshotai/Kimi-K2.6", "")
 	require.Equal(t, "kimi", k26.ModelFamily)
 	require.Equal(t, system.ThinkingModeControllable, k26.Thinking.Mode)
 	require.Equal(t, "chat_template_kwargs.thinking", k26.Bindings[system.IntentReasoningDisable].Param)
+
+	k3 := build("vllm", "moonshotai/Kimi-K3", "")
+	require.Equal(t, "kimi", k3.ModelFamily)
+	require.Equal(t, system.ThinkingModeAlwaysOn, k3.Thinking.Mode)
 
 	ex := build("llamacpp", "LGAI-EXAONE/EXAONE-3.5-7.8B-Instruct", "exaone")
 	require.Equal(t, "exaone", ex.ModelFamily)

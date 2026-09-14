@@ -3282,6 +3282,10 @@ const docTemplate = `{
         "aiengine.LocalModel": {
             "type": "object",
             "properties": {
+                "apiStack": {
+                    "description": "apiStack preset the model advertises; empty when none",
+                    "type": "string"
+                },
                 "apiType": {
                     "type": "string"
                 },

@@ -194,14 +194,27 @@ func containsAny(name string, subs ...string) bool {
 // (the Gemma 4 card's own comparison column is "Gemma 3 27B (no think)" and
 // https://ai.google.dev/gemma/docs/core/model_card_3 documents none), so
 // they get no bindings.
+//
+// gemma4Re matches the Gemma 4 generation token (gemma-4-31b-it,
+// gemma-4-26b-a4b-it, gemma4:31b, gemma_4_12b) and not a 4B size token:
+// google/medgemma-4b-it "is built based on Gemma 3"
+// (https://huggingface.co/google/medgemma-4b-it) and has no thinking mode,
+// so a plain "gemma-4" substring test would bind it wrongly.
+var gemma4Re = regexp.MustCompile(`gemma[-_]?4(?:[-_:.]|$)`)
+
 func gemmaBindings(modelName string) (alwaysOn bool, b bindingSet) {
-	if containsAny(modelName, "gemma-4", "gemma4", "gemma_4") {
+	if gemma4Re.MatchString(strings.ToLower(modelName)) {
 		return false, kwargBoolBindings("enable_thinking")
 	}
 	return false, nil
 }
 
-// kimiBindings covers Moonshot's Kimi K2 line, per the official model cards:
+// kimiBindings covers Moonshot's Kimi K2 / K3 line, per the official model
+// cards:
+//   - Kimi-K3 (https://huggingface.co/moonshotai/Kimi-K3): "Kimi K3 always
+//     has thinking enabled, and will return reasoning_content" — always on.
+//     (Its encoding_k3.py carries a thinking flag, but no deploy guide
+//     documents it as a chat-template kwarg, so no toggle is advertised.)
 //   - Kimi-K2-Thinking (https://huggingface.co/moonshotai/Kimi-K2-Thinking):
 //     a thinking model whose template and deploy guide expose no toggle —
 //     always on; the generic "thinking" name rule above already handles it.
@@ -216,6 +229,8 @@ func gemmaBindings(modelName string) (alwaysOn bool, b bindingSet) {
 //     "a reflex-grade model without long thinking" — no bindings.
 func kimiBindings(modelName string) (alwaysOn bool, b bindingSet) {
 	switch {
+	case containsAny(modelName, "kimi-k3", "kimi_k3"):
+		return true, nil
 	case containsAny(modelName, "k2.7-code"):
 		return true, nil
 	case containsAny(modelName, "k2.5", "k2.6"):
@@ -230,14 +245,31 @@ func kimiBindings(modelName string) (alwaysOn bool, b bindingSet) {
 // thinking model [...] Do not remove the <think>...</think> part"; its chat
 // template pre-fills "<think>\n" unconditionally and reads no kwarg) and
 // https://platform.minimax.io/docs/api-reference/text-chat-openai ("For M2.x
-// models, thinking cannot be disabled"). MiniMax-Text-01
+// models, thinking cannot be disabled").
+// MiniMax-M3 (https://huggingface.co/MiniMaxAI/MiniMax-M3) is hybrid: "M3
+// supports three reasoning modes through the `thinking` parameter:
+// enabled / adaptive / disabled". Its chat template
+// (https://huggingface.co/MiniMaxAI/MiniMax-M3/raw/main/chat_template.jinja)
+// reads the thinking_mode kwarg ("enabled" | "disabled" | "adaptive", and
+// takes the adaptive branch when it is undefined), and the platform docs
+// expose the same switch as thinking.type ("When omitted, adaptive thinking
+// is enabled by default"; "disabled: Skip thinking for MiniMax-M3 and answer
+// directly"). MiniMax-Text-01
 // (https://huggingface.co/MiniMaxAI/MiniMax-Text-01) has no thinking mode.
 // MiniMax-M1 (https://huggingface.co/MiniMaxAI/MiniMax-M1-80k) emits <think>
 // blocks, but no official source says whether that can be turned off, so it
 // is deliberately left without bindings rather than guessed.
 func minimaxBindings(modelName string) (alwaysOn bool, b bindingSet) {
-	if containsAny(modelName, "minimax-m2") {
+	switch {
+	case containsAny(modelName, "minimax-m2"):
 		return true, nil
+	case containsAny(modelName, "minimax-m3"):
+		param := "chat_template_kwargs.thinking_mode"
+		hint := "enabled | disabled | adaptive; adaptive when unset"
+		return false, bindingSet{
+			system.IntentReasoningDisable: {Kind: system.BindingKindTemplateKwarg, Param: param, ParamType: "string", Value: "disabled", Hint: hint},
+			system.IntentReasoningEnable:  {Kind: system.BindingKindTemplateKwarg, Param: param, ParamType: "string", Value: "enabled", Hint: hint},
+		}
 	}
 	return false, nil
 }
@@ -256,11 +288,14 @@ func minimaxBindings(modelName string) (alwaysOn bool, b bindingSet) {
 //   - EXAONE 3.5 and older
 //     (https://huggingface.co/LGAI-EXAONE/EXAONE-3.5-32B-Instruct): no
 //     reasoning mode.
+//
+// Like the gemma rule, the 4.x token also accepts the hyphen-less Ollama-tag
+// and GGUF-architecture spellings (exaone4:32b, exaone4, exaone_4).
 func exaoneBindings(modelName string) (alwaysOn bool, b bindingSet) {
 	switch {
 	case containsAny(modelName, "exaone-deep"):
 		return true, nil
-	case containsAny(modelName, "exaone-4"):
+	case containsAny(modelName, "exaone-4", "exaone4", "exaone_4"):
 		return false, kwargBoolBindings("enable_thinking")
 	}
 	return false, nil
