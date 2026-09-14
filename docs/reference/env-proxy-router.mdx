@@ -209,7 +209,7 @@ These are only consulted when at least one model in the marketplace is `tee`-tag
 
 | Variable | Default | Notes |
 |----------|---------|-------|
-| `TEE_PORTAL_URL` | `https://secretai.scrtlabs.com/api` | SecretAI Portal used to verify raw TDX CPU quotes |
+| `TEE_PORTAL_URL` | `https://secretai.scrtlabs.com/api/quote-parse` | SecretAI Portal used to verify raw TDX CPU quotes |
 | `TEE_IMAGE_REPO` | `ghcr.io/morpheusais/morpheus-lumerin-node-tee` | GHCR repo where the consumer-side P-Node attestation fetches the signed golden manifest via cosign |
 | `ARTIFACT_REGISTRY_URL` | `https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/tdx.csv` | SecretVM TDX artifact registry CSV (MRTD + RTMR0-2 lookup). Served from the published [secretvm-verify](https://www.npmjs.com/package/secretvm-verify) package after the GitHub repo was removed. |
 | `SEV_ARTIFACT_REGISTRY_URL` | `https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/sev.json` | SecretVM SEV-SNP artifact registry JSON |

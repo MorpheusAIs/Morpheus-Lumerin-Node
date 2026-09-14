@@ -20,10 +20,36 @@ const (
 	ImageURLDetailAuto ImageURLDetail = "auto"
 )
 
+type ChatMessagePart struct {
+	Type     ChatMessagePartType `json:"type"`
+	Text     string              `json:"text,omitempty"`
+	ImageURL *ChatMessageImageURL `json:"image_url,omitempty"`
+}
+
+type ChatMessageImageURL struct {
+	// URL is either an https:// link or a base64 data URI
+	// ("data:image/png;base64,...").
+	URL    string         `json:"url,omitempty"`
+	Detail ImageURLDetail `json:"detail,omitempty"`
+}
+
 type ChatCompletionMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
-	// MultiContent []ChatMessagePart `json:"multiContent",omitempty`
+
+	// MultiContent carries multimodal parts (text + image_url) for vision
+	// models. Optional, so records written before this existed still decode.
+	//
+	// This was previously present but commented out, with a malformed tag
+	// (`json:"multiContent",omitempty` — omitempty outside the quotes, which
+	// makes the field name literally `multiContent",omitempty`). Restored with
+	// the correct tag and the OpenAI-standard `multi_content` name.
+	//
+	// Without this the request still reaches the provider — the inbound API
+	// binds to openai.ChatCompletionRequest, which has its own MultiContent —
+	// but the stored history drops the image, so reopening a chat shows the
+	// text with the attachment silently missing.
+	MultiContent []ChatMessagePart `json:"multi_content,omitempty"`
 
 	// This property isn't in the official documentation, but it's in
 	// the documentation for the official library for python:

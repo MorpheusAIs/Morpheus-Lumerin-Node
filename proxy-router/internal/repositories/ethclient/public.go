@@ -22,7 +22,6 @@ var publicRPCURLs = map[int][]string{
 		"https://base.drpc.org",
 		"https://base.public.blockpi.network/v1/rpc/public",
 		"https://base-mainnet.public.blastapi.io",
-		"https://base.lava.build",
 	},
 }
 

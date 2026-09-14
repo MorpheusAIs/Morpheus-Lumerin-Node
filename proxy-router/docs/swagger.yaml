@@ -909,6 +909,12 @@ definitions:
     - approvalSig
     - stake
     type: object
+  structs.ExistingSessionRes:
+    properties:
+      existingSessionID:
+        example: "0x1234"
+        type: string
+    type: object
   structs.OpenSessionRes:
     properties:
       sessionID:
@@ -925,6 +931,13 @@ definitions:
       directPayment:
         type: boolean
       failover:
+        type: boolean
+      rejectExisting:
+        description: |-
+          RejectExisting asks the router to refuse this open when the wallet already
+          has a live session for the same model. It is opt-in so existing API and
+          mobile callers that intentionally manage multiple sessions keep their
+          current behaviour.
         type: boolean
       omitProvider:
         description: |-
@@ -1783,6 +1796,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.OpenSessionRes'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/structs.ExistingSessionRes'
       security:
       - BasicAuth: []
       summary: Open Session by ModelID in blockchain
@@ -2966,6 +2983,15 @@ paths:
         format: hex32
         in: header
         name: chat_id
+        type: string
+      - description: Request-local chat history mode. 'off' disables storing and forwarding
+          context for this request; 'on' and 'default' preserve the server policy.
+        enum:
+        - default
+        - "on"
+        - "off"
+        in: header
+        name: x-morpheus-history
         type: string
       - description: Prompt
         in: body

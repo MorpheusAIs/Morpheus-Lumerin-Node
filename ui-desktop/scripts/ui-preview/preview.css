@@ -1,0 +1,125 @@
+html {
+  font-size: 10px;
+}
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  width: 100%;
+}
+body {
+  background: #071711;
+  color: #edf7f0;
+  font-family: var(--font-ui, Inter, sans-serif);
+  font-size: 1.4rem;
+  overflow: hidden;
+}
+* {
+  box-sizing: border-box;
+}
+.preview-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  height: 48px;
+  padding: 0.6rem 1.2rem;
+  background: #24382f;
+  position: relative;
+  z-index: 90;
+  font-size: 12px;
+}
+.quick-start.quick-start {
+  top: 64px;
+  max-height: calc(100dvh - 80px);
+}
+.preview-toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0;
+}
+.preview-toolbar select,
+.preview-toolbar button {
+  border: 1px solid #5e7d6a;
+  border-radius: 6px;
+  background: #12251a;
+  color: #edf7f0;
+  padding: 0.4rem 0.8rem;
+  font: inherit;
+}
+.preview-shell {
+  display: flex;
+  height: calc(100vh - 48px);
+  width: 100%;
+  margin: 0 auto;
+}
+.preview-shell[data-compact='true'] {
+  width: min(760px, 100%);
+}
+.preview-shell > aside {
+  height: 100%;
+}
+.preview-surface {
+  container-name: route-space;
+  container-type: inline-size;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+.preview-surface .cowork-shell {
+  height: 100%;
+}
+.preview-controls {
+  max-width: 76rem;
+  padding: 4rem;
+}
+.preview-controls h1 {
+  font-size: 2.8rem;
+  margin: 0 0 1.2rem;
+}
+.preview-controls p {
+  color: var(--text-muted, #9ab4a7);
+  margin: 1.6rem 0;
+}
+.preview-control-row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin: 2rem 0;
+}
+.preview-controls label {
+  display: grid;
+  gap: 0.6rem;
+  margin: 1.6rem 0;
+}
+.preview-controls input {
+  width: 100%;
+  border: 1px solid #3d634c;
+  border-radius: 10px;
+  padding: 1rem;
+  background: #10271e;
+  color: #edf7f0;
+}
+@media (max-width: 799px) {
+  .preview-shell {
+    padding-left: 64px;
+  }
+  .preview-shell > aside {
+    top: 48px;
+    height: calc(100vh - 48px);
+  }
+  .preview-toolbar {
+    gap: 0.6rem;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  .preview-toolbar strong {
+    display: none;
+  }
+  .preview-controls {
+    padding: 2rem;
+  }
+}

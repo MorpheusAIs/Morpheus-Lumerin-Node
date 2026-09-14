@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import styled from 'styled-components';
 
 import { ReceiveForm } from './ReceiveForm';
@@ -36,38 +36,36 @@ const Body = styled.div`
 `;
 
 function TransactionModal(props) {
-  const [amount, setAmount] = useState(null);
-  const [destinationAddress, setDestinationAddress] = useState('');
-
   const handlePropagation = e => e.stopPropagation();
 
-  const onSetDestinationAddress = e => setDestinationAddress(e.targetValue);
+  // Form state (amount, destination, selected currency, validation errors) all
+  // lives in withTransactionModalState now. It used to be split between here
+  // and the HOC, with the two copies drifting out of sync — the modal tracked a
+  // `destinationAddress` that the submit path never actually read.
+  const handleClose = () => {
+    props.resetForm();
+    props.onRequestClose();
+  };
 
   if (!props.activeTab) {
     return <></>;
   }
 
   return (
-    <Modal onClick={props.onRequestClose}>
+    <Modal onClick={handleClose}>
       <Body onClick={handlePropagation}>
-        {props.activeTab === 'receive' && <ReceiveForm {...props} />}
+        {props.activeTab === 'receive' && (
+          <ReceiveForm {...props} onRequestClose={handleClose} />
+        )}
         {props.activeTab === 'send' && (
-          <SendForm
-            {...props}
-            destinationAddress={destinationAddress}
-            onDestinationAddressInput={onSetDestinationAddress}
-            onAmountInput={setAmount}
-            amountInput={amount}
-            onSubmit={props.onSubmit}
-            symbol={props.symbol}
-            symbolEth={props.symbolEth}
-          />
+          <SendForm {...props} onRequestClose={handleClose} />
         )}
         {props.activeTab === 'success' && (
           <SuccessForm
-            amountInput={amount}
             {...props}
-            symbol={props.selectedCurrency.label}
+            onRequestClose={handleClose}
+            amountInput={props.coinAmount}
+            symbol={props.selectedCurrency?.label}
           />
         )}
       </Body>

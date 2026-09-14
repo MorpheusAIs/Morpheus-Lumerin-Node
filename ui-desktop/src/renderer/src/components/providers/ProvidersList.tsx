@@ -1,40 +1,93 @@
-import withProvidersState from '../../store/hocs/withProvidersState';
+import { useContext, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import styled from 'styled-components';
 import Accordion from 'react-bootstrap/Accordion';
 
 import { abbreviateAddress } from '../../utils';
 import Table from 'react-bootstrap/Table';
 import Button from 'react-bootstrap/Button';
+import { ToastsContext } from '../toasts';
+import { queryKeys } from '../../store/queries';
 import './Providers.css';
 
 const BidTable = styled(Table)`
-  text-align: center !important;
-  border: 0.5px solid#21dc8f !important;
+  text-align: left;
+  font-size: 1.3rem;
+  --bs-table-border-color: var(--border-subtle);
+  --bs-table-striped-bg: transparent;
+  font-variant-numeric: tabular-nums;
 
   th {
-    background: #244a47 !important;
-    color: #21dc8f !important;
+    background: var(--surface-raised) !important;
+    color: var(--text-muted) !important;
+    padding: 1.2rem !important;
+    font-weight: 550;
   }
 
   td {
-    background: #244a47 !important;
-    color: #21dc8f !important;
-    padding: 12px 0 !important;
+    background: var(--surface-base) !important;
+    color: var(--text-primary) !important;
+    padding: 1.2rem !important;
+    vertical-align: middle;
   }
 `;
 
 const StartBtn = styled(Button)`
-  background: rgba(0, 0, 0, 0.9) !important;
-  border-radius: 0 !important;
-  border: 1px solid #21dc8f !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 3.6rem;
+  padding: 0.8rem 1.2rem;
+  font-size: 1.3rem;
+  background: var(--surface-hover) !important;
+  color: var(--accent) !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--border-strong) !important;
 `;
 
 const Container = styled.div`
-  height: 75vh;
-  overflow-y: auto;
+  overflow: auto;
 `;
 
-function renderTable({ onClaim, sessions }) {
+const EmptyState = styled.div`
+  color: var(--text-muted);
+  font-size: 1.4rem;
+  padding: 3.2rem 0;
+`;
+
+const formatBalance = (session, balances, balancesLoading) => {
+  if (session.ClosedAt) return '0 MOR';
+  const balance = balances[session.Id];
+  if (balance == null) return balancesLoading ? 'Loading…' : 'Unavailable';
+  const numericBalance = Number(balance);
+  return Number.isFinite(numericBalance)
+    ? `${numericBalance / 10 ** 18} MOR`
+    : 'Unavailable';
+};
+
+export const groupProviderSessions = (sessions, modelNames) => {
+  const groups = new Map();
+  for (const session of sessions ?? []) {
+    const modelId = String(session.ModelAgentId ?? 'Unknown model');
+    const key = modelId.toLowerCase();
+    const current = groups.get(key) ?? {
+      id: modelId,
+      name: modelNames[key] ?? abbreviateAddress(modelId, 6),
+      sessions: [],
+    };
+    current.sessions.push(session);
+    groups.set(key, current);
+  }
+  return [...groups.values()];
+};
+
+function renderTable({
+  onClaim,
+  claiming,
+  sessions,
+  balances,
+  balancesLoading,
+}) {
   return (
     <BidTable striped bordered hover size="sm">
       <thead>
@@ -43,7 +96,7 @@ function renderTable({ onClaim, sessions }) {
           <th>Bid</th>
           <th>Status</th>
           <th>Balance</th>
-          <th></th>
+          <th>Action</th>
         </tr>
       </thead>
       <tbody>
@@ -55,10 +108,15 @@ function renderTable({ onClaim, sessions }) {
                   <td>{abbreviateAddress(b.Id, 5)}</td>
                   <td>{abbreviateAddress(b.BidID, 5)}</td>
                   <td>{b.ClosedAt ? 'CLOSED' : 'OPEN'}</td>
-                  <td>{b.Balance / 10 ** 18} MOR</td>
+                  <td>{formatBalance(b, balances, balancesLoading)}</td>
                   <td>
                     {!b.ClosedAt && (
-                      <StartBtn onClick={() => onClaim(b.Id)}>Claim</StartBtn>
+                      <StartBtn
+                        disabled={!!claiming}
+                        onClick={() => onClaim(b.Id)}
+                      >
+                        {claiming === b.Id ? 'Claiming…' : 'Claim'}
+                      </StartBtn>
                     )}
                   </td>
                 </tr>
@@ -70,33 +128,87 @@ function renderTable({ onClaim, sessions }) {
   );
 }
 
-function ProvidersList({ data, claimFunds }) {
+function ProvidersList({
+  sessions,
+  sessionsLoading,
+  modelNames,
+  balances,
+  balancesLoading,
+  claimFunds,
+  providerId,
+}) {
+  const context = useContext(ToastsContext);
+  const queryClient = useQueryClient();
+  const [claiming, setClaiming] = useState<string | null>(null);
+
+  // Claim used to fail silently (see withProvidersState.claimFunds). Now the
+  // result is actually surfaced, and the table refreshes so the claimed
+  // balance disappears without a manual tab switch.
+  const handleClaim = async (sessionId: string) => {
+    if (claiming) {
+      return;
+    }
+    setClaiming(sessionId);
+    try {
+      await claimFunds(sessionId);
+      context.toast('success', 'Funds claimed');
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.providerSessions(providerId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.providerBalances(providerId),
+        }),
+      ]);
+    } catch (e: any) {
+      context.toast('error', e?.message || 'Failed to claim funds');
+    } finally {
+      setClaiming(null);
+    }
+  };
+
+  const groups = useMemo(
+    () => groupProviderSessions(sessions, modelNames),
+    [sessions, modelNames],
+  );
+
+  if (sessionsLoading) {
+    return <EmptyState role="status">Loading provider sessions…</EmptyState>;
+  }
+
+  if (!groups.length) {
+    return (
+      <EmptyState>
+        No provider sessions yet. Sessions will appear here when your provider
+        serves a request.
+      </EmptyState>
+    );
+  }
+
   return (
     <Container>
-      {data?.modelsNames &&
-        Object.keys(data?.modelsNames).map((model) => {
-          const modelSessions = data.results.filter(
-            (r) => r.ModelAgentId.toLowerCase() == model.toLowerCase(),
-          );
-
-          return (
-            <Accordion alwaysOpen key={model}>
-              <Accordion.Item eventKey={model}>
-                <Accordion.Header className="model-header">
-                  {data?.modelsNames[model]}
-                </Accordion.Header>
-                <Accordion.Body>
-                  {renderTable({
-                    onClaim: claimFunds,
-                    sessions: modelSessions,
-                  })}
-                </Accordion.Body>
-              </Accordion.Item>
-            </Accordion>
-          );
-        })}
+      {groups.map((group) => {
+        return (
+          <Accordion alwaysOpen key={group.id}>
+            <Accordion.Item eventKey={group.id}>
+              <Accordion.Header className="model-header">
+                {group.name}
+              </Accordion.Header>
+              <Accordion.Body>
+                {renderTable({
+                  onClaim: handleClaim,
+                  claiming,
+                  sessions: group.sessions,
+                  balances,
+                  balancesLoading,
+                })}
+              </Accordion.Body>
+            </Accordion.Item>
+          </Accordion>
+        );
+      })}
     </Container>
   );
 }
 
-export default withProvidersState(ProvidersList);
+export default ProvidersList;

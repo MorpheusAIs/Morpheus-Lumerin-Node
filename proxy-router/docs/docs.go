@@ -952,6 +952,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/structs.OpenSessionRes"
                         }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ExistingSessionRes"
+                        }
                     }
                 }
             }
@@ -2856,6 +2862,17 @@ const docTemplate = `{
                         "in": "header"
                     },
                     {
+                        "enum": [
+                            "default",
+                            "on",
+                            "off"
+                        ],
+                        "type": "string",
+                        "description": "Request-local chat history mode. 'off' disables storing and forwarding context for this request; 'on' and 'default' preserve the server policy.",
+                        "name": "x-morpheus-history",
+                        "in": "header"
+                    },
+                    {
                         "description": "Prompt",
                         "name": "prompt",
                         "in": "body",
@@ -4594,6 +4611,15 @@ const docTemplate = `{
                 }
             }
         },
+        "structs.ExistingSessionRes": {
+            "type": "object",
+            "properties": {
+                "existingSessionID": {
+                    "type": "string",
+                    "example": "0x1234"
+                }
+            }
+        },
         "structs.OpenSessionRes": {
             "type": "object",
             "properties": {
@@ -4618,6 +4644,10 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "failover": {
+                    "type": "boolean"
+                },
+                "rejectExisting": {
+                    "description": "RejectExisting asks the router to refuse this open when the wallet already\nhas a live session for the same model. It is opt-in so existing API and\nmobile callers that intentionally manage multiple sessions keep their\ncurrent behaviour.",
                     "type": "boolean"
                 },
                 "omitProvider": {

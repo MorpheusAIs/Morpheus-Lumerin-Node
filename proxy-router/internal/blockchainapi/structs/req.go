@@ -65,12 +65,39 @@ type QueryProvider struct {
 
 type OpenSessionWithDurationRequest struct {
 	SessionDuration *lib.BigInt `json:"sessionDuration" swaggertype:"integer"`
+	// DirectPayment pays the provider out of the amount escrowed for this
+	// session instead of out of the emissions pool. Opening against a chosen
+	// bid used to force staking, so a consumer picking their own provider had
+	// no way to pay directly.
+	DirectPayment bool `json:"directPayment" binding:"omitempty"`
+	// RejectExisting asks the router to refuse this open when the wallet already
+	// has a live session for the bid's model. It mirrors the field of the same
+	// name on OpenSessionWithFailover: a consumer who picks their own provider
+	// is choosing a route to a model, not asking for a second session, and
+	// without this the by-bid route was the one way to lock a second lot of MOR
+	// against a model the wallet was already paying for. Opt-in for the same
+	// reason as on the by-model route, so callers that deliberately run parallel
+	// sessions keep working.
+	RejectExisting bool `json:"rejectExisting" binding:"omitempty"`
+}
+
+// QueryOpenSessionEstimate selects what to quote: a session length, a payment
+// method, and optionally one specific bid rather than the top-scored one.
+type QueryOpenSessionEstimate struct {
+	SessionDuration *lib.BigInt `form:"sessionDuration" binding:"required" validate:"number,gt=0" swaggertype:"integer"`
+	DirectPayment   bool        `form:"directPayment" binding:"omitempty"`
+	BidID           string      `form:"bidId" binding:"omitempty" validate:"omitempty,hex32"`
 }
 
 type OpenSessionWithFailover struct {
 	SessionDuration *lib.BigInt `json:"sessionDuration" swaggertype:"integer"`
 	DirectPayment   bool        `json:"directPayment" binding:"omitempty"`
 	Failover        bool        `json:"failover" binding:"omitempty"`
+	// RejectExisting asks the router to refuse this open when the wallet already
+	// has a live session for the same model. It is opt-in so existing API and
+	// mobile callers that intentionally manage multiple sessions keep their
+	// current behaviour.
+	RejectExisting bool `json:"rejectExisting" binding:"omitempty"`
 	// OmitProvider excludes a provider from bid selection, e.g. one whose
 	// backend just failed a prompt (impaired provider failover).
 	OmitProvider lib.Address `json:"omitProvider" binding:"omitempty" swaggertype:"string" example:"0x1234567890abcdef1234567890abcdef12345678"`

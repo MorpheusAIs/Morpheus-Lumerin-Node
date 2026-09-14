@@ -25,6 +25,9 @@ const TextInput = ({
       </Label>
       <InputControl
         id={id}
+        data-testid={dataTestId}
+        aria-invalid={hasErrors || undefined}
+        aria-describedby={hasErrors ? `${id}-error` : undefined}
         rows={rows}
         cols={cols}
         value={value || ''}
@@ -35,7 +38,11 @@ const TextInput = ({
         {...rest}
       />
       {hasErrors && (
-        <ErrorMsg data-testid={`${dataTestId}-error`}>
+        <ErrorMsg
+          id={`${id}-error`}
+          role="alert"
+          data-testid={`${dataTestId}-error`}
+        >
           {typeof error === 'string' ? error : error.join('. ')}
         </ErrorMsg>
       )}

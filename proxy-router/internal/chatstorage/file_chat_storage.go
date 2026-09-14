@@ -16,8 +16,14 @@ import (
 type ChatStorage struct {
 	dirPath            string                 // Directory path to store the files
 	fileMutexes        map[string]*sync.Mutex // Map to store mutexes for each file
+	fileMutexesMu      sync.Mutex             // Protects fileMutexes
 	forwardChatContext bool
 }
+
+const (
+	chatDirectoryMode os.FileMode = 0o700
+	chatFileMode      os.FileMode = 0o600
+)
 
 // NewChatStorage creates a new instance of ChatStorage.
 func NewChatStorage(dirPath string) *ChatStorage {
@@ -29,26 +35,25 @@ func NewChatStorage(dirPath string) *ChatStorage {
 
 // StorePromptResponseToFile stores the prompt and response to a file.
 func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isLocal bool, modelId string, prompt interface{}, responses []gcs.Chunk, promptAt time.Time, responseAt time.Time) error {
-	if err := os.MkdirAll(cs.dirPath, os.ModePerm); err != nil {
+	if err := ensurePrivateDirectory(cs.dirPath); err != nil {
 		return err
 	}
 
 	filePath := filepath.Join(cs.dirPath, identifier+".json")
-	cs.initFileMutex(filePath)
+	fileMutex := cs.getFileMutex(filePath)
 
 	// Lock the file mutex
-	cs.fileMutexes[filePath].Lock()
-	defer cs.fileMutexes[filePath].Unlock()
+	fileMutex.Lock()
+	defer fileMutex.Unlock()
 
 	var chatHistory gcs.ChatHistory
-	if _, err := os.Stat(filePath); err == nil {
-		fileContent, err := os.ReadFile(filePath)
-		if err != nil {
-			return err
-		}
+	fileContent, err := readPrivateFile(filePath)
+	if err == nil {
 		if err := json.Unmarshal(fileContent, &chatHistory); err != nil {
 			return err
 		}
+	} else if !os.IsNotExist(err) {
+		return err
 	}
 
 	resps := make([]string, len(responses))
@@ -138,7 +143,7 @@ func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isLocal bool
 		return err
 	}
 
-	if err := os.WriteFile(filePath, updatedContent, 0644); err != nil {
+	if err := writePrivateFileAtomically(filePath, updatedContent); err != nil {
 		return err
 	}
 
@@ -147,21 +152,26 @@ func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isLocal bool
 
 func (cs *ChatStorage) GetChats() []gcs.Chat {
 	var chats []gcs.Chat
+	if err := ensurePrivateDirectory(cs.dirPath); err != nil {
+		return chats
+	}
 	files, err := os.ReadDir(cs.dirPath)
 	if err != nil {
 		return chats
 	}
 
 	for _, file := range files {
-		if file.IsDir() {
+		if file.IsDir() || filepath.Ext(file.Name()) != ".json" {
 			continue
 		}
 
-		chatID := file.Name()
-		chatID = chatID[:len(chatID)-5]
+		chatID := strings.TrimSuffix(file.Name(), ".json")
 
 		fileContent, err := cs.LoadChatFromFile(chatID)
 		if err != nil {
+			continue
+		}
+		if len(fileContent.Messages) == 0 {
 			continue
 		}
 		chats = append(chats, gcs.Chat{
@@ -177,11 +187,14 @@ func (cs *ChatStorage) GetChats() []gcs.Chat {
 }
 
 func (cs *ChatStorage) DeleteChat(identifier string) error {
+	if err := ensurePrivateDirectory(cs.dirPath); err != nil {
+		return err
+	}
 	filePath := filepath.Join(cs.dirPath, identifier+".json")
-	cs.initFileMutex(filePath)
+	fileMutex := cs.getFileMutex(filePath)
 
-	cs.fileMutexes[filePath].Lock()
-	defer cs.fileMutexes[filePath].Unlock()
+	fileMutex.Lock()
+	defer fileMutex.Unlock()
 
 	if err := os.Remove(filePath); err != nil {
 		return err
@@ -190,24 +203,33 @@ func (cs *ChatStorage) DeleteChat(identifier string) error {
 }
 
 func (cs *ChatStorage) UpdateChatTitle(identifier string, title string) error {
-	chat, err := cs.LoadChatFromFile(identifier)
+	if err := ensurePrivateDirectory(cs.dirPath); err != nil {
+		return err
+	}
+
+	filePath := filepath.Join(cs.dirPath, identifier+".json")
+	fileMutex := cs.getFileMutex(filePath)
+
+	fileMutex.Lock()
+	defer fileMutex.Unlock()
+
+	fileContent, err := readPrivateFile(filePath)
 	if err != nil {
+		return err
+	}
+
+	var chat gcs.ChatHistory
+	if err := json.Unmarshal(fileContent, &chat); err != nil {
 		return err
 	}
 	chat.Title = title
 
-	filePath := filepath.Join(cs.dirPath, identifier+".json")
-	cs.initFileMutex(filePath)
-
-	cs.fileMutexes[filePath].Lock()
-	defer cs.fileMutexes[filePath].Unlock()
-
-	updatedContent, err := json.MarshalIndent(chat, "", "  ")
+	updatedContent, err := json.MarshalIndent(&chat, "", "  ")
 	if err != nil {
 		return err
 	}
 
-	if err := os.WriteFile(filePath, updatedContent, 0644); err != nil {
+	if err := writePrivateFileAtomically(filePath, updatedContent); err != nil {
 		return err
 	}
 
@@ -215,14 +237,17 @@ func (cs *ChatStorage) UpdateChatTitle(identifier string, title string) error {
 }
 
 func (cs *ChatStorage) LoadChatFromFile(identifier string) (*gcs.ChatHistory, error) {
+	if err := ensurePrivateDirectory(cs.dirPath); err != nil {
+		return nil, err
+	}
 	filePath := filepath.Join(cs.dirPath, identifier+".json")
-	cs.initFileMutex(filePath)
+	fileMutex := cs.getFileMutex(filePath)
 
-	cs.fileMutexes[filePath].Lock()
-	defer cs.fileMutexes[filePath].Unlock()
+	fileMutex.Lock()
+	defer fileMutex.Unlock()
 
 	var data gcs.ChatHistory
-	fileContent, err := os.ReadFile(filePath)
+	fileContent, err := readPrivateFile(filePath)
 	if err != nil {
 		return &data, err
 	}
@@ -234,9 +259,69 @@ func (cs *ChatStorage) LoadChatFromFile(identifier string) (*gcs.ChatHistory, er
 	return &data, nil
 }
 
-// initFileMutex initializes a mutex for the file if not already present.
-func (cs *ChatStorage) initFileMutex(filePath string) {
-	if _, exists := cs.fileMutexes[filePath]; !exists {
-		cs.fileMutexes[filePath] = &sync.Mutex{}
+// getFileMutex initializes and returns the mutex for a file. The map itself is
+// protected because requests for different chats can arrive concurrently.
+func (cs *ChatStorage) getFileMutex(filePath string) *sync.Mutex {
+	cs.fileMutexesMu.Lock()
+	defer cs.fileMutexesMu.Unlock()
+
+	if fileMutex, exists := cs.fileMutexes[filePath]; exists {
+		return fileMutex
 	}
+
+	fileMutex := &sync.Mutex{}
+	cs.fileMutexes[filePath] = fileMutex
+	return fileMutex
+}
+
+func ensurePrivateDirectory(dirPath string) error {
+	if err := os.MkdirAll(dirPath, chatDirectoryMode); err != nil {
+		return err
+	}
+	return os.Chmod(dirPath, chatDirectoryMode)
+}
+
+func readPrivateFile(filePath string) ([]byte, error) {
+	if err := os.Chmod(filePath, chatFileMode); err != nil {
+		return nil, err
+	}
+	return os.ReadFile(filePath)
+}
+
+// writePrivateFileAtomically writes a private temporary file beside its final
+// destination, flushes and closes it, then replaces the destination with a
+// same-directory rename. Readers therefore never observe partially-written
+// JSON.
+func writePrivateFileAtomically(filePath string, content []byte) error {
+	if err := ensurePrivateDirectory(filepath.Dir(filePath)); err != nil {
+		return err
+	}
+
+	tempFile, err := os.CreateTemp(filepath.Dir(filePath), "."+filepath.Base(filePath)+".tmp-")
+	if err != nil {
+		return err
+	}
+	tempPath := tempFile.Name()
+	defer func() {
+		_ = tempFile.Close()
+		_ = os.Remove(tempPath)
+	}()
+
+	if err := tempFile.Chmod(chatFileMode); err != nil {
+		return err
+	}
+	if _, err := tempFile.Write(content); err != nil {
+		return err
+	}
+	if err := tempFile.Sync(); err != nil {
+		return err
+	}
+	if err := tempFile.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tempPath, filePath); err != nil {
+		return err
+	}
+
+	return os.Chmod(filePath, chatFileMode)
 }

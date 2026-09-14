@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import styled from 'styled-components';
+import React from 'react';
+import styled, { keyframes } from 'styled-components';
 import { BaseBtn } from '../../common';
 import { IconX } from '@tabler/icons-react';
 
@@ -7,8 +7,8 @@ const CloseButton = styled.button`
   position: absolute;
   top: 12px;
   right: 12px;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -17,9 +17,11 @@ const CloseButton = styled.button`
   border-radius: 6px;
   padding: 0;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.7);
-  transition: background 0.12s ease, color 0.12s ease;
-  z-index: 21;
+  color: var(--text-muted, #9ab4a7);
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+  z-index: 1;
 
   &:hover {
     background: rgba(255, 255, 255, 0.08);
@@ -32,46 +34,53 @@ const CloseButton = styled.button`
   }
 `;
 
-export const CloseModal = onClose => (
+export const CloseModal = (onClose) => (
   <CloseButton type="button" aria-label="Close" onClick={onClose}>
     <IconX size={18} stroke={2} />
   </CloseButton>
 );
 
+const dialogReveal = keyframes`
+  from { opacity: .65; transform: translateY(8px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+`;
+
 export const Modal = styled.div`
   display: flex;
   flex-direction: column;
   position: fixed;
-  z-index: 10;
-  left: 0;
-  top: 0;
-  width: 100%;
-  min-width: 330px;
-  height: 100%;
-  overflow: auto;
-  background-color: rgb(0, 0, 0);
-  background-color: rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  inset: 0;
+  padding: 1.6rem;
+  box-sizing: border-box;
+  overflow: hidden;
+  background-color: rgba(2, 10, 7, 0.72);
   align-items: center;
   justify-content: center;
-  color: ${p => p.theme.colors.primaryDark};
+  color: var(--text-primary, #edf7f0);
 `;
 
 export const Body = styled.div`
-  position: fixed;
-  z-index: 20;
-  background-color: ${p => p.theme.colors.light};
-  width: ${p => p.width || '45%'};
-  height: ${p => p.height || 'fit-content'};
-  border-radius: 5px;
-  padding: 3rem 5%;
-  max-width: ${p => p.maxWidth || '600px'};
-  max-height: ${p => p.maxHeight || '800px'};
-  background-color: #173629;
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  position: relative;
+  flex: 0 1 auto;
+  box-sizing: border-box;
+  width: ${(p) => p.width || '640px'};
+  height: ${(p) => p.height || 'auto'};
+  min-height: 0;
+  border-radius: 16px;
+  padding: 2.4rem;
+  max-width: min(${(p) => p.maxWidth || '640px'}, calc(100vw - 3.2rem));
+  max-height: min(${(p) => p.maxHeight || '800px'}, calc(100vh - 3.2rem));
+  max-height: min(${(p) => p.maxHeight || '800px'}, calc(100dvh - 3.2rem));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background-color: var(--surface-raised, #10271e);
+  color: var(--text-primary, #edf7f0);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.36);
+  animation: ${dialogReveal} 180ms cubic-bezier(0.16, 1, 0.3, 1);
 
-  @media (min-height: 700px) {
-    padding: 5rem;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
   }
 `;
 
@@ -80,7 +89,7 @@ export const TitleWrapper = styled.div`
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  height: 10%;
+  padding-inline-end: 3.6rem;
   margin-bottom: 10px;
 `;
 export const Title = styled.div`
@@ -157,7 +166,7 @@ export const Input = styled.input`
     color: rgba(1, 67, 83, 0.56);
   }
 
-  ${props =>
+  ${(props) =>
     props.id === 'price' &&
     `
       display: inline-block;
@@ -201,8 +210,8 @@ export const LeftBtn = styled(BaseBtn)`
   height: 40px;
   font-size: 1.5rem;
   border-radius: 5px;
-  border: 1px solid ${p => p.theme.colors.primary};
-  background-color: ${p => p.theme.colors.morMain};
+  border: 1px solid ${(p) => p.theme.colors.primary};
+  background-color: ${(p) => p.theme.colors.morMain};
   color: black;
 
   @media (min-width: 1040px) {
@@ -215,7 +224,7 @@ export const RightBtn = styled(BaseBtn)`
   height: 40px;
   font-size: 1.5rem;
   border-radius: 5px;
-  background-color: ${p => p.theme.colors.morMain};
+  background-color: ${(p) => p.theme.colors.morMain};
   color: black;
   font-weight: 600;
 
@@ -235,8 +244,8 @@ export const ApplyBtn = styled(RightBtn)`
   font-size: 1.2rem;
   border-radius: 15px;
   margin-left: 10px;
-  background-color: ${p => p.theme.colors.primary};
-  color: ${p => p.theme.colors.light};
+  background-color: ${(p) => p.theme.colors.primary};
+  color: ${(p) => p.theme.colors.light};
 
   @media (min-width: 1040px) {
     margin-left: 10px;
@@ -263,27 +272,27 @@ export const ProfitMessageLabel = styled.div`
   opacity: 0.65;
   cursor: default;
   padding: 0 1rem;
-  border-bottom: ${p => (p.show ? '1px solid rgba(0,0,0,.125)' : '')};
-  padding-bottom: ${p => (p.show ? '1rem' : '')};
+  border-bottom: ${(p) => (p.show ? '1px solid rgba(0,0,0,.125)' : '')};
+  padding-bottom: ${(p) => (p.show ? '1rem' : '')};
 `;
 
 export const SearchContainer = styled.div`
-    input {
-      background-color: transparent;
-      border: 1px solid ${p => p.theme.colors.morMain};
-      color: white;
-    }
-    input::placeholder {
-      color: white;
-    }
-    .form-control:focus {
-      color: white;
-      background-color: transparent;
-      border-color: ${p => p.theme.colors.morMain};
-    }
-    .input-group-text {
-      background-color: transparent;
-      border: 1px solid ${p => p.theme.colors.morMain};
-      color: white;
-    }
-`
+  input {
+    background-color: transparent;
+    border: 1px solid ${(p) => p.theme.colors.morMain};
+    color: white;
+  }
+  input::placeholder {
+    color: white;
+  }
+  .form-control:focus {
+    color: white;
+    background-color: transparent;
+    border-color: ${(p) => p.theme.colors.morMain};
+  }
+  .input-group-text {
+    background-color: transparent;
+    border: 1px solid ${(p) => p.theme.colors.morMain};
+    color: white;
+  }
+`;
