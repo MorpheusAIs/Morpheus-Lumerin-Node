@@ -44,3 +44,39 @@ func TestModelHealthReportOmitsApiWhenNil(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, string(raw), `"api"`)
 }
+
+func TestModelApiSpecSourceOnWire(t *testing.T) {
+	raw, err := json.Marshal(ModelApiSpec{Stack: "vllm", Source: ApiSpecSourceDetected})
+	require.NoError(t, err)
+	require.Contains(t, string(raw), `"source":"detected"`)
+	raw, err = json.Marshal(ModelApiSpec{Stack: "vllm"})
+	require.NoError(t, err)
+	require.NotContains(t, string(raw), `"source"`)
+	require.Equal(t, "declared", ApiSpecSourceDeclared)
+}
+
+func TestModelApiSpecCloneIsDeep(t *testing.T) {
+	var nilSpec *ModelApiSpec
+	require.Nil(t, nilSpec.Clone())
+	orig := &ModelApiSpec{
+		Stack: "vllm", Source: ApiSpecSourceDetected, Thinking: &ThinkingSpec{Mode: ThinkingModeTunable},
+		Bindings: map[string]*ParamBinding{
+			IntentReasoningEffort:    {Kind: BindingKindTemplateKwarg, Param: "chat_template_kwargs.reasoning_effort", ParamType: "enum", EnumValues: []string{"low", "high"}},
+			IntentResponseFormatJSON: {Kind: BindingKindBodyParam, Param: "response_format", ParamType: "object", Value: map[string]any{"type": "json_object"}},
+		},
+		Parameters: []string{"messages"}, DeclaredAt: 7,
+	}
+	c := orig.Clone()
+	require.Equal(t, orig, c)
+	c.DeclaredAt = 99
+	c.Thinking.Mode = ThinkingModeAlwaysOn
+	c.Bindings[IntentReasoningEffort].EnumValues[0] = "mutated"
+	c.Bindings[IntentResponseFormatJSON].Value.(map[string]any)["type"] = "mutated"
+	c.Parameters[0] = "mutated"
+	delete(c.Bindings, IntentResponseFormatJSON)
+	require.Equal(t, int64(7), orig.DeclaredAt)
+	require.Equal(t, ThinkingModeTunable, orig.Thinking.Mode)
+	require.Equal(t, []string{"low", "high"}, orig.Bindings[IntentReasoningEffort].EnumValues)
+	require.Equal(t, map[string]any{"type": "json_object"}, orig.Bindings[IntentResponseFormatJSON].Value)
+	require.Equal(t, []string{"messages"}, orig.Parameters)
+}

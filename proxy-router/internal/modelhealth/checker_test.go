@@ -919,3 +919,19 @@ func TestCheckModelDeclaredAtStableAcrossSweeps(t *testing.T) {
 	require.NotZero(t, third.Api.DeclaredAt)
 	require.NotEqual(t, int64(12345), third.Api.DeclaredAt, "changed spec must refresh DeclaredAt")
 }
+
+// R3: a spec composed from apiStack reports source: declared.
+func TestCheckModelDeclaredSpecCarriesSource(t *testing.T) {
+	deps := &mockDeps{
+		bids:     []*structs.Bid{bidFor(modelLLM)},
+		tags:     map[common.Hash][]string{modelLLM: {"llm"}},
+		modelIDs: []common.Hash{modelLLM},
+		adapter:  &mathSolvingAdapter{},
+		configs:  map[common.Hash]config.ModelConfig{modelLLM: {ModelName: "qwen3-32b", ApiType: "openai", ApiStack: "vllm", ApiURL: "http://llm:8000/v1/chat/completions"}},
+	}
+	checker := newTestChecker(deps)
+	checker.checkAll(context.Background(), common.Address{})
+	llm := reportByID(t, checker.GetReports(), modelLLM)
+	require.NotNil(t, llm.Api)
+	require.Equal(t, system.ApiSpecSourceDeclared, llm.Api.Source)
+}

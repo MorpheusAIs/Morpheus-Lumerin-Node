@@ -78,7 +78,7 @@ type ModelHealthReport struct {
 	// when the probe failed with a non-200 response (e.g. 402, 429).
 	// Zero when the probe succeeded or never got an HTTP response.
 	HttpStatus int `json:"httpStatus,omitempty"`
-	// Api is the provider-declared API spec for this model (see internal/apispec): serving stack preset, model family and the request-param bindings a consumer needs to translate canonical fields. Derived from models-config presets only — never the backend URL, key or private model string.
+	// Api is the API spec for this model (see internal/apispec and internal/apidetect): serving stack, model family and the request-param bindings a consumer needs to translate canonical fields. Composed from models-config presets (source: declared) or from probing the backend's service endpoints (source: detected) — never the backend URL, key, hostnames or the private model string.
 	Api *ModelApiSpec `json:"api,omitempty"`
 }
 
@@ -136,12 +136,26 @@ const (
 	IntentToolsParallel      = "tools.parallel"
 )
 
-// ModelApiSpec describes the API serving a model as declared by the
-// provider's models-config apiStack preset. Self-reported and unverified:
-// consumers treat it as a routing/translation hint, not truth.
+// ApiSpecSource* say where a model's api block came from.
+const (
+	// ApiSpecSourceDeclared: composed from the models-config apiStack preset.
+	ApiSpecSourceDeclared = "declared"
+	// ApiSpecSourceDetected: composed from runtime probing of the backend's
+	// service endpoints (no apiStack declared); never from inference requests.
+	ApiSpecSourceDetected = "detected"
+)
+
+// ModelApiSpec describes the API serving a model, as declared by the
+// provider's apiStack preset or detected at runtime from the backend's
+// service endpoints (internal/apispec, internal/apidetect). Self-reported
+// and unverified: consumers treat it as a routing/translation hint, not truth.
 type ModelApiSpec struct {
 	// Stack is the serving stack / vendor preset: vllm | sglang | llamacpp |
-	// ollama | venice | openrouter | litellm | anthropic | openai.
+	// ollama | venice | openrouter | litellm | anthropic | openai. A detected
+	// block may also report engines that are not presets (tgi, lmstudio,
+	// koboldcpp) or a hosted vendor recognised by hostname (together,
+	// fireworks, groq, deepinfra, hyperbolic, mistral, gemini, xai, deepseek,
+	// moonshot, nvidia-nim, cerebras, sambanova); those carry no bindings table.
 	Stack string `json:"stack,omitempty"`
 	// ModelFamily is the canonical model family (qwen3, deepseek-r1, claude…).
 	ModelFamily string `json:"modelFamily,omitempty"`
@@ -156,7 +170,12 @@ type ModelApiSpec struct {
 	// Anthropic Messages names (an upper bound: server-side flags are
 	// invisible).
 	Parameters []string `json:"parameters,omitempty"`
-	DeclaredAt int64    `json:"declaredAt,omitempty"`
+	// Source says how the block was obtained: declared (models-config
+	// apiStack preset) or detected (runtime probing of the backend's service
+	// endpoints, never inference requests). A detected block reports only
+	// what this struct carries — no upstream model id, api_base or hostname.
+	Source     string `json:"source,omitempty"`
+	DeclaredAt int64  `json:"declaredAt,omitempty"`
 }
 
 // ThinkingSpec summarizes whether reasoning output can be controlled.
@@ -174,6 +193,49 @@ type ParamBinding struct {
 	Value      any      `json:"value,omitempty"`
 	EnumValues []string `json:"enumValues,omitempty"`
 	Hint       string   `json:"hint,omitempty"`
+}
+
+// Clone returns a deep copy (nil for a nil receiver): cached specs are handed
+// out as copies so callers can stamp DeclaredAt or edit bindings freely.
+func (s *ModelApiSpec) Clone() *ModelApiSpec {
+	if s == nil {
+		return nil
+	}
+	c := *s
+	if s.Thinking != nil {
+		t := *s.Thinking
+		c.Thinking = &t
+	}
+	if s.Bindings != nil {
+		c.Bindings = make(map[string]*ParamBinding, len(s.Bindings))
+		for intent, b := range s.Bindings {
+			c.Bindings[intent] = b.Clone()
+		}
+	}
+	if s.Parameters != nil {
+		c.Parameters = append([]string(nil), s.Parameters...)
+	}
+	return &c
+}
+
+// Clone returns a deep copy of the binding (nil for nil): EnumValues and an
+// object Value are copied so shared tables are never aliased.
+func (b *ParamBinding) Clone() *ParamBinding {
+	if b == nil {
+		return nil
+	}
+	c := *b
+	if b.EnumValues != nil {
+		c.EnumValues = append([]string(nil), b.EnumValues...)
+	}
+	if m, ok := b.Value.(map[string]any); ok {
+		mc := make(map[string]any, len(m))
+		for k, v := range m {
+			mc[k] = v
+		}
+		c.Value = mc
+	}
+	return &c
 }
 
 type StatusRes struct {

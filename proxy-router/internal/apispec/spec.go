@@ -98,7 +98,10 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 	tracef := func(format string, args ...any) { lines = append(lines, fmt.Sprintf(format, args...)) }
 
 	stack := ev.Stack
-	api := &system.ModelApiSpec{Stack: stack}
+	api := &system.ModelApiSpec{Stack: stack, Source: system.ApiSpecSourceDetected}
+	if ev.Declared {
+		api.Source = system.ApiSpecSourceDeclared
+	}
 
 	// Family: the explicit declaration is never overridden; otherwise direct
 	// backend evidence beats name heuristics and the backend's own model id
@@ -163,7 +166,15 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 		}
 	}
 	if len(bindings) == 0 && !alwaysOn {
-		if bindings = bindingsFromTemplate(ev.ChatTemplate); bindings != nil {
+		if stack == "" {
+			// Like the family-default step below: an undetermined stack means
+			// the wire vocabulary is unknown, so template-kwarg bindings
+			// (chat_template_kwargs.*) cannot be advertised either — they may
+			// not even apply if the backend turns out to be a gateway.
+			if bindingsFromTemplate(ev.ChatTemplate) != nil {
+				tracef("bindings: chat template evidence skipped — stack undetermined (unknown wire vocabulary)")
+			}
+		} else if bindings = bindingsFromTemplate(ev.ChatTemplate); bindings != nil {
 			tracef("bindings: from chat template source -> %s", describeBindings(bindings))
 		}
 	}
@@ -343,16 +354,5 @@ func cloneSet(b bindingSet) bindingSet {
 }
 
 func cloneBinding(b *system.ParamBinding) *system.ParamBinding {
-	c := *b
-	if b.EnumValues != nil {
-		c.EnumValues = append([]string(nil), b.EnumValues...)
-	}
-	if m, ok := b.Value.(map[string]any); ok {
-		mc := make(map[string]any, len(m))
-		for k, v := range m {
-			mc[k] = v
-		}
-		c.Value = mc
-	}
-	return &c
+	return b.Clone()
 }

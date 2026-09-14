@@ -213,6 +213,29 @@ func TestComposeWithTraceExplainsDecisions(t *testing.T) {
 	require.Contains(t, strings.Join(lines, "\n"), "stack undetermined")
 }
 
+// R3: the composer stamps where the block came from.
+func TestComposeSetsSource(t *testing.T) {
+	require.Equal(t, system.ApiSpecSourceDeclared, Build(config.ModelConfig{ModelName: "qwen3-32b", ApiType: "openai", ApiStack: "vllm", ApiURL: "http://h/v1"}).Source)
+	require.Equal(t, system.ApiSpecSourceDetected, Compose(Evidence{Stack: "vllm", ModelName: "qwen3-32b"}).Source)
+	require.Equal(t, system.ApiSpecSourceDetected, Compose(Evidence{ModelName: "qwen3-32b"}).Source, "a family-only detected spec still says detected")
+}
+
+// Rider (post-Task-1 review, closes an R4 gap): chat-template evidence must
+// not bypass the "undetermined stack" guard the family-default step already
+// enforces — an unknown wire vocabulary means no template-kwarg bindings
+// either, not just no family default.
+func TestComposeUndeterminedStackSkipsTemplateEvidence(t *testing.T) {
+	api := Compose(Evidence{Stack: "", ModelName: "Qwen3-8B", ChatTemplate: qwen3Template})
+	require.NotNil(t, api)
+	require.Equal(t, "", api.Stack)
+	require.Equal(t, "qwen3", api.ModelFamily, "family may still be reported")
+	require.Nil(t, api.Thinking, "qwen3 is not an always-on family")
+	require.Empty(t, api.Bindings)
+
+	_, lines := ComposeWithTrace(Evidence{Stack: "", ModelName: "Qwen3-8B", ChatTemplate: qwen3Template})
+	require.Contains(t, strings.Join(lines, "\n"), "chat template evidence skipped — stack undetermined")
+}
+
 func TestDescribeBinding(t *testing.T) {
 	require.Equal(t, "unknown", DescribeBinding(nil))
 	s := DescribeBinding(&system.ParamBinding{Kind: system.BindingKindBodyParam, Param: "thinking", ParamType: "object", Value: map[string]any{"type": "disabled"}, Hint: "h"})
