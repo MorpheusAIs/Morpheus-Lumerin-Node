@@ -63,7 +63,9 @@ const config: Configuration = {
     target: ['portable']
   },
   portable: {
-    artifactName: '${os}-${arch}-${name}-${version}.${ext}'
+    // Product name and version first, so a downloaded file still says what it
+    // is and which release it came from once it is out of the dist folder.
+    artifactName: '${productName}-${version}-${os}-${arch}.${ext}'
   },
   mac: {
     executableName: 'MorpheusUI',
@@ -78,14 +80,18 @@ const config: Configuration = {
     },
     target: ['dmg'],
     notarize: false,
-    artifactName: '${os}-${arch}-${name}-${version}.${ext}'
+    // Product name and version first, so a downloaded file still says what it
+    // is and which release it came from once it is out of the dist folder.
+    artifactName: '${productName}-${version}-${os}-${arch}.${ext}'
   },
   linux: {
     target: ['AppImage'],
     maintainer: 'mor.org',
     category: 'Utility',
     executableName: 'MorpheusUI',
-    artifactName: '${os}-${arch}-${name}-${version}.${ext}'
+    // Product name and version first, so a downloaded file still says what it
+    // is and which release it came from once it is out of the dist folder.
+    artifactName: '${productName}-${version}-${os}-${arch}.${ext}'
   },
   npmRebuild: false,
   publish: {

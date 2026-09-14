@@ -382,3 +382,158 @@ describe('ModelSelectionModal Workspace filter', () => {
     expect(screen.queryByText('Object tags model')).toBeNull();
   });
 });
+
+describe('ModelSelectionModal price sort', () => {
+  const priced = (modelId: string, minWei: string, maxWei = minWei) => ({
+    model_id: modelId,
+    min_price_per_second_wei: minWei,
+    max_price_per_second_wei: maxWei,
+    bid_count: 1,
+  });
+
+  // Four models covering every price state the sort has to order: two with real
+  // prices, one the sweep answered for but found no provider on, and one the
+  // sweep never reached.
+  const sortModels = [
+    marketplaceModel({ Id: 'expensive', Name: 'Expensive model' }),
+    marketplaceModel({ Id: 'cheap', Name: 'Cheap model' }),
+    marketplaceModel({ Id: 'unpriced', Name: 'Unpriced model' }),
+    marketplaceModel({ Id: 'unswept', Name: 'Unswept model' }),
+  ];
+
+  const priceIndex = {
+    byModelId: new Map([
+      // Deliberately past Number.MAX_SAFE_INTEGER: a float comparison would
+      // call these two equal and leave the list in registry order.
+      ['cheap', priced('cheap', '9007199254740993')],
+      ['expensive', priced('expensive', '9007199254740994')],
+      ['unpriced', priced('unpriced', '')],
+    ]),
+    failedModelIds: new Set(['unswept']),
+  };
+
+  const renderPicker = (extra: Record<string, unknown> = {}) =>
+    render(
+      <ThemeProvider theme={theme}>
+        <ModelSelectionModal
+          isActive
+          handleClose={vi.fn()}
+          onChangeModel={vi.fn()}
+          symbol="MOR"
+          models={sortModels}
+          priceIndex={priceIndex}
+          {...extra}
+        />
+      </ThemeProvider>,
+    );
+
+  /** The picker's rows, in the order they appear in the document. */
+  const rowOrder = () =>
+    screen
+      .getAllByRole('button')
+      .map((button) => button.textContent || '')
+      .filter((label) => label.endsWith(' model'));
+
+  it('orders by price in both directions and sinks unpriced models in each', () => {
+    renderPicker();
+
+    fireEvent.click(screen.getByRole('button', { name: /Cheapest first/ }));
+    expect(rowOrder()).toEqual([
+      'Cheap model',
+      'Expensive model',
+      // Neither of these has a price. They are not free, so they must not lead
+      // the cheap list, and they are not dear, so they must not lead the other
+      // one either. Alphabetical between themselves keeps the order stable.
+      'Unpriced model',
+      'Unswept model',
+    ]);
+
+    fireEvent.click(screen.getByRole('button', { name: /Most expensive first/ }));
+    expect(rowOrder()).toEqual([
+      'Expensive model',
+      'Cheap model',
+      'Unpriced model',
+      'Unswept model',
+    ]);
+  });
+
+  it('flattens the capability sections into one ordered list', () => {
+    renderPicker();
+
+    // Recommended keeps the capability grouping, which is what makes a price
+    // order impossible: five sections means five separate cheapest-first lists.
+    expect(
+      screen.queryByText('(models with no live provider are listed last)'),
+    ).toBeNull();
+    expect(screen.getByText('Marketplace')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /Cheapest first/ }));
+
+    expect(screen.queryByText('Marketplace')).toBeNull();
+    expect(
+      screen.getByText('(models with no live provider are listed last)'),
+    ).toBeTruthy();
+  });
+
+  it('says which of the three price states the list is in', () => {
+    const { rerender } = renderPicker({ pricesLoading: true });
+
+    // Nothing is claimed about prices until the list is actually ordered by
+    // them.
+    expect(screen.queryByRole('status')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Cheapest first/ }));
+    expect(screen.getByRole('status').textContent).toContain('Checking prices');
+
+    const props = {
+      isActive: true,
+      handleClose: vi.fn(),
+      onChangeModel: vi.fn(),
+      symbol: 'MOR',
+      models: sortModels,
+      priceIndex,
+    };
+    rerender(
+      <ThemeProvider theme={theme}>
+        <ModelSelectionModal {...props} pricesFailed />
+      </ThemeProvider>,
+    );
+    expect(screen.getByRole('status').textContent).toContain(
+      'could not be read',
+    );
+
+    rerender(
+      <ThemeProvider theme={theme}>
+        <ModelSelectionModal {...props} />
+      </ThemeProvider>,
+    );
+    expect(screen.getByText('Price per second of compute.')).toBeTruthy();
+  });
+
+  it('still orders the list when no prices arrived at all', () => {
+    render(
+      <ThemeProvider theme={theme}>
+        <ModelSelectionModal
+          isActive
+          handleClose={vi.fn()}
+          onChangeModel={vi.fn()}
+          symbol="MOR"
+          models={sortModels}
+          pricesFailed
+        />
+      </ThemeProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Cheapest first/ }));
+
+    // Every model is unpriced, so the price comparison ties throughout and the
+    // name tie-break decides. A sort that threw or shuffled here would make a
+    // failed price read look like a broken picker.
+    expect(rowOrder()).toEqual([
+      'Cheap model',
+      'Expensive model',
+      'Unpriced model',
+      'Unswept model',
+    ]);
+  });
+});

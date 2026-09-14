@@ -70,6 +70,7 @@ const legacyIpcChannels = new Set([
   'get-contract-hashrate',
   'get-all-models',
   'get-models-page',
+  'get-model-prices',
   'get-providers',
   'get-local-models',
   'get-node-config',

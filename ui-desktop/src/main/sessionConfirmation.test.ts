@@ -6,6 +6,10 @@ const mocks = vi.hoisted(() => ({
   constructorError: null as Error | null,
   loadError: null as Error | null,
   setupError: null as Error | null,
+  // `BrowserWindow.setMenu` exists on Linux and Windows only. The fixture used
+  // to define it unconditionally, so every test ran against a window shape that
+  // macOS never produces.
+  hasWindowMenu: true,
   send: vi.fn(),
   expose: vi.fn()
 }))
@@ -50,12 +54,22 @@ vi.mock('electron', async () => {
         options,
         webContents,
         setBounds: vi.fn(),
-        setMenu: vi.fn(),
+        ...(mocks.hasWindowMenu ? { setMenu: vi.fn() } : {}),
         show: vi.fn(),
-        // A modal child disables its parent on Windows. Teardown has to break
-        // the link before destroying the window, so the fixture has to model
-        // the call or the production cleanup throws.
-        setParentWindow: vi.fn(),
+        getBounds: vi.fn(() => ({ x: 0, y: 0, width: 1200, height: 800 })),
+        // Electron refuses this for a modal window, and the fixture used to
+        // model it as a harmless no-op. That is why teardown looked fine here
+        // while throwing on every real approval in the field.
+        setParentWindow: vi.fn(() => {
+          if (options?.modal) throw new TypeError('Can not be called for modal window')
+        }),
+        // A modal child disables its parent on Windows, and `destroy()` skips
+        // the close path that undoes it. `close()` is the legal way to run it.
+        close: vi.fn(() => {
+          destroyed = true
+          webContents.emit('destroyed')
+          view.emit('closed')
+        }),
         isDestroyed: vi.fn(() => destroyed),
         destroy: vi.fn(() => {
           destroyed = true
@@ -71,6 +85,8 @@ vi.mock('electron', async () => {
 
 import { BrowserWindow, ipcMain } from 'electron'
 import {
+  consumeSessionConfirmationDismissal,
+  SESSION_CONFIRMATION_ATTACH_TIMEOUT_MS,
   SESSION_CONFIRMATION_CHANNEL,
   SESSION_CONFIRMATION_TIMEOUT_MS,
   showSessionConfirmation
@@ -107,13 +123,24 @@ function makeOwner() {
   return owner
 }
 
-function request(owner = makeOwner()) {
+/**
+ * @param ready whether to model a preload that attached its handlers. A real
+ * prompt pings on DOMContentLoaded; omitting it is how a dead prompt is tested.
+ */
+function request(owner = makeOwner(), { ready = true } = {}) {
   const promise = showSessionConfirmation(owner as unknown as BrowserWindow, details)
   const view = mocks.views.at(-1)
   const argument = view.options.webPreferences.additionalArguments.find((value: string) =>
     value.startsWith('--session-confirmation-id=')
   )
   const requestId = argument.slice('--session-confirmation-id='.length)
+  if (ready) {
+    ipcMain.emit(
+      SESSION_CONFIRMATION_CHANNEL,
+      { sender: view.webContents, senderFrame: view.webContents.mainFrame },
+      { requestId, ready: true }
+    )
+  }
   return { promise, owner, view, requestId }
 }
 
@@ -130,7 +157,10 @@ function respond(pending: ReturnType<typeof request>, approved = false) {
 
 function expectCleaned(pending: ReturnType<typeof request>) {
   expect(ipcMain.listenerCount(SESSION_CONFIRMATION_CHANNEL)).toBe(0)
-  expect(pending.view.destroy).toHaveBeenCalled()
+  // What matters is that the window is gone, not which call removed it. A
+  // clean close is the normal route and skips `destroy()`; `destroy()` is the
+  // fallback for a close that did not take.
+  expect(pending.view.isDestroyed()).toBe(true)
   expect(pending.owner.listenerCount('resize')).toBe(0)
   expect(pending.owner.listenerCount('move')).toBe(0)
   expect(pending.owner.listenerCount('closed')).toBe(0)
@@ -147,6 +177,7 @@ describe('main-owned in-app session confirmation', () => {
     mocks.constructorError = null
     mocks.loadError = null
     mocks.setupError = null
+    mocks.hasWindowMenu = true
     owners.length = 0
   })
 
@@ -313,6 +344,122 @@ describe('main-owned in-app session confirmation', () => {
     await expect(pending.promise).resolves.toBe(false)
   })
 
+  it('gives up in seconds on a prompt whose controls never came up', async () => {
+    // A preload that never ran leaves a window that looks exactly like one the
+    // user has not answered yet. Without the readiness ping the only outcome
+    // was the full 60 second timeout, reported as an ordinary cancel.
+    const pending = request(makeOwner(), { ready: false })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(pending.view.show).toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(SESSION_CONFIRMATION_ATTACH_TIMEOUT_MS)
+    await expect(pending.promise).resolves.toBe(false)
+    expect(consumeSessionConfirmationDismissal()).toMatch(/controls never came up/iu)
+    expectCleaned(pending)
+  })
+
+  it('keeps a prompt that reported in waiting for the user, not the attach timeout', async () => {
+    const pending = request()
+    await vi.advanceTimersByTimeAsync(SESSION_CONFIRMATION_ATTACH_TIMEOUT_MS * 2)
+    let settled = false
+    void pending.promise.then(() => (settled = true))
+    await Promise.resolve()
+    expect(settled).toBe(false)
+
+    respond(pending, true)
+    await expect(pending.promise).resolves.toBe(true)
+    // A readiness ping is not a decision and must never stand in for one.
+    expectCleaned(pending)
+  })
+
+  it('reports why it gave up, and reports a real Cancel as a plain cancel', async () => {
+    const expired = request()
+    await vi.advanceTimersByTimeAsync(SESSION_CONFIRMATION_TIMEOUT_MS)
+    await expect(expired.promise).resolves.toBe(false)
+    const reason = consumeSessionConfirmationDismissal()
+    expect(reason).toMatch(/timeout/iu)
+    // Reading clears it. A stale reason attached to a later genuine Cancel
+    // would be worse than no reason at all.
+    expect(consumeSessionConfirmationDismissal()).toBe('')
+
+    const declined = request()
+    respond(declined, false)
+    await expect(declined.promise).resolves.toBe(false)
+    expect(consumeSessionConfirmationDismissal()).toBe('')
+  })
+
+  it('carries the load failure detail rather than discarding it', async () => {
+    const pending = request()
+    pending.view.webContents.emit(
+      'did-fail-load',
+      {},
+      -6,
+      'ERR_FILE_NOT_FOUND',
+      'data:text/html,x',
+      true
+    )
+    await expect(pending.promise).resolves.toBe(false)
+    expect(consumeSessionConfirmationDismissal()).toContain('ERR_FILE_NOT_FOUND')
+  })
+
+  it('names the missing app window instead of failing silently', async () => {
+    // The only refusal with no window, no log and no reason. It reached the
+    // user as an instant, unexplained "Session opening cancelled."
+    await expect(showSessionConfirmation(null, details)).resolves.toBe(false)
+    expect(consumeSessionConfirmationDismissal()).toMatch(/no app window/iu)
+  })
+
+  it('still shows the prompt on a window with no setMenu, as on macOS', async () => {
+    // `BrowserWindow.setMenu` is Linux and Windows only. Calling it on macOS
+    // threw inside the setup try/catch that fails closed, so the prompt was
+    // cancelled before loadURL ran: no window, and an instant "Session opening
+    // cancelled." on every attempt. There is no menu bar to strip there.
+    mocks.hasWindowMenu = false
+    const pending = request()
+    expect(pending.view.setMenu).toBeUndefined()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(pending.view.webContents.loadURL).toHaveBeenCalled()
+    expect(pending.view.show).toHaveBeenCalled()
+
+    respond(pending, true)
+    await expect(pending.promise).resolves.toBe(true)
+    expectCleaned(pending)
+  })
+
+  it('accepts an approval after Chromium re-canonicalises the data URL it was given', async () => {
+    // The fixture's getURL echoes whatever loadURL was handed, so a check that
+    // compared the two strings passed here while failing in the app. Chromium
+    // canonicalises data URLs, and encodeURIComponent leaves characters such as
+    // the apostrophes in the CSP untouched, so the string that comes back is
+    // not guaranteed to be the string that went in. Dropping a real Approve
+    // over that surfaced to the user as "Session opening cancelled."
+    const pending = request()
+    const loaded: string = pending.view.webContents.loadURL.mock.calls[0][0]
+    const canonicalised = loaded.replace(/'/gu, '%27')
+    expect(canonicalised).not.toBe(loaded)
+    pending.view.webContents.getURL.mockReturnValueOnce(canonicalised)
+
+    respond(pending, true)
+    await expect(pending.promise).resolves.toBe(true)
+    expectCleaned(pending)
+  })
+
+  it('does not accept an approval from an inline document that is not this prompt', async () => {
+    // Right scheme, wrong document. The nonce is what ties the page the user is
+    // looking at to this request, so relaxing the URL check must not relax that.
+    const pending = request()
+    let settled = false
+    void pending.promise.then(() => (settled = true))
+    pending.view.webContents.getURL.mockReturnValueOnce(
+      'data:text/html;charset=utf-8,%3Cbutton%20data-decision%3D%22approve%22%3E'
+    )
+    respond(pending, true)
+    await Promise.resolve()
+    expect(settled).toBe(false)
+
+    respond(pending)
+    await expect(pending.promise).resolves.toBe(false)
+  })
+
   it('expires before the renderer request timeout and releases its confirmation lock', async () => {
     expect(SESSION_CONFIRMATION_TIMEOUT_MS).toBeLessThan(120_000)
     const pending = request()
@@ -343,7 +490,7 @@ describe('main-owned in-app session confirmation', () => {
     expectCleaned(pending)
   })
 
-  it('cancels on owner main-frame reload/navigation but not a child-frame navigation', async () => {
+  it('cancels on an owner main-frame document swap but not a child-frame one', async () => {
     const pending = request()
     let settled = false
     void pending.promise.then(() => (settled = true))
@@ -353,6 +500,63 @@ describe('main-owned in-app session confirmation', () => {
     pending.owner.webContents.emit('did-start-navigation', {}, 'about:blank', false, true)
     await expect(pending.promise).resolves.toBe(false)
     expectCleaned(pending)
+  })
+
+  it('survives the owner navigating within the same document', async () => {
+    // The app renders under a HashRouter, so an in-app route change, a ?query
+    // update and a history.replaceState all arrive as same-document main-frame
+    // navigations. React also flushes the state the open button queued during
+    // the await that is showing this prompt, so one landing mid-prompt is
+    // routine. Cancelling on them dismissed the window the user was reading.
+    const pending = request()
+    let settled = false
+    void pending.promise.then(() => (settled = true))
+    for (const url of ['file:///app/index.html#/chat', 'file:///app/index.html#/chat?setup=x']) {
+      pending.owner.webContents.emit('did-start-navigation', {}, url, true, true)
+    }
+    await Promise.resolve()
+    expect(settled).toBe(false)
+
+    respond(pending, true)
+    await expect(pending.promise).resolves.toBe(true)
+    expectCleaned(pending)
+  })
+
+  it('says which teardown path dismissed a prompt nobody decided', async () => {
+    // Every one of these resolves false, and openSession reports all of them as
+    // "Session opening cancelled." A prompt that dies on its own has to be
+    // distinguishable from the user pressing Cancel, or a field report of
+    // "it cancels every time" is unactionable.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const expired = request()
+      await vi.advanceTimersByTimeAsync(SESSION_CONFIRMATION_TIMEOUT_MS)
+      await expect(expired.promise).resolves.toBe(false)
+      expect(warn.mock.calls.at(-1)?.[0]).toMatch(/timeout/iu)
+
+      const failed = request()
+      failed.view.webContents.emit('did-fail-load', {}, -2, 'failed', 'data:text/html,x', true)
+      await expect(failed.promise).resolves.toBe(false)
+      expect(warn.mock.calls.at(-1)?.[0]).toMatch(/failed to load/iu)
+
+      const replaced = request()
+      replaced.owner.webContents.emit('did-start-navigation', {}, 'about:blank', false, true)
+      await expect(replaced.promise).resolves.toBe(false)
+      expect(warn.mock.calls.at(-1)?.[0]).toMatch(/different document/iu)
+
+      // A decision is not a dismissal. It is still worth one line, because the
+      // alternative is that a user who pressed Cancel and an approval that
+      // teardown took away are the same silence.
+      const decided = request()
+      const before = warn.mock.calls.length
+      respond(decided, false)
+      await expect(decided.promise).resolves.toBe(false)
+      expect(warn.mock.calls).toHaveLength(before + 1)
+      expect(warn.mock.calls.at(-1)?.[0]).toMatch(/cancelled by the user/iu)
+      expect(warn.mock.calls.at(-1)?.[0]).not.toMatch(/dismissed/iu)
+    } finally {
+      warn.mockRestore()
+    }
   })
 
   it('cancels on overlay document load failure', async () => {
@@ -374,7 +578,7 @@ describe('main-owned in-app session confirmation', () => {
     const pending = request()
     await expect(pending.promise).resolves.toBe(false)
     expect(pending.view.show).not.toHaveBeenCalled()
-    expect(pending.view.destroy).toHaveBeenCalled()
+    expect(pending.view.isDestroyed()).toBe(true)
     expect(ipcMain.listenerCount(SESSION_CONFIRMATION_CHANNEL)).toBe(0)
     expect(pending.owner.listenerCount('resize')).toBe(0)
     expect(vi.getTimerCount()).toBe(0)
@@ -403,12 +607,12 @@ describe('main-owned in-app session confirmation', () => {
     }
   )
 
-  it.each(['destroy', 'focus'])(
+  it.each(['close', 'focus'])(
     'fails closed but finishes all cleanup when native %s throws',
     async (step) => {
       const pending = request()
       const failingOperation =
-        step === 'destroy' ? pending.view.destroy : pending.owner.webContents.focus
+        step === 'close' ? pending.view.close : pending.owner.webContents.focus
       failingOperation.mockImplementationOnce(() => {
         throw new Error('Native object disappeared during teardown')
       })
@@ -422,6 +626,13 @@ describe('main-owned in-app session confirmation', () => {
       await expect(next.promise).resolves.toBe(false)
     }
   )
+
+  it('reports a deliberate Cancel with no teardown reason attached', async () => {
+    const pending = request()
+    respond(pending, false)
+    await expect(pending.promise).resolves.toBe(false)
+    expect(consumeSessionConfirmationDismissal()).toBe('')
+  })
 
   it('rejects an otherwise valid approval if the owner died before its close event arrives', async () => {
     const pending = request()
@@ -464,20 +675,41 @@ describe('main-owned in-app session confirmation', () => {
     expectCleaned(pending)
   })
 
-  it('releases the owner before destroying the modal child', async () => {
+  it('releases the owner through the close path, never setParentWindow', async () => {
     // A modal child disables its parent through EnableWindow on Windows, and
     // `destroy()` deliberately skips the close path that would undo it. Tearing
     // the child down first left the main window painting but deaf to every
     // click and keystroke until the app was restarted — the "app breaks after
     // starting a second session" report.
+    //
+    // The obvious-looking cure, `setParentWindow(null)`, is rejected by
+    // Electron for modal windows with "Can not be called for modal window".
+    // It threw on every approval, the teardown catch downgraded that approval
+    // to a cancel, and the user was told "Session opening cancelled." after
+    // pressing Open session. `close()` runs the same path and is allowed.
     const pending = request()
     respond(pending, true)
     await expect(pending.promise).resolves.toBe(true)
-    const released = pending.view.setParentWindow.mock.invocationCallOrder[0]
-    const destroyed = pending.view.destroy.mock.invocationCallOrder[0]
-    expect(pending.view.setParentWindow).toHaveBeenCalledWith(null)
-    expect(released).toBeLessThan(destroyed)
+    expect(pending.view.setParentWindow).not.toHaveBeenCalled()
+    expect(pending.view.close).toHaveBeenCalled()
+    expect(pending.view.close.mock.invocationCallOrder[0]).toBeLessThan(
+      pending.view.destroy.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY
+    )
     expect(pending.owner.setEnabled).not.toHaveBeenCalled()
+  })
+
+  it('survives an approval when the modal refuses to close', async () => {
+    // Teardown must never be the thing that cancels a transaction the user
+    // authorised, so the fallback has to actually run and the approval has to
+    // survive it.
+    const pending = request()
+    pending.view.close.mockImplementationOnce(() => {
+      throw new TypeError('Can not be called for modal window')
+    })
+    respond(pending, true)
+    await expect(pending.promise).resolves.toBe(false)
+    expect(pending.view.destroy).toHaveBeenCalled()
+    expect(consumeSessionConfirmationDismissal()).toMatch(/could not be torn down/u)
   })
 
   it('re-enables an owner the platform left disabled anyway', async () => {
@@ -495,7 +727,7 @@ describe('main-owned in-app session confirmation', () => {
     pending.owner.emit('closed')
     await expect(pending.promise).resolves.toBe(false)
     expect(pending.owner.webContents.focus).not.toHaveBeenCalled()
-    expect(pending.view.destroy).toHaveBeenCalled()
+    expect(pending.view.isDestroyed()).toBe(true)
     expect(ipcMain.listenerCount(SESSION_CONFIRMATION_CHANNEL)).toBe(0)
   })
 
@@ -634,12 +866,25 @@ describe('dedicated confirmation preload', () => {
     document.body.innerHTML = ''
   })
 
-  it('exposes no API bridge and puts initial focus on Cancel', async () => {
+  it('exposes no API bridge, focuses Cancel and reports that its controls are live', async () => {
     await loadPreload()
+    expect(mocks.send).not.toHaveBeenCalled()
     window.dispatchEvent(new Event('DOMContentLoaded'))
     expect(mocks.expose).not.toHaveBeenCalled()
-    expect(mocks.send).not.toHaveBeenCalled()
     expect(document.activeElement).toBe(document.getElementById('session-cancel'))
+    // The ping is what separates a prompt nobody has answered yet from one that
+    // cannot be answered at all. It carries no decision.
+    expect(mocks.send).toHaveBeenCalledOnce()
+    expect(mocks.send).toHaveBeenCalledWith(SESSION_CONFIRMATION_CHANNEL, {
+      requestId,
+      ready: true
+    })
+  })
+
+  it('does not report readiness without a well-formed request id', async () => {
+    await loadPreload('--session-confirmation-id=not-a-uuid')
+    window.dispatchEvent(new Event('DOMContentLoaded'))
+    expect(mocks.send).not.toHaveBeenCalled()
   })
 
   it('does not accept synthetic DOM clicks or synthetic escape keys', async () => {

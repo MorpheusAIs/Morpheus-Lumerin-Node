@@ -209,6 +209,10 @@ const createClient = function (createStore) {
     // instead of timing out and immediately duplicating the same chain scan.
     getAllModels: utils.forwardToMainProcess('get-all-models', 120000),
     getModelsPage: utils.forwardToMainProcess('get-models-page', 30000),
+    // One bid read per registered model behind a router-side cache. A warm
+    // answer is instant; a cold sweep is on the order of the full-registry read
+    // above, so it gets the same budget rather than the generic 10s one.
+    getModelPrices: utils.forwardToMainProcess('get-model-prices', 120000),
     getProviders: utils.forwardToMainProcess('get-providers'),
     getLocalModels: utils.forwardToMainProcess('get-local-models'),
     getNodeConfig: utils.forwardToMainProcess('get-node-config'),

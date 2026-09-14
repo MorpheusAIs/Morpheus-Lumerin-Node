@@ -3,12 +3,26 @@ import {
   DEFAULT_SESSION_DURATION_SECONDS,
   MAX_SESSION_DURATION_SECONDS,
   MIN_SESSION_DURATION_SECONDS,
+  SESSION_AMOUNT_SAFETY_BPS,
   SESSION_DURATION_OPTIONS,
   clampSessionDuration,
   estimateSessionTokenAmount,
   sessionComputeCost,
   sessionDurationOptions,
 } from './sessionDuration';
+
+/**
+ * The quote's safety margin, applied the same way the implementation applies it.
+ *
+ * Spelled out rather than baked into a literal so these expectations say what
+ * they are checking. The margin absorbs supply drift between quoting and mining
+ * and is refunded at close, so its exact size is a tuning decision; what must
+ * not change silently is that it is applied, and applied by rounding up.
+ */
+const withSafetyMargin = (amount: number) =>
+  Number(
+    (BigInt(amount) * (10_000n + SESSION_AMOUNT_SAFETY_BPS) + 9_999n) / 10_000n,
+  );
 
 describe('session duration', () => {
   it('offers nothing shorter than a session a provider will accept', () => {
@@ -55,13 +69,18 @@ describe('session duration', () => {
     // session costs to open. Direct pay used to be quoted at price x duration,
     // which buys a few hundredth of the length asked for.
     const meta = { supply: 100, budget: 10 };
-    // 2 wei/s x (900 + 1 headroom) x 100 / 10.
-    expect(estimateSessionTokenAmount(2, 900, meta)).toBe(18020);
+    // 2 wei/s x (900 + 1 headroom) x 100 / 10, then the safety margin.
+    expect(estimateSessionTokenAmount(2, 900, meta)).toBe(
+      withSafetyMargin(18020),
+    );
   });
 
   it('rounds the amount up so the session is never short', () => {
+    // Rounded up twice: once dividing by the budget, once applying the margin.
+    // Rounding down at either step buys less time than was asked for, and the
+    // contract reverts the open rather than shortening the session.
     expect(estimateSessionTokenAmount(1, 900, { supply: 10, budget: 3 })).toBe(
-      Math.ceil((901 * 10) / 3),
+      withSafetyMargin(Math.ceil((901 * 10) / 3)),
     );
   });
 

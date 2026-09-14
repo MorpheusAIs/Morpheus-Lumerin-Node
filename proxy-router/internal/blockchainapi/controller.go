@@ -59,6 +59,9 @@ func (c *BlockchainController) RegisterRoutes(r interfaces.Router) {
 
 	// models
 	r.GET("/blockchain/models", c.authConf.CheckAuth("get_models"), c.getAllModels)
+	// Registered before the /:id routes for the same reason /blockchain/sessions/user
+	// is: "prices" is a literal segment, not a model id.
+	r.GET("/blockchain/models/prices", c.authConf.CheckAuth("get_bids"), c.getModelPrices)
 	r.POST("/blockchain/models", c.authConf.CheckAuth("create_model"), c.createNewModel)
 	r.DELETE("/blockchain/models/:id", c.authConf.CheckAuth("delete_model"), c.deregisterModel)
 
@@ -433,6 +436,30 @@ func (c *BlockchainController) getAllModels(ctx *gin.Context) {
 	return
 }
 
+// GetModelPrices godoc
+//
+//	@Summary		Get price index for every model
+//	@Description	Get the live price range per second of compute for every registered model, so a client can rank models by cost without one request per model
+//	@Tags			models
+//	@Produce		json
+//	@Success		200	{object}	structs.ModelPricesRes
+//	@Failure		500	{object}	structs.ErrRes
+//	@Security		BasicAuth
+//	@Router			/blockchain/models/prices [get]
+func (c *BlockchainController) getModelPrices(ctx *gin.Context) {
+	prices, err := c.service.GetModelPrices(ctx)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	// Deliberately not sorted here. A model with no live provider has no price to
+	// rank, and whether those rows belong at the bottom of a cheap-first list or
+	// hidden entirely is the client's decision, not the router's.
+	ctx.JSON(http.StatusOK, prices)
+}
+
 // GetBidsByModelAgent godoc
 //
 //	@Summary		Get Bids by	Model Agent
@@ -672,6 +699,7 @@ func (c *BlockchainController) openSession(ctx *gin.Context) {
 //	@Param			opensession	body		structs.OpenSessionWithDurationRequest	true	"Open session"
 //	@Param			id			path		string									true	"Bid ID"
 //	@Success		200			{object}	structs.OpenSessionRes
+//	@Failure		409			{object}	structs.ExistingSessionRes
 //	@Router			/blockchain/bids/{id}/session [post]
 //	@Security		BasicAuth
 func (s *BlockchainController) openSessionByBid(ctx *gin.Context) {
@@ -696,9 +724,15 @@ func (s *BlockchainController) openSessionByBid(ctx *gin.Context) {
 	}
 	usernameStr := username.(string)
 
-	sessionId, err := s.service.openSessionByBid(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), reqPayload.DirectPayment, usernameStr)
+	var sessionId common.Hash
+	if reqPayload.RejectExisting {
+		sessionId, err = s.service.OpenSessionByBidIdRejectExisting(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), reqPayload.DirectPayment, usernameStr)
+	} else {
+		sessionId, err = s.service.openSessionByBid(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), reqPayload.DirectPayment, usernameStr, nil)
+	}
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
+		s.log.Error(err)
+		writeOpenSessionError(ctx, err)
 		return
 	}
 
@@ -821,7 +855,7 @@ func (s *BlockchainController) openSessionByModelId(ctx *gin.Context) {
 	}
 	if err != nil {
 		s.log.Error(err)
-		writeOpenSessionByModelError(ctx, err)
+		writeOpenSessionError(ctx, err)
 		return
 	}
 
@@ -829,7 +863,9 @@ func (s *BlockchainController) openSessionByModelId(ctx *gin.Context) {
 	return
 }
 
-func writeOpenSessionByModelError(ctx *gin.Context, err error) {
+// writeOpenSessionError is shared by both open routes: either can now be asked
+// to reject an existing session, so either can need to answer 409.
+func writeOpenSessionError(ctx *gin.Context, err error) {
 	var existing *ExistingSessionError
 	if errors.As(err, &existing) {
 		ctx.JSON(http.StatusConflict, structs.ExistingSessionRes{

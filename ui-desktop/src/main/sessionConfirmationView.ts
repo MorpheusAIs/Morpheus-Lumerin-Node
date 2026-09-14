@@ -12,6 +12,17 @@ export interface SessionConfirmationDetails {
    * visible in the window that actually authorises the transaction.
    */
   readonly provider?: string
+  /**
+   * What the open will actually move, in whole MOR, as quoted by the router
+   * rather than re-derived here.
+   *
+   * This window is the last thing between the user and a blockchain
+   * transaction, and until now it named a model, a duration and a payment mode
+   * but never a number. Optional because the quote is a live call to the proxy
+   * router: if it fails, the confirmation still has to appear, and it says so
+   * rather than inventing a figure.
+   */
+  readonly amountMor?: string
 }
 
 const escapeHtml = (value: string): string =>
@@ -47,6 +58,11 @@ export function renderSessionConfirmationHtml(
     <div class="session-confirmation__body">
       <p id="session-description">Review the session details before submitting a blockchain transaction.</p>
       <dl class="session-confirmation__details">
+        <div><dt>Amount</dt><dd>${
+          details.amountMor
+            ? `${escapeHtml(details.amountMor)} MOR`
+            : 'Could not be quoted — check the amount in the app before confirming'
+        }</dd></div>
         <div class="session-confirmation__model"><dt>Model ID</dt><dd><code>${escapeHtml(details.modelId)}</code></dd></div>
         <div><dt>Contract duration input</dt><dd>${escapeHtml(details.duration.toLocaleString('en-US'))} seconds</dd></div>
         <div><dt>Payment method</dt><dd>${details.directPayment ? 'Direct MOR payment' : 'Stake MOR · escrow'}</dd></div>

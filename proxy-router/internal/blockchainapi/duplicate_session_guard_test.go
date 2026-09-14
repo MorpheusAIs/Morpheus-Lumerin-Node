@@ -167,13 +167,13 @@ func TestKeyedLockSetSerializesOnlyMatchingKeys(t *testing.T) {
 	}
 }
 
-func TestWriteOpenSessionByModelErrorReturnsStructuredConflict(t *testing.T) {
+func TestWriteOpenSessionErrorReturnsStructuredConflict(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 	sessionID := common.HexToHash("0x42").Hex()
 
-	writeOpenSessionByModelError(ctx, &ExistingSessionError{SessionID: sessionID})
+	writeOpenSessionError(ctx, &ExistingSessionError{SessionID: sessionID})
 
 	require.Equal(t, http.StatusConflict, recorder.Code)
 	var body structs.ExistingSessionRes

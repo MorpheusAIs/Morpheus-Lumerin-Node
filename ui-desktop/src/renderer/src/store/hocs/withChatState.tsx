@@ -109,6 +109,19 @@ const withChatState = (WrappedComponent: ComponentType<any>) => {
     };
 
     /**
+     * Every model's live price range in one call.
+     *
+     * Unlike getBidsByModelId above, this needs no filtering here: the router
+     * already leaves this wallet's own bids and zero-priced bids out of the
+     * sweep, and it has to, because the wei strings are reduced to a min and a
+     * max on that side. Re-filtering here would be impossible and duplicating
+     * the rule would be a second place for it to drift.
+     */
+    getModelPrices = async () => {
+      return await this.props.client.getModelPrices();
+    };
+
+    /**
      * The contract's own session length range. Owner settable, so offering a
      * hardcoded ceiling means selling lengths getSessionEnd would shorten.
      */
@@ -185,6 +198,7 @@ const withChatState = (WrappedComponent: ComponentType<any>) => {
           getMetaInfo={this.getMetaInfo}
           getBidsByModelId={this.getBidsByModelId}
           getRatedBidsByModelId={this.getRatedBidsByModelId}
+          getModelPrices={this.getModelPrices}
           getSessionDurationBounds={this.getSessionDurationBounds}
           getSessionsByUser={this.getSessionsByUser}
           closeSession={this.closeSession}

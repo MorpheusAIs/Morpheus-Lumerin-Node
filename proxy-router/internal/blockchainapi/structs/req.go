@@ -70,6 +70,15 @@ type OpenSessionWithDurationRequest struct {
 	// bid used to force staking, so a consumer picking their own provider had
 	// no way to pay directly.
 	DirectPayment bool `json:"directPayment" binding:"omitempty"`
+	// RejectExisting asks the router to refuse this open when the wallet already
+	// has a live session for the bid's model. It mirrors the field of the same
+	// name on OpenSessionWithFailover: a consumer who picks their own provider
+	// is choosing a route to a model, not asking for a second session, and
+	// without this the by-bid route was the one way to lock a second lot of MOR
+	// against a model the wallet was already paying for. Opt-in for the same
+	// reason as on the by-model route, so callers that deliberately run parallel
+	// sessions keep working.
+	RejectExisting bool `json:"rejectExisting" binding:"omitempty"`
 }
 
 // QueryOpenSessionEstimate selects what to quote: a session length, a payment

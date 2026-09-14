@@ -1924,43 +1924,29 @@
   font-weight: 650;
 }
 
-.cowork-inline-error,
-.cowork-complete-card {
+.cowork-inline-error {
   align-items: flex-start;
-  border: 1px solid;
+  background: rgba(255, 131, 119, 0.08);
+  border: 1px solid rgba(255, 131, 119, 0.18);
   border-radius: 1rem;
+  color: var(--cowork-danger);
   display: flex;
   gap: 0.9rem;
   margin: 1.5rem 0;
   padding: 1.2rem 1.3rem;
 }
 
-.cowork-inline-error {
-  background: rgba(255, 131, 119, 0.08);
-  border-color: rgba(255, 131, 119, 0.18);
-  color: var(--cowork-danger);
-}
-
-.cowork-complete-card {
-  background: var(--cowork-green-soft);
-  border-color: rgba(32, 220, 142, 0.2);
-  color: var(--cowork-green);
-}
-
-.cowork-inline-error > div,
-.cowork-complete-card > div {
+.cowork-inline-error > div {
   display: flex;
   flex-direction: column;
 }
 
-.cowork-inline-error strong,
-.cowork-complete-card strong {
+.cowork-inline-error strong {
   font-size: 1.1rem;
   font-weight: 650;
 }
 
-.cowork-inline-error span,
-.cowork-complete-card p {
+.cowork-inline-error span {
   color: var(--cowork-muted);
   font-family: var(--font-ui, sans-serif);
   font-size: 1.1rem;

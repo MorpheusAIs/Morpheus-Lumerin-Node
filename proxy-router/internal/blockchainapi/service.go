@@ -100,6 +100,7 @@ type BlockchainService struct {
 	cachedBudget     *big.Int
 	cachedBudgetAt   time.Time
 	allModelsCache   modelListCache
+	modelPricesCache modelPriceIndexCache
 	sessionOpenLocks keyedLockSet
 
 	legacyTx    bool
@@ -1290,10 +1291,15 @@ func (s *BlockchainService) GetTransactions(ctx context.Context, page uint64, li
 
 // OpenSessionByBidId opens a session against a specific bid (no provider failover).
 func (s *BlockchainService) OpenSessionByBidId(ctx context.Context, bidID common.Hash, duration *big.Int, directPayment bool, agentUsername string) (common.Hash, error) {
-	return s.openSessionByBid(ctx, bidID, duration, directPayment, agentUsername)
+	return s.openSessionByBid(ctx, bidID, duration, directPayment, agentUsername, nil)
 }
 
-func (s *BlockchainService) openSessionByBid(ctx context.Context, bidID common.Hash, duration *big.Int, directPayment bool, agentUsername string) (common.Hash, error) {
+// beforeOpen, when set, runs after the wallet and the bid have been resolved but
+// before any transaction is prepared. It mirrors the hook on openSessionByModelID
+// and exists for the same reason: the guarded desktop flow has to decide whether
+// a session already exists while holding the wallet/model lock, and it cannot
+// know the model until the bid has been read.
+func (s *BlockchainService) openSessionByBid(ctx context.Context, bidID common.Hash, duration *big.Int, directPayment bool, agentUsername string, beforeOpen func(context.Context, common.Address, common.Hash) error) (common.Hash, error) {
 	supply, err := s.GetTokenSupply(ctx)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrTokenSupply, err)
@@ -1316,6 +1322,12 @@ func (s *BlockchainService) openSessionByBid(ctx context.Context, bidID common.H
 
 	if bid.Provider == userAddr {
 		return common.Hash{}, ErrOpenOwnBid
+	}
+
+	if beforeOpen != nil {
+		if err := beforeOpen(ctx, userAddr, bid.ModelAgentId); err != nil {
+			return common.Hash{}, err
+		}
 	}
 
 	isTee := false

@@ -244,3 +244,65 @@ func (s *BlockchainService) OpenSessionByModelIdRejectExisting(
 		},
 	)
 }
+
+// OpenSessionByBidIdRejectExisting is the by-bid counterpart of
+// OpenSessionByModelIdRejectExisting, and exists because naming a provider is
+// still opening a session for a model. Without it the by-bid route was the one
+// way past the duplicate check: a consumer who picked a provider from the
+// desktop picker could stake a second lot of MOR against a model the wallet was
+// already paying for, while the identical open left on "best available" was
+// refused.
+//
+// The bid is read before the lock is taken because the lock is keyed on the
+// model, and only the bid says which model that is. A bid's model is fixed at
+// creation, so the value cannot drift between that read and the open; the wallet
+// can, which is what the callback re-checks.
+func (s *BlockchainService) OpenSessionByBidIdRejectExisting(
+	ctx context.Context,
+	bidID common.Hash,
+	duration *big.Int,
+	directPayment bool,
+	agentUsername string,
+) (common.Hash, error) {
+	user, err := s.GetMyAddress(ctx)
+	if err != nil {
+		return common.Hash{}, fmt.Errorf("get wallet address for existing-session check: %w", err)
+	}
+
+	bid, err := s.GetBidByID(ctx, bidID)
+	if err != nil {
+		return common.Hash{}, fmt.Errorf("read bid for existing-session check: %w", err)
+	}
+	modelID := bid.ModelAgentId
+
+	unlock := s.sessionOpenLocks.lock(user.Hex() + ":" + modelID.Hex())
+	defer unlock()
+	if err := ctx.Err(); err != nil {
+		return common.Hash{}, err
+	}
+
+	return s.openSessionByBid(
+		ctx,
+		bidID,
+		duration,
+		directPayment,
+		agentUsername,
+		func(ctx context.Context, openingUser common.Address, openingModel common.Hash) error {
+			if openingUser != user {
+				return errors.New("wallet changed during existing-session check")
+			}
+			if openingModel != modelID {
+				return errors.New("bid model changed during existing-session check")
+			}
+			existing, err := s.findLiveSessionForUserModel(ctx, user, modelID)
+			if err != nil {
+				// A failed or partial query must never be interpreted as "no session".
+				return fmt.Errorf("check existing live sessions: %w", err)
+			}
+			if existing != nil {
+				return &ExistingSessionError{SessionID: existing.Id}
+			}
+			return nil
+		},
+	)
+}

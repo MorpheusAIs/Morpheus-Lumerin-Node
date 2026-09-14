@@ -20,6 +20,9 @@ import {
   IconSparkles,
   IconLoader2,
   IconArrowLeft,
+  IconCoin,
+  IconSortAscendingNumbers,
+  IconSortDescendingNumbers,
 } from '@tabler/icons-react';
 import Modal from '../../contracts/modals/Modal';
 import ModelRow from './ModelRow';
@@ -34,6 +37,14 @@ import {
   normalizeModelList,
   normalizeModelTags,
 } from '../../../store/utils/modelMetadata';
+import {
+  comparePriceAscending,
+  EMPTY_MODEL_PRICE_INDEX,
+  minPriceWei,
+  ModelPriceIndex,
+  PRICE_SORTS,
+  PriceSort,
+} from '../../../store/utils/modelPrices';
 
 /* The shared outer modal `Body` (in CreateContractModal.styles) bakes in
    `padding: 5rem` and never sets `overflow: hidden`, so an `auto`-height box
@@ -161,6 +172,28 @@ const FilterRow = styled.div`
   gap: 6px;
   flex-wrap: wrap;
   margin-top: 1.2rem;
+`;
+
+/* Sorting answers a different question from filtering ("which of these is
+   cheap" vs "which of these are vision models"), so it gets its own labelled
+   row rather than another pill in the capability group. */
+const SortRow = styled(FilterRow)`
+  align-items: center;
+  margin-top: 0.9rem;
+`;
+
+const SortLabel = styled.span`
+  font-size: 1.05rem;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  color: rgba(255, 255, 255, 0.4);
+  margin-right: 2px;
+`;
+
+const SortNote = styled.span`
+  font-size: 1.02rem;
+  color: rgba(255, 255, 255, 0.42);
+  margin-left: 4px;
 `;
 
 const CoworkCandidateHint = styled.div`
@@ -383,10 +416,16 @@ const ModelSelectionModal = ({
   modelsLoading = false,
   marketplaceOnly = false,
   coworkSetup = false,
+  priceIndex = EMPTY_MODEL_PRICE_INDEX,
+  pricesLoading = false,
+  pricesFailed = false,
 }: any) => {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<FilterId>('all');
+  const [sort, setSort] = useState<PriceSort>('recommended');
   const [showTeeInfo, setShowTeeInfo] = useState(false);
+
+  const prices: ModelPriceIndex = priceIndex ?? EMPTY_MODEL_PRICE_INDEX;
 
   const bodyRef = useRef<HTMLDivElement | null>(null);
   // Where the list was left off. A ref rather than state, so scrolling a list
@@ -427,6 +466,7 @@ const ModelSelectionModal = ({
     scrollTopRef.current = 0;
     setSearch('');
     setFilter('all');
+    setSort('recommended');
     setShowTeeInfo(false);
   }, [modeKey]);
 
@@ -497,14 +537,45 @@ const ModelSelectionModal = ({
       }
     });
 
+    const byName = (a: any, b: any) =>
+      (a.Name || '').localeCompare(b.Name || '');
+
+    if (sort !== 'recommended') {
+      // Price order, cheapest or dearest first.
+      //
+      // Local models and models with no live bid have no price at all, and
+      // comparePriceAscending puts both at the bottom in either direction: they
+      // are neither the cheapest nor the most expensive, and floating them to
+      // one end would answer "which of these is cheap" with a model nobody is
+      // serving. Name is the tie-break so the list does not reshuffle when two
+      // models quote the same price or a refetch returns in a different order.
+      const direction = sort === 'cheapest' ? 1 : -1;
+      return filtered.sort((a: any, b: any) => {
+        const left = a.isLocal
+          ? undefined
+          : minPriceWei(prices.byModelId.get(a.Id));
+        const right = b.isLocal
+          ? undefined
+          : minPriceWei(prices.byModelId.get(b.Id));
+        if (left === undefined || right === undefined) {
+          // Unpriced rows go last regardless of direction, so this comparison
+          // is deliberately not multiplied by `direction`.
+          const unpriced = comparePriceAscending(left, right);
+          return unpriced !== 0 ? unpriced : byName(a, b);
+        }
+        const compared = comparePriceAscending(left, right) * direction;
+        return compared !== 0 ? compared : byName(a, b);
+      });
+    }
+
     // Stable sort: online first, then local first inside online group,
     // then alphabetical by name.
     return filtered.sort((a: any, b: any) => {
       if (!!b.isOnline !== !!a.isOnline) return b.isOnline ? 1 : -1;
       if (!!b.isLocal !== !!a.isLocal) return b.isLocal ? 1 : -1;
-      return (a.Name || '').localeCompare(b.Name || '');
+      return byName(a, b);
     });
-  }, [enriched, search, filter]);
+  }, [enriched, search, filter, sort, prices]);
 
   // Bail out *after* all hooks have run.
   if (!isActive) return null;
@@ -517,6 +588,23 @@ const ModelSelectionModal = ({
     onChangeModel(data);
     close();
   };
+
+  const priceSorted = sort !== 'recommended';
+
+  // The entry alone tells the row everything it needs. The router returns a row
+  // for every model it swept, with empty prices when nobody is serving it, so a
+  // missing entry can only mean the sweep has not answered — still loading, or
+  // failed. Passing a separate "unknown" flag restated that, and the two could
+  // disagree.
+  const renderRow = (m: any) => (
+    <ModelRow
+      key={m.Id}
+      model={m}
+      symbol={symbol}
+      onChangeModel={handlePick}
+      priceEntry={prices.byModelId.get(m.Id)}
+    />
+  );
 
   // A provider-declared capability and a name-family heuristic are materially
   // different confidence levels. Keep them in separate buckets so users never
@@ -645,6 +733,49 @@ const ModelSelectionModal = ({
               );
             })}
           </FilterRow>
+          <SortRow role="group" aria-label="Sort models">
+            <SortLabel id="model-sort-label">Sort</SortLabel>
+            {PRICE_SORTS.map((option) => {
+              const active = sort === option.id;
+              return (
+                <FilterPill
+                  key={option.id}
+                  $active={active}
+                  type="button"
+                  onClick={() => setSort(option.id)}
+                  aria-pressed={active}
+                  title={option.hint}
+                >
+                  {option.id === 'recommended' && (
+                    <IconSparkles size={13} stroke={2} />
+                  )}
+                  {option.id === 'cheapest' && (
+                    <IconSortAscendingNumbers size={13} stroke={2} />
+                  )}
+                  {option.id === 'expensive' && (
+                    <IconSortDescendingNumbers size={13} stroke={2} />
+                  )}
+                  {option.label}
+                </FilterPill>
+              );
+            })}
+            {/* Prices are a live read of every model's bids, so say which of the
+                three states the list is in rather than letting a half-priced
+                list look like the finished answer. */}
+            {priceSorted && pricesLoading && (
+              <SortNote role="status" aria-live="polite">
+                Checking prices…
+              </SortNote>
+            )}
+            {priceSorted && !pricesLoading && pricesFailed && (
+              <SortNote role="status" aria-live="polite">
+                Prices could not be read from your node.
+              </SortNote>
+            )}
+            {priceSorted && !pricesLoading && !pricesFailed && (
+              <SortNote>Price per second of compute.</SortNote>
+            )}
+          </SortRow>
           {filter === 'cowork' && (
             <CoworkCandidateHint role="note">
               <IconInfoCircle size={15} stroke={2} aria-hidden="true" />
@@ -686,26 +817,35 @@ const ModelSelectionModal = ({
             </EmptyState>
           ) : null}
 
-          {localModels.length > 0 && (
+          {/* A price order and the capability sections cannot both hold. Split
+              into five sections, "cheapest first" would produce five separate
+              cheapest-first lists and the one thing the user asked for — where
+              the cheap models are — would be the one thing the list does not
+              show. So a price sort flattens. */}
+          {priceSorted && visible.length > 0 && (
+            <Section>
+              <SectionLabel>
+                <IconCoin size={13} stroke={2} />
+                {sort === 'cheapest' ? 'Cheapest first' : 'Most expensive first'}
+                <SectionHint>
+                  (models with no live provider are listed last)
+                </SectionHint>
+              </SectionLabel>
+              <SectionList>{visible.map(renderRow)}</SectionList>
+            </Section>
+          )}
+
+          {!priceSorted && localModels.length > 0 && (
             <Section>
               <SectionLabel>
                 <IconHome size={13} stroke={2} />
                 Local
               </SectionLabel>
-              <SectionList>
-                {localModels.map((m: any) => (
-                  <ModelRow
-                    key={m.Id}
-                    model={m}
-                    symbol={symbol}
-                    onChangeModel={handlePick}
-                  />
-                ))}
-              </SectionList>
+              <SectionList>{localModels.map(renderRow)}</SectionList>
             </Section>
           )}
 
-          {teeModels.length > 0 && (
+          {!priceSorted && teeModels.length > 0 && (
             <Section>
               <SectionLabel>
                 <IconShieldLock size={13} stroke={2} />
@@ -721,20 +861,11 @@ const ModelSelectionModal = ({
                 </InfoToggle>
               </SectionLabel>
               {showTeeInfo && <InfoPanel>{SECURE_MODE_INFO}</InfoPanel>}
-              <SectionList>
-                {teeModels.map((m: any) => (
-                  <ModelRow
-                    key={m.Id}
-                    model={m}
-                    symbol={symbol}
-                    onChangeModel={handlePick}
-                  />
-                ))}
-              </SectionList>
+              <SectionList>{teeModels.map(renderRow)}</SectionList>
             </Section>
           )}
 
-          {declaredVisionModels.length > 0 && (
+          {!priceSorted && declaredVisionModels.length > 0 && (
             <Section>
               <SectionLabel>
                 <IconEye size={13} stroke={2} />
@@ -743,20 +874,11 @@ const ModelSelectionModal = ({
                   (image input advertised by model metadata)
                 </SectionHint>
               </SectionLabel>
-              <SectionList>
-                {declaredVisionModels.map((m: any) => (
-                  <ModelRow
-                    key={m.Id}
-                    model={m}
-                    symbol={symbol}
-                    onChangeModel={handlePick}
-                  />
-                ))}
-              </SectionList>
+              <SectionList>{declaredVisionModels.map(renderRow)}</SectionList>
             </Section>
           )}
 
-          {possibleVisionModels.length > 0 && (
+          {!priceSorted && possibleVisionModels.length > 0 && (
             <Section>
               <SectionLabel>
                 <IconEye size={13} stroke={2} />
@@ -765,35 +887,17 @@ const ModelSelectionModal = ({
                   (recognised family; provider did not declare it)
                 </SectionHint>
               </SectionLabel>
-              <SectionList>
-                {possibleVisionModels.map((m: any) => (
-                  <ModelRow
-                    key={m.Id}
-                    model={m}
-                    symbol={symbol}
-                    onChangeModel={handlePick}
-                  />
-                ))}
-              </SectionList>
+              <SectionList>{possibleVisionModels.map(renderRow)}</SectionList>
             </Section>
           )}
 
-          {remoteModels.length > 0 && (
+          {!priceSorted && remoteModels.length > 0 && (
             <Section>
               <SectionLabel>
                 <IconWorld size={13} stroke={2} />
                 Marketplace
               </SectionLabel>
-              <SectionList>
-                {remoteModels.map((m: any) => (
-                  <ModelRow
-                    key={m.Id}
-                    model={m}
-                    symbol={symbol}
-                    onChangeModel={handlePick}
-                  />
-                ))}
-              </SectionList>
+              <SectionList>{remoteModels.map(renderRow)}</SectionList>
             </Section>
           )}
         </Body>

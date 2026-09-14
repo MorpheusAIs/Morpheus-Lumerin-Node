@@ -2,22 +2,29 @@ import { ipcRenderer } from 'electron'
 
 // This preload belongs only to the main-owned confirmation surface. It
 // exposes no bridge/API to either renderer and never imports the app preload.
+const CHANNEL = 'session-confirmation:respond'
 const requestId = process.argv
   .find((argument) => argument.startsWith('--session-confirmation-id='))
   ?.slice('--session-confirmation-id='.length)
+const identified = !!requestId && /^[a-f0-9-]{36}$/iu.test(requestId)
 let decided = false
 
 function decide(approved: boolean): void {
-  if (decided || !requestId || !/^[a-f0-9-]{36}$/i.test(requestId)) return
+  if (decided || !identified) return
   decided = true
   for (const button of document.querySelectorAll<HTMLButtonElement>('button')) {
     button.disabled = true
   }
-  ipcRenderer.send('session-confirmation:respond', { requestId, approved })
+  ipcRenderer.send(CHANNEL, { requestId, approved })
 }
 
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('session-cancel')?.focus()
+  // Report that the controls are bound. Until this existed, a preload that
+  // never ran was indistinguishable from a user taking their time: the window
+  // sat there, the buttons did nothing, and the only outcome was the 60 second
+  // timeout arriving as a bare "Session opening cancelled."
+  if (identified) ipcRenderer.send(CHANNEL, { requestId, ready: true })
 })
 
 document.addEventListener('click', (event) => {

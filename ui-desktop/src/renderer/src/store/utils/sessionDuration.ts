@@ -25,6 +25,26 @@ export const DEFAULT_SESSION_DURATION_SECONDS = 60 * 60;
  */
 export const SESSION_DURATION_HEADROOM_SECONDS = 1;
 
+/**
+ * A further 0.1% on top of the computed amount, to absorb drift between
+ * quoting and mining.
+ *
+ * The amount needed scales with totalMORSupply, which the contract evaluates at
+ * block.timestamp while the router quotes from a cached read taken up to a
+ * minute earlier. Supply grows about 0.29% a day, so a quote that sits in the
+ * mempool for a few minutes buys very slightly less time than it was priced
+ * for — and on a 24 hour session that shortfall already exceeds the one second
+ * of headroom above. Falling short means the open reverts with SessionTooShort
+ * and the gas is spent for nothing.
+ *
+ * 0.1% covers roughly eight hours of drift. It is not a fee: staked MOR is
+ * refunded in full at close, and on the direct-pay path the unused remainder is
+ * returned, so the padding comes back either way.
+ *
+ * Mirrors sessionAmountSafetyBps in proxy-router. Keep the two in step.
+ */
+export const SESSION_AMOUNT_SAFETY_BPS = 10n;
+
 export const SESSION_DURATION_OPTIONS = [
   { seconds: 15 * 60, label: '15 minutes' },
   { seconds: 30 * 60, label: '30 minutes' },
@@ -37,7 +57,36 @@ export const SESSION_DURATION_OPTIONS = [
 
 export type SessionDurationOption = (typeof SESSION_DURATION_OPTIONS)[number];
 
-type StakingInfo = { budget: number; supply: number };
+type StakingInfo = { budget: string | number; supply: string | number };
+
+/**
+ * Wei-denominated values arrive from the proxy-router as JSON, which means a
+ * decimal string for anything the Go side holds in a big.Int and a JS number
+ * for the few that were already narrowed. Both are accepted; the string form is
+ * the one that survives a round trip intact, so prefer passing it through.
+ *
+ * Throws rather than returning a sentinel: every caller is about to quote a
+ * price, and a silently-zero price quotes a free session.
+ */
+function toWei(value: string | number, label: string): bigint {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!/^\d+$/.test(trimmed)) {
+      throw new Error(`${label} is not a whole number of wei`);
+    }
+    return BigInt(trimmed);
+  }
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(`${label} is not a usable amount`);
+  }
+  // A number this large has already lost its low digits before reaching us.
+  // Rounding here only makes that explicit; it does not add error.
+  return BigInt(Math.round(value));
+}
+
+/** Integer ceiling division. `/` on bigint truncates toward zero. */
+const divCeil = (numerator: bigint, denominator: bigint): bigint =>
+  (numerator + denominator - 1n) / denominator;
 
 /**
  * The lengths worth offering given the contract's ceiling. Anything longer than
@@ -88,32 +137,58 @@ export function clampSessionDuration(
  * it sent for direct pay while the router applied no conversion at all; both
  * sides now use this one number.
  *
- * Mirrors computeSessionTokenAmount in proxy-router. Keep the two in step.
+ * `maxSeconds` must be the same contract ceiling the picker and the open path
+ * clamp against. Leaving it off quotes the unclamped length while the session
+ * opened is the clamped one, so the user is shown a price for time they do not
+ * get.
+ *
+ * The arithmetic runs in BigInt. These are 18-decimal amounts multiplied by a
+ * supply on the order of 1e25, so every intermediate is far past 2^53 and the
+ * rounding-up this function promises would otherwise be decorative.
+ *
+ * Mirrors computeSessionTokenAmount in proxy-router. Keep the two in step,
+ * including SESSION_AMOUNT_SAFETY_BPS.
  */
 export function estimateSessionTokenAmount(
-  pricePerSecondWei: number,
+  pricePerSecondWei: string | number,
   desiredSeconds: number,
   stakingInfo: StakingInfo,
+  maxSeconds?: number,
 ): number {
-  const budget = Number(stakingInfo.budget);
-  const supply = Number(stakingInfo.supply);
-  if (!(budget > 0) || !(supply > 0)) {
+  const budget = toWei(stakingInfo.budget, "Today's budget");
+  const supply = toWei(stakingInfo.supply, 'Token supply');
+  if (budget <= 0n || supply <= 0n) {
     throw new Error('Pricing data is not ready');
   }
-  const paidSeconds =
-    clampSessionDuration(desiredSeconds) + SESSION_DURATION_HEADROOM_SECONDS;
-  const cost = pricePerSecondWei * paidSeconds;
-  return Math.ceil((cost * supply) / budget);
+  const price = toWei(pricePerSecondWei, 'Price per second');
+  if (price <= 0n) {
+    throw new Error('Price per second is not ready');
+  }
+  const paidSeconds = BigInt(
+    clampSessionDuration(desiredSeconds, maxSeconds) +
+      SESSION_DURATION_HEADROOM_SECONDS,
+  );
+  const amount = divCeil(price * paidSeconds * supply, budget);
+  return Number(
+    divCeil(amount * (10_000n + SESSION_AMOUNT_SAFETY_BPS), 10_000n),
+  );
 }
 
 /**
  * What the session is actually worth in MOR: price per second times the length.
  * Shown next to the amount above so the user can see that the difference is the
  * emissions conversion and not a fee.
+ *
+ * Takes the same `maxSeconds` as the estimate above, for the same reason: these
+ * two numbers are displayed side by side and must describe one session.
  */
 export function sessionComputeCost(
-  pricePerSecondWei: number,
+  pricePerSecondWei: string | number,
   desiredSeconds: number,
+  maxSeconds?: number,
 ): number {
-  return pricePerSecondWei * clampSessionDuration(desiredSeconds);
+  const price = toWei(pricePerSecondWei, 'Price per second');
+  return Number(
+    price * BigInt(clampSessionDuration(desiredSeconds, maxSeconds)),
+  );
 }

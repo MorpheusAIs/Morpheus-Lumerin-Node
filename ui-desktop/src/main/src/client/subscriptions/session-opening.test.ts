@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   fetch: vi.fn(),
   confirm: vi.fn(),
-  owner: { isDestroyed: () => false },
+  dismissal: vi.fn(() => ''),
+  owner: { isDestroyed: () => false, isVisible: () => true, isMinimized: () => false },
   readFileSync: vi.fn(() => 'test-user:test-password')
 }))
 
@@ -15,7 +16,10 @@ vi.mock('electron', () => ({
   },
   dialog: { showMessageBox: vi.fn() }
 }))
-vi.mock('../../../sessionConfirmation', () => ({ showSessionConfirmation: mocks.confirm }))
+vi.mock('../../../sessionConfirmation', () => ({
+  showSessionConfirmation: mocks.confirm,
+  consumeSessionConfirmationDismissal: mocks.dismissal
+}))
 vi.mock('node:fs', () => ({ default: { readFileSync: mocks.readFileSync } }))
 vi.mock('../electron-restart', () => ({ default: vi.fn() }))
 vi.mock('../database', () => ({ default: { getDb: vi.fn() } }))
@@ -60,11 +64,16 @@ const response = (body: unknown, status = 200) => ({
   json: vi.fn(async () => body)
 })
 
+const stakeWei = '123456789012345678901'
+
 function mockProxy(sessionResponse = response({ sessionID: sessionId })) {
   mocks.fetch.mockImplementation(async (url: string) => {
     if (url.endsWith('/auth/cookie/path')) {
       return response({ path: '/tmp/morpheus-session-opening-test-cookie' })
     }
+    // The confirmation window quotes the open before showing it, so the
+    // estimate is a GET the router answers on the way to the dialog.
+    if (url.includes('/session/estimate')) return response({ stake_wei: stakeWei })
     if (url.endsWith(`/blockchain/models/${modelId}/session`)) return sessionResponse
     throw new Error(`Unexpected proxy request in test: ${url}`)
   })
@@ -72,10 +81,22 @@ function mockProxy(sessionResponse = response({ sessionID: sessionId })) {
 
 const sessionPosts = () => mocks.fetch.mock.calls.filter(([, init]) => init?.method === 'POST')
 
+/**
+ * The assertion that matters before approval is that nothing has been
+ * *submitted*, not that nothing has been sent. Opening the confirmation window
+ * now involves reads — the auth cookie path and the stake quote — and a
+ * blanket "fetch was never called" would fail on those while saying nothing
+ * about whether a transaction escaped.
+ */
+const expectNothingSubmitted = () => {
+  expect(sessionPosts()).toHaveLength(0)
+}
+
 describe('session opening requires the main-owned in-app confirmation', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.confirm.mockReset().mockResolvedValue(false)
+    mocks.dismissal.mockReset().mockReturnValue('')
     mocks.fetch.mockReset()
     resetAuthHeaders()
     vi.stubGlobal('fetch', mocks.fetch)
@@ -83,11 +104,59 @@ describe('session opening requires the main-owned in-app confirmation', () => {
 
   afterEach(() => vi.unstubAllGlobals())
 
-  it('does not contact the router at all when confirmation is declined', async () => {
+  it('submits no transaction when confirmation is declined', async () => {
+    mockProxy()
     await expect(openSession(payload)).rejects.toThrow('Session opening cancelled.')
-    expect(mocks.confirm).toHaveBeenCalledWith(mocks.owner, payload)
-    expect(mocks.fetch).not.toHaveBeenCalled()
+    expect(mocks.confirm).toHaveBeenCalledWith(mocks.owner, expect.objectContaining(payload))
+    expectNothingSubmitted()
     expect(dialog.showMessageBox).not.toHaveBeenCalled()
+  })
+
+  it('tells the user why a prompt they never answered gave up', async () => {
+    // A dismissal and a deliberate Cancel used to read identically, so a report
+    // of "it cancels every time" could not be told apart from someone cancelling
+    // every time. The reason belongs in the message the user actually sees.
+    mockProxy()
+    mocks.dismissal.mockReturnValue('the prompt document failed to load (ERR_ABORTED -3)')
+    await expect(openSession(payload)).rejects.toThrow(/ERR_ABORTED/u)
+    expectNothingSubmitted()
+  })
+
+  it('names the amount in the window that authorises it', async () => {
+    mocks.confirm.mockResolvedValue(true)
+    mockProxy()
+    await openSession(payload)
+
+    // The renderer shows a figure, but this window is the one that authorises
+    // the transaction, so it quotes the router itself for the same duration the
+    // request carries. A renderer bug cannot get a different amount approved
+    // than the one on screen here.
+    const [, details] = mocks.confirm.mock.calls[0]
+    expect(details.amountMor).toBe('123.4567')
+
+    const estimateCall = mocks.fetch.mock.calls.find((call) =>
+      String(call[0]).includes('/session/estimate')
+    )
+    expect(String(estimateCall?.[0])).toContain(`sessionDuration=${payload.duration}`)
+  })
+
+  it('still asks for approval when the amount cannot be quoted', async () => {
+    mocks.confirm.mockResolvedValue(true)
+    mocks.fetch.mockImplementation(async (url: string) => {
+      if (url.endsWith('/auth/cookie/path')) {
+        return response({ path: '/tmp/morpheus-session-opening-test-cookie' })
+      }
+      if (url.includes('/session/estimate')) return response({ error: 'nope' }, 500)
+      if (url.endsWith(`/blockchain/models/${modelId}/session`)) {
+        return response({ sessionID: sessionId })
+      }
+      throw new Error(`Unexpected proxy request in test: ${url}`)
+    })
+
+    // A quote that fails is a reason to say the amount is unknown, not to block
+    // an open the user explicitly asked for. The decision stays with them.
+    await expect(openSession(payload)).resolves.toEqual({ sessionID: sessionId })
+    expect(mocks.confirm.mock.calls[0][1].amountMor).toBeUndefined()
   })
 
   it('waits for approval and submits only the displayed immutable transaction values', async () => {
@@ -96,8 +165,9 @@ describe('session opening requires the main-owned in-app confirmation', () => {
     mockProxy()
     const mutablePayload = { ...payload }
     const pending = openSession(mutablePayload)
-    expect(mocks.confirm).toHaveBeenCalledWith(mocks.owner, payload)
-    expect(mocks.fetch).not.toHaveBeenCalled()
+    await vi.waitFor(() => expect(mocks.confirm).toHaveBeenCalled())
+    expect(mocks.confirm).toHaveBeenCalledWith(mocks.owner, expect.objectContaining(payload))
+    expectNothingSubmitted()
 
     // A renderer changing its source object after opening the prompt must not
     // change the transaction that the user is currently reviewing.
@@ -124,11 +194,10 @@ describe('session opening requires the main-owned in-app confirmation', () => {
     mocks.confirm.mockResolvedValue(true)
     mockProxy()
     await openSession({ ...payload, directPayment: true, failover: false })
-    expect(mocks.confirm).toHaveBeenCalledWith(mocks.owner, {
-      ...payload,
-      directPayment: true,
-      failover: false
-    })
+    expect(mocks.confirm).toHaveBeenCalledWith(
+      mocks.owner,
+      expect.objectContaining({ ...payload, directPayment: true, failover: false })
+    )
     expect(JSON.parse(sessionPosts()[0][1].body)).toMatchObject({
       directPayment: true,
       failover: false
@@ -150,30 +219,33 @@ describe('session opening requires the main-owned in-app confirmation', () => {
   })
 
   it('fails closed if the confirmation host throws', async () => {
+    mockProxy()
     mocks.confirm.mockRejectedValue(new Error('Another confirmation is already open.'))
     await expect(openSession(payload)).rejects.toThrow('Another confirmation')
-    expect(mocks.fetch).not.toHaveBeenCalled()
+    expectNothingSubmitted()
   })
 
   it('shares the native financial-confirmation lock and releases it after dismissal', async () => {
     let decline!: (value: boolean) => void
+    mockProxy()
     mocks.confirm.mockImplementation(() => new Promise<boolean>((resolve) => (decline = resolve)))
     const pending = openSession(payload)
     const pendingRejection = expect(pending).rejects.toThrow('Session opening cancelled.')
     const transfer = { to: `0x${'12'.repeat(20)}`, amount: '1000000000000000000' }
+    await vi.waitFor(() => expect(mocks.confirm).toHaveBeenCalled())
 
     await expect(sendMor(transfer)).rejects.toThrow(
       'Another security confirmation is already open.'
     )
     expect(dialog.showMessageBox).not.toHaveBeenCalled()
-    expect(mocks.fetch).not.toHaveBeenCalled()
+    expectNothingSubmitted()
 
     decline(false)
     await pendingRejection
     vi.mocked(dialog.showMessageBox).mockResolvedValueOnce({ response: 0, checkboxChecked: false })
     await expect(sendMor(transfer)).rejects.toThrow('Transfer cancelled.')
     expect(dialog.showMessageBox).toHaveBeenCalledOnce()
-    expect(mocks.fetch).not.toHaveBeenCalled()
+    expectNothingSubmitted()
   })
 
   it('keeps duplicate-session recovery after confirmation unchanged', async () => {

@@ -22,6 +22,12 @@ export const queryKeys = {
   // price". Same wallet reasoning applies.
   ratedModelBids: (address?: string, modelId?: string) =>
     ['ratedModelBids', address ?? '', modelId ?? ''] as const,
+  // Every model's live price range, swept once by the router so the picker can
+  // be ordered by cost. The wallet belongs in the key for the same reason it
+  // does above: the router leaves this wallet's own bids out of the range,
+  // because a price the user cannot pay has no business setting the bottom of
+  // a list labelled "cheapest".
+  modelPrices: (address?: string) => ['modelPrices', address ?? ''] as const,
   // The contract's session length range. Owner settable, so it is read rather
   // than hardcoded, but it changes rarely enough to cache broadly.
   sessionDurationBounds: ['sessionDurationBounds'] as const,

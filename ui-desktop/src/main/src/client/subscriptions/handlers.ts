@@ -43,7 +43,10 @@ import {
 } from './agentMutationSecurity'
 import { InferenceTargetPayload, sessionInferenceHeaders } from './inference-session-target'
 import { parseExistingSessionConflict } from './proxy-router-conflict'
-import { showSessionConfirmation } from '../../../sessionConfirmation'
+import {
+  consumeSessionConfirmationDismissal,
+  showSessionConfirmation
+} from '../../../sessionConfirmation'
 import type { SessionConfirmationDetails } from '../../../sessionConfirmationView'
 
 let authentication: Record<string, string> | null = null
@@ -52,13 +55,41 @@ let sensitiveConfirmationOpen = false
 let onboardingInProgress = false
 let onboardingRecoveryHash: string | null = null
 
+/**
+ * An 18-decimal wei string as whole MOR, for the confirmation window.
+ *
+ * BigInt rather than division by 1e18: a session amount is on the order of 1e20
+ * wei, well past what a double holds exactly, and the figure shown here is the
+ * one the user is being asked to authorise. Four decimal places is enough to
+ * tell two quotes apart without printing a number nobody can read.
+ *
+ * Returns undefined for anything that is not a plain decimal integer, which is
+ * what the caller treats as "could not be quoted".
+ */
+export function formatWeiForConfirmation(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !/^\d+$/.test(value.trim())) return undefined
+  const wei = BigInt(value.trim())
+  const whole = wei / 10n ** 18n
+  const fraction = (wei % 10n ** 18n) / 10n ** 14n
+  return `${whole.toLocaleString('en-US')}.${fraction.toString().padStart(4, '0')}`
+}
+
 async function confirmSessionAction(details: SessionConfirmationDetails): Promise<boolean> {
   if (sensitiveConfirmationOpen) throw new Error('Another security confirmation is already open.')
   sensitiveConfirmationOpen = true
   try {
+    // Prefer a window the user can actually see. `getFocusedWindow` returns null
+    // whenever the app is not frontmost, and the old fallback took the first
+    // undestroyed window in creation order, which may be hidden or minimised.
+    // Parenting a modal prompt to a window nobody is looking at is the same
+    // failure as never showing one.
+    const windows = BrowserWindow.getAllWindows().filter((window) => !window.isDestroyed())
+    const focused = BrowserWindow.getFocusedWindow()
     const owner =
-      BrowserWindow.getFocusedWindow() ??
-      BrowserWindow.getAllWindows().find((window) => !window.isDestroyed())
+      (focused && !focused.isDestroyed() ? focused : undefined) ??
+      windows.find((window) => window.isVisible() && !window.isMinimized()) ??
+      windows.find((window) => window.isVisible()) ??
+      windows[0]
     return await showSessionConfirmation(owner, details)
   } finally {
     sensitiveConfirmationOpen = false
@@ -568,6 +599,49 @@ export const getModelsPage = async (payload?: {
   return data.models ?? []
 }
 
+export interface ModelPrice {
+  readonly model_id: string
+  /**
+   * Decimal wei strings, per second of compute. Empty when the model has no live
+   * bid, which is not the same as free: a caller must not coerce it to zero or
+   * the models nobody serves sort to the top of a cheapest-first list.
+   */
+  readonly min_price_per_second_wei: string
+  readonly max_price_per_second_wei: string
+  readonly bid_count: number
+}
+
+export interface ModelPricesResult {
+  readonly prices: ModelPrice[]
+  /** Models whose bids the router could not read this time. */
+  readonly failed_model_ids: string[]
+}
+
+/**
+ * The whole marketplace's prices in one request.
+ *
+ * The model picker deliberately carries no bids: loading them per model meant
+ * hundreds of requests and a picker that stayed disabled until the last one
+ * landed. That is also why sorting by price could not be done in the renderer.
+ * The router now sweeps every model's bids behind a one-minute cache and answers
+ * here in a single call, so the picker can rank by cost without going back to
+ * the per-model routes.
+ *
+ * Given the sweep is one bid read per registered model, this is allowed more
+ * time than an ordinary proxy call and is not something to poll tightly.
+ */
+export const getModelPrices = async (): Promise<ModelPricesResult> => {
+  const data = await proxyFetch<Partial<ModelPricesResult>>(
+    '/blockchain/models/prices',
+    {},
+    'model prices'
+  )
+  return {
+    prices: Array.isArray(data?.prices) ? data.prices : [],
+    failed_model_ids: Array.isArray(data?.failed_model_ids) ? data.failed_model_ids : []
+  }
+}
+
 const boundedProxyId = (value: unknown, label: string): string => {
   const result = String(value ?? '').trim()
   if (!result || result.length > 256 || /[\u0000-\u001f\u007f]/u.test(result)) {
@@ -765,14 +839,43 @@ export const openSession = async (payload: {
   const bidId = payload?.bidId ? boundedProxyId(payload.bidId, 'Bid ID') : ''
   const failover = bidId ? false : payload?.failover === true
   const provider = payload?.provider ? walletAddress(payload.provider, 'Provider address') : ''
+  // Quote the open before asking the user to authorise it. The renderer already
+  // shows an amount, but this window is the one that actually authorises the
+  // transaction and it named no figure at all, so a renderer bug or a stale
+  // panel could get a different amount approved than the one on screen. The
+  // router is asked directly, for the same bid and duration the request below
+  // carries.
+  //
+  // Never fatal: a quote that fails is a reason to warn, not to block an open
+  // the user explicitly asked for. The dialog says the amount is unknown and
+  // the decision stays with them.
+  let amountMor: string | undefined
+  try {
+    const estimate = (await estimateOpenSession({
+      modelId,
+      duration,
+      directPayment,
+      bidId: bidId || undefined
+    })) as { stake_wei?: string } | null
+    amountMor = formatWeiForConfirmation(estimate?.stake_wei)
+  } catch (error) {
+    console.warn('Could not quote the session before confirmation', error)
+  }
   const approved = await confirmSessionAction({
     modelId,
     duration,
     directPayment,
     failover,
-    provider: bidId ? provider || undefined : undefined
+    provider: bidId ? provider || undefined : undefined,
+    amountMor
   })
-  if (!approved) throw new Error('Session opening cancelled.')
+  if (!approved) {
+    // Say which. A prompt that died on its own and a user who pressed Cancel
+    // produced the same sentence, so "it cancels every time" could not be told
+    // apart from "I keep cancelling" without a terminal attached to the app.
+    const reason = consumeSessionConfirmationDismissal()
+    throw new Error(reason ? `Session opening cancelled: ${reason}.` : 'Session opening cancelled.')
+  }
   try {
     // A chosen bid goes to the by-bid route, which opens against that provider
     // and no other. The by-model route re-scores and may land somewhere else,
@@ -782,7 +885,17 @@ export const openSession = async (payload: {
         `/blockchain/bids/${encodeURIComponent(bidId)}/session`,
         {
           method: 'POST',
-          body: JSON.stringify({ sessionDuration: duration, directPayment })
+          // rejectExisting matters just as much here as on the by-model route
+          // below. Picking a provider is still opening a session for a model,
+          // and without this the picker was a way around the duplicate check:
+          // the same open would be refused on "best available" and go through
+          // with a provider named, locking a second amount of MOR against a
+          // model the wallet was already paying for.
+          body: JSON.stringify({
+            sessionDuration: duration,
+            directPayment,
+            rejectExisting: true
+          })
         },
         'session opening'
       )

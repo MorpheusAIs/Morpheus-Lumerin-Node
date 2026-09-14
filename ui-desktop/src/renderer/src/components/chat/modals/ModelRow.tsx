@@ -17,6 +17,10 @@ import {
   normalizeModelName,
   normalizeModelTags,
 } from '../../../store/utils/modelMetadata';
+import {
+  ModelPriceEntry,
+  weiToMorPerSecond,
+} from '../../../store/utils/modelPrices';
 
 type IconCmp = React.ComponentType<any>;
 
@@ -276,29 +280,81 @@ function classifyTags(rawTags: unknown, modelName: string = '') {
 
 type PriceInfo =
   | { kind: 'local' }
-  | { kind: 'offline' }
-  | { kind: 'single'; perSec: number }
-  | { kind: 'range'; minPerSec: number; maxPerSec: number };
+  /** Nobody is serving this model, so there is no price to quote. */
+  | { kind: 'none' }
+  /** Not looked up yet, or the lookup failed. Distinct from 'none' on purpose. */
+  | { kind: 'unknown' }
+  | { kind: 'single'; perSec: number; providers: number }
+  | { kind: 'range'; minPerSec: number; maxPerSec: number; providers: number };
 
-function computePrice(model: any): PriceInfo {
+/**
+ * What this model costs per second, from whichever source knows.
+ *
+ * Two sources, in order. `model.bids` is the per-model active-bid read, which
+ * only the selected model has and which is the more current of the two.
+ * `priceEntry` is the router's marketplace-wide sweep, which every row has once
+ * the picker has loaded it and which is what makes ordering by cost possible at
+ * all. They agree on substance: both exclude this wallet's own bids and both
+ * exclude withdrawn ones, the sweep on the router side and the bid list here.
+ *
+ * A zero price is dropped rather than shown as free. getSessionEnd divides by
+ * price per second, so a zero-priced bid is malformed, not a bargain, and
+ * showing it would sort the model to the top of a cheapest-first list and then
+ * fail at the point of opening.
+ */
+function computePrice(
+  model: any,
+  priceEntry: ModelPriceEntry | undefined,
+): PriceInfo {
   if (model?.isLocal) return { kind: 'local' };
+
   const bids = Array.isArray(model?.bids)
-    ? model.bids.filter((b: any) => b?.Id)
-    : [];
-  if (bids.length === 0) return { kind: 'offline' };
-  const prices = bids
-    .map((b: any) => Number(b.PricePerSecond))
-    .filter((n: number) => Number.isFinite(n));
-  if (prices.length === 0) return { kind: 'offline' };
-  const min = Math.min(...prices) / 1e18;
-  const max = Math.max(...prices) / 1e18;
-  if (min === max) return { kind: 'single', perSec: min };
-  return { kind: 'range', minPerSec: min, maxPerSec: max };
+    ? model.bids.filter((b: any) => b?.Id && Number(b.DeletedAt ?? 0) === 0)
+    : null;
+  if (bids) {
+    const prices = bids
+      .map((b: any) => Number(b.PricePerSecond))
+      .filter((n: number) => Number.isFinite(n) && n > 0);
+    if (prices.length === 0) return { kind: 'none' };
+    const min = Math.min(...prices) / 1e18;
+    const max = Math.max(...prices) / 1e18;
+    return min === max
+      ? { kind: 'single', perSec: min, providers: prices.length }
+      : {
+          kind: 'range',
+          minPerSec: min,
+          maxPerSec: max,
+          providers: prices.length,
+        };
+  }
+
+  if (priceEntry) {
+    const min = weiToMorPerSecond(priceEntry.min_price_per_second_wei);
+    const max = weiToMorPerSecond(priceEntry.max_price_per_second_wei);
+    if (min === undefined) return { kind: 'none' };
+    const providers = priceEntry.bid_count;
+    return max === undefined || max === min
+      ? { kind: 'single', perSec: min, providers }
+      : { kind: 'range', minPerSec: min, maxPerSec: max, providers };
+  }
+
+  // Neither source has spoken for this model. That is not the same as having no
+  // providers, and saying so would tell the user a model is dead when all that
+  // happened is that the sweep has not answered yet or could not be read.
+  return { kind: 'unknown' };
 }
 
 function ModelRow(props: {
   model: any;
   symbol: string;
+  /**
+   * This model's row in the router's marketplace-wide price sweep.
+   *
+   * Undefined means the sweep has not answered for this model — not loaded yet,
+   * or it failed. An entry with an empty price is the opposite: the sweep did
+   * answer, and the answer is that nobody is serving this model.
+   */
+  priceEntry?: ModelPriceEntry;
   onChangeModel: (data: {
     modelId: string;
     bidId?: string;
@@ -313,11 +369,20 @@ function ModelRow(props: {
   const hasBidData = Array.isArray(model?.bids);
   const providerCount = hasBidData
     ? model.bids.filter((bid: any) => bid?.Id).length
-    : 0;
-  const availabilityUnknown = !isLocal && !hasBidData;
+    : (props.priceEntry?.bid_count ?? 0);
+  // Neither the per-model bid read nor the marketplace sweep has spoken for this
+  // row yet. Saying "offline since" on that basis would be an assertion the row
+  // has not earned.
+  const availabilityUnknown = !isLocal && !hasBidData && !props.priceEntry;
+  // The price sweep says how many providers are live, but it is a cached read
+  // taken up to a minute ago and it excludes this wallet's own bids. Letting it
+  // disable a row would mean a model the user could open being greyed out on
+  // stale data, so it informs the price column and nothing else. Only the
+  // per-model bid read, which is fetched for the model actually chosen, still
+  // gates selection.
   const isOnline =
     isLocal ||
-    availabilityUnknown ||
+    !hasBidData ||
     (providerCount > 0 && model.isOnline !== false);
   const symbol = props.symbol || 'MOR';
   const lastCheck: Date | undefined = model.lastCheck
@@ -332,7 +397,10 @@ function ModelRow(props: {
   const primaryModalityKey = modalityKeys[0] || 'llm';
   const ModalityIcon = MODALITY[primaryModalityKey]?.Icon || IconMessage;
 
-  const price = useMemo(() => computePrice(model), [model]);
+  const price = useMemo(
+    () => computePrice(model, props.priceEntry),
+    [model, props.priceEntry],
+  );
   const visionCapability = getVisionCapability(model);
 
   const handleSelect = () => {
@@ -390,12 +458,9 @@ function ModelRow(props: {
               {visionCapability === 'declared' ? 'Vision' : 'Likely vision'}
             </VisionPill>
           )}
-          {!isLocal && providerCount > 1 && (
-            <>
-              <Dot>·</Dot>
-              <span>{providerCount} providers</span>
-            </>
-          )}
+          {/* The provider count now sits under the price, where it qualifies
+              the figure it belongs to. Repeating it here said the same thing
+              twice in one row. */}
           {familyTags.slice(0, 2).map((t) => (
             <Pill key={t}>{t}</Pill>
           ))}
@@ -415,14 +480,20 @@ function ModelRow(props: {
             Local
           </LocalBadge>
         )}
-        {availabilityUnknown && <CheckPriceBadge>Check price</CheckPriceBadge>}
-        {!availabilityUnknown && price.kind === 'offline' && (
-          <OfflineBadge>Unavailable</OfflineBadge>
+        {price.kind === 'unknown' && (
+          <CheckPriceBadge>Check price</CheckPriceBadge>
         )}
+        {price.kind === 'none' && <OfflineBadge>No providers</OfflineBadge>}
+        {/* The unit says what the number is per, and the provider count says
+            what it is one of. A single figure with neither reads like the price
+            of the model, when it is the cheapest of several offers for it. */}
         {price.kind === 'single' && (
           <>
             <PriceValue>{formatSmallNumber(price.perSec)}</PriceValue>
-            <PriceUnit>{symbol}/s</PriceUnit>
+            <PriceUnit>
+              {symbol}/s
+              {price.providers > 1 ? ` · ${price.providers} providers` : ''}
+            </PriceUnit>
           </>
         )}
         {price.kind === 'range' && (
@@ -431,7 +502,10 @@ function ModelRow(props: {
               {formatSmallNumber(price.minPerSec)} –{' '}
               {formatSmallNumber(price.maxPerSec)}
             </PriceValue>
-            <PriceUnit>{symbol}/s</PriceUnit>
+            <PriceUnit>
+              {symbol}/s
+              {price.providers > 1 ? ` · ${price.providers} providers` : ''}
+            </PriceUnit>
           </>
         )}
       </PriceBlock>

@@ -1062,7 +1062,6 @@ function Cowork(): JSX.Element {
     activeTask?.messages.length,
     activeTask?.pendingApproval?.id,
     activeTask?.status,
-    activeTask?.summary,
     selectedModelKey,
     selectedTaskId,
     taskNeedsRebind,
@@ -3023,15 +3022,15 @@ function Cowork(): JSX.Element {
                 </div>
               )}
 
-              {activeTask.status === 'completed' && activeTask.summary && (
-                <div className="cowork-complete-card">
-                  <IconCircleCheck size={19} />
-                  <div>
-                    <strong>Task complete</strong>
-                    <SafeMarkdown>{activeTask.summary}</SafeMarkdown>
-                  </div>
-                </div>
-              )}
+              {/*
+                No completion card. task.summary is not a summary: both paths
+                that set it copy the assistant's closing message verbatim — the
+                finish_task tool appends the same string as a display message
+                before storing it, and a task that ends without a tool call
+                stores the content it has already displayed. Rendering it again
+                restated the last reply under a green heading after every turn.
+                The transcript row above is the one copy.
+              */}
 
               {taskNeedsRebind && (
                 <section className="cowork-rebind-card" role="note">
