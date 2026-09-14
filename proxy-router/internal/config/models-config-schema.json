@@ -34,7 +34,7 @@
           },
           "modelFamily": {
             "title": "Model Family",
-            "description": "Optional canonical model family (qwen3, deepseek-v3.1, deepseek-r1, gpt-oss, glm, granite, seed-oss, nemotron, claude, o-series, gemini) used to pick reasoning-control bindings; inferred from modelName when omitted",
+            "description": "Optional canonical model family used to pick reasoning-control bindings. Families with bindings: qwen3, qwq, deepseek-v3.1, deepseek-r1, gpt-oss, glm, granite, hunyuan, seed-oss, nemotron, claude, o-series, gemini, gemma (Gemma 4 members only), kimi (K2.5 / K2.6 hybrid; K2 Thinking and K2.7-Code always-on), minimax (MiniMax-M2 and M2.x always-on), exaone (EXAONE 4.x hybrid; EXAONE Deep always-on). Any other value (or an inferred label such as llama, mistral, phi) is accepted and reported as modelFamily without reasoning bindings; inferred from modelName when omitted",
             "type": "string"
           },
           "apiUrl": {

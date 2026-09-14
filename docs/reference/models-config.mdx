@@ -1,6 +1,6 @@
 ---
 title: "models-config.json"
-description: "How the proxy-router maps on-chain model IDs to backend HTTP endpoints, including the apiType stack presets (OpenAI, vLLM, SGLang, llama.cpp, Ollama, Venice, OpenRouter, LiteLLM, Anthropic) and legacy Prodia / Hyperbolic adapters."
+description: "How the proxy-router maps on-chain model IDs to backend HTTP endpoints: the apiType transport adapter, the optional apiStack backend preset (OpenAI, vLLM, SGLang, llama.cpp, Ollama, Venice, OpenRouter, LiteLLM, Anthropic) that declares the advertised API, and the Prodia / Hyperbolic image adapters."
 audience: ["provider-full", "provider-resale", "developer"]
 product: ["proxy-router"]
 last_verified: "v7.0.0"
@@ -15,8 +15,9 @@ source: "docs/models-config.json.md"
 |-------|----------|-------|
 | `modelId` | yes | The on-chain model id (32-byte hex) |
 | `modelName` | yes | Human-readable name |
-| `apiType` | yes | Stack preset: `openai`, `vllm`, `sglang`, `llamacpp`, `ollama`, `venice`, `openrouter`, `litellm`, `anthropic`. Legacy values (still supported): `claudeai`, `prodia-sd`, `prodia-sdxl`, `prodia-v2`, `hyperbolic-sd` |
-| `modelFamily` | optional | Canonical model family used to pick reasoning-control bindings: `qwen3`, `deepseek-v3.1`, `deepseek-r1`, `gpt-oss`, `glm`, `granite`, `seed-oss`, `nemotron`, `claude`, `o-series`, `gemini`. Inferred from `modelName` when omitted |
+| `apiType` | yes | Transport adapter the proxy-router speaks to the backend: `openai` (any OpenAI-compatible chat/completions endpoint), `claudeai` (Anthropic Messages), `prodia-sd`, `prodia-sdxl`, `prodia-v2`, `hyperbolic-sd` (image generation) |
+| `apiStack` | optional | Backend API preset advertised to consumers: `openai`, `vllm`, `sglang`, `llamacpp`, `ollama`, `venice`, `openrouter`, `litellm`, `anthropic`. Never selects the adapter; its required `apiType` is listed under [API presets](#api-presets) and the proxy-router refuses the config on a mismatch |
+| `modelFamily` | optional | Canonical model family used to pick reasoning-control bindings. Families with bindings: `qwen3`, `qwq`, `deepseek-v3.1`, `deepseek-r1`, `gpt-oss`, `glm`, `granite`, `hunyuan`, `seed-oss`, `nemotron`, `claude`, `o-series`, `gemini`, `gemma` (Gemma 4 members only), `kimi` (Kimi K2.5 / K2.6 hybrid; K2 Thinking and K2.7-Code always-on), `minimax` (MiniMax-M2 and M2.x always-on), `exaone` (EXAONE 4.x hybrid; EXAONE Deep always-on). Any other value (or an inferred label such as `llama`, `mistral`, `phi`) is accepted and reported as the `api` block's `modelFamily` without reasoning bindings. Inferred from `modelName` when omitted |
 | `apiUrl` | yes | Full backend URL including the endpoint path |
 | `apiKey` | optional | Backend API key (resale providers usually need this) |
 | `concurrentSlots` | optional | Distinct concurrent chats your backend can handle for **this** model |
@@ -31,21 +32,32 @@ For the canonical per-`apiType` schema, see the JSON schema file linked above.
 
 ## API presets
 
-Presets declare the backend API; the reported `api` block in `/healthcheck` is derived from them and is self-reported.
+`apiStack` declares which backend API serves the model. It only feeds the self-reported `api` block in `/healthcheck` and in the pong `models` list: that block is reported **only when `apiStack` is set**, so the feature is opt-in per model. `apiType` stays the transport adapter and is not derived from `apiStack`; each preset is valid with exactly one `apiType`, and a mismatch (for example `apiStack: anthropic` with `apiType: openai`) makes the proxy-router reject `models-config.json` at startup.
 
-**`apiType` stack presets:** `openai`, `vllm`, `sglang`, `llamacpp`, `ollama`, `venice`, `openrouter`, `litellm`, `anthropic`. Legacy values that keep working: `claudeai`, `prodia-sd`, `prodia-sdxl`, `prodia-v2`, `hyperbolic-sd`.
+| `apiStack` | Backend | Required `apiType` |
+|------------|---------|--------------------|
+| `openai` | api.openai.com or any generic OpenAI-compatible endpoint | `openai` |
+| `vllm` | vLLM OpenAI-compatible server | `openai` |
+| `sglang` | SGLang OpenAI-compatible server | `openai` |
+| `llamacpp` | llama.cpp `llama-server` | `openai` |
+| `ollama` | Ollama `/v1` OpenAI-compatible surface | `openai` |
+| `venice` | Venice | `openai` |
+| `openrouter` | OpenRouter | `openai` |
+| `litellm` | LiteLLM proxy | `openai` |
+| `anthropic` | Anthropic Messages API | `claudeai` |
 
-**`modelFamily` (optional):** one of `qwen3`, `deepseek-v3.1`, `deepseek-r1`, `gpt-oss`, `glm`, `granite`, `seed-oss`, `nemotron`, `claude`, `o-series`, `gemini`. When omitted, the family is inferred from `modelName`.
+**`modelFamily` (optional):** families with reasoning bindings are `qwen3`, `qwq`, `deepseek-v3.1`, `deepseek-r1`, `gpt-oss`, `glm`, `granite`, `hunyuan`, `seed-oss`, `nemotron`, `claude`, `o-series`, `gemini`, `gemma` (Gemma 4 members only; Gemma 3 and older get none), `kimi` (Kimi K2.5 / K2.6 hybrid via the `thinking` chat-template kwarg; K2 Thinking and K2.7-Code always-on; K2 Instruct none), `minimax` (MiniMax-M2 and every M2.x always-on; MiniMax-Text-01 none), `exaone` (EXAONE 4.x hybrid via `enable_thinking`; EXAONE Deep always-on; EXAONE 3.5 and older none). Any other value (or an inferred label such as `llama`, `mistral`, `phi`) is accepted and reported as the `api` block's `modelFamily` without reasoning bindings. When omitted, the family is inferred from `modelName`.
 
 **`parameters` vocabulary:** the `api.parameters` list in a preset's declared spec uses the stack's own request vocabulary — OpenAI chat-completions names for every stack except `anthropic`, which uses Anthropic Messages names (an upper bound: server-side flags are invisible).
 
-**`anthropic` preset transport:** the `anthropic` preset uses the Anthropic Messages transport; the request's `max_tokens` is forwarded (default 1024 when omitted) and `thinking.budget_tokens` must stay below it.
+**`anthropic` preset transport:** `apiStack: anthropic` requires `apiType: claudeai` (Anthropic Messages transport); the request's `max_tokens` is forwarded (default 1024 when omitted) and `thinking.budget_tokens` must stay below it.
 
 ```json
 {
   "modelId": "0x0000000000000000000000000000000000000000000000000000000000000008",
   "modelName": "Qwen3-235B-A22B",
-  "apiType": "vllm",
+  "apiType": "openai",
+  "apiStack": "vllm",
   "apiUrl": "http://localhost:8000/v1/chat/completions",
   "modelFamily": "qwen3"
 }
@@ -85,6 +97,7 @@ Presets declare the backend API; the reported `api` block in `/healthcheck` is d
       "modelId": "0x0000000000000000000000000000000000000000000000000000000000000003",
       "modelName": "claude-3-5-sonnet-20241022",
       "apiType": "claudeai",
+      "apiStack": "anthropic",
       "apiUrl": "https://api.anthropic.com/v1/messages",
       "apiKey": "FILL_ME_IN"
     },
