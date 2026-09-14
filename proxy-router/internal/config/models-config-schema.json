@@ -28,7 +28,7 @@
           },
           "apiStack": {
             "title": "API Stack",
-            "description": "Optional backend API preset advertised in the model's api block (/healthcheck and pong models); it never selects the adapter. Its transport must match apiType: openai for every preset except anthropic, which requires claudeai. Trimmed and lowercased on load; an unknown preset or a mismatch is logged and ignored for that model (served without an api block). When omitted, the backend API is detected at runtime by probing the backend's service endpoints (never inference requests; one hop through LiteLLM) and reported with source: detected; MODEL_API_DETECT_ENABLED=false turns detection off.",
+            "description": "Optional backend API preset advertised in the model's api block (/healthcheck and pong models); it never selects the adapter. Its transport must match apiType: openai for every preset except anthropic, which requires claudeai. Trimmed and lowercased on load; an unknown preset or a mismatch is logged and ignored for that model (its backend API is then detected at runtime, as if apiStack were omitted). When omitted, the backend API is detected at runtime by probing the backend's service endpoints (never inference requests; one hop through LiteLLM) and reported with source: detected; MODEL_API_DETECT_ENABLED=false turns detection off.",
             "type": "string",
             "enum": ["openai", "vllm", "sglang", "llamacpp", "ollama", "venice", "openrouter", "litellm", "anthropic"]
           },
