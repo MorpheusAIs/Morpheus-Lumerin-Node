@@ -43,6 +43,16 @@ func TestStackTransportTable(t *testing.T) {
 	}
 }
 
+// IsChatTransport must accept exactly the transports StackTransport actually
+// serves chat over, and reject a legacy image-only apiType and the empty
+// value.
+func TestIsChatTransport(t *testing.T) {
+	require.True(t, IsChatTransport("openai"))
+	require.True(t, IsChatTransport("claudeai"))
+	require.False(t, IsChatTransport("prodia-v2"))
+	require.False(t, IsChatTransport(""))
+}
+
 func TestValidateApiStackAcceptsEveryPresetOnItsTransport(t *testing.T) {
 	for stack, adapter := range StackTransport {
 		require.NoError(t, ValidateApiStack("0x01", ModelConfig{ApiType: adapter, ApiStack: stack}), stack)

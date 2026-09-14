@@ -989,6 +989,34 @@ func TestCheckModelDetectsWhenNoApiStack(t *testing.T) {
 	require.Equal(t, 2, det.calls)
 }
 
+// Chat transports only: an apiType with no chat API (e.g. the prodia-v2
+// image adapter) must never reach the detector, even though it has no
+// apiStack and an ApiURL — the same condition that triggers detection for a
+// chat transport like openai right beside it.
+func TestCheckModelSkipsDetectorForNonChatTransport(t *testing.T) {
+	det := &fakeDetector{spec: detectedQwen3()}
+	deps := &mockDeps{
+		bids: []*structs.Bid{bidFor(modelLLM)}, tags: map[common.Hash][]string{modelLLM: {"llm"}},
+		modelIDs: []common.Hash{modelLLM, modelImage}, adapter: &mathSolvingAdapter{}, apiDetect: det,
+		configs: map[common.Hash]config.ModelConfig{
+			modelLLM:   {ModelName: "qwen3-32b", ApiType: "openai", ApiURL: "http://llm:8000/v1/chat/completions"},
+			modelImage: {ModelName: "sd-xl", ApiType: "prodia-v2", ApiURL: "https://inference.prodia.com/v2"},
+		},
+	}
+	checker := newTestChecker(deps)
+	checker.checkAll(context.Background(), common.Address{})
+	reports := checker.GetReports()
+
+	llm := reportByID(t, reports, modelLLM)
+	require.NotNil(t, llm.Api, "chat transport (openai) is still detected")
+	require.Equal(t, system.ApiSpecSourceDetected, llm.Api.Source)
+
+	image := reportByID(t, reports, modelImage)
+	require.Nil(t, image.Api, "non-chat transport (prodia-v2) must not be probed")
+
+	require.Equal(t, 1, det.calls, "the detector must be called only for the chat-transport model")
+}
+
 // R1: a declared apiStack is composed statically; the detector is not called.
 func TestCheckModelDeclaredStackSkipsDetector(t *testing.T) {
 	det := &fakeDetector{spec: detectedQwen3()}
@@ -1056,6 +1084,24 @@ func TestCheckModelDetectBudgetIsCappedByTimeout(t *testing.T) {
 	deps := newDeps(det)
 	checker := NewChecker(Deps{Adapters: deps, Bids: deps, Models: deps, ModelConfigs: deps, ApiDetect: det}, time.Hour, time.Hour, 0, 0, lib.NewTestLogger())
 	start = time.Now()
+	checker.checkAll(context.Background(), common.Address{})
+	require.Len(t, det.deadlines, 1)
+	require.WithinDuration(t, start.Add(detectBudget), det.deadlines[0], 300*time.Millisecond)
+}
+
+// Budget fallback: a checker built with timeout 0 must still give the
+// detector the 10 s detectBudget rather than an already-expired
+// zero-duration context — the same `budget <= 0` fallback as an unset
+// timeout, distinct from the >detectBudget cap covered above.
+func TestCheckModelDetectBudgetFallsBackWhenTimeoutIsZero(t *testing.T) {
+	det := &fakeDetector{spec: detectedQwen3()}
+	deps := &mockDeps{
+		modelIDs:  []common.Hash{modelNoBid},
+		apiDetect: det,
+		configs:   map[common.Hash]config.ModelConfig{modelNoBid: {ModelName: "qwen3-32b", ApiType: "openai", ApiURL: "http://llm:8000/v1/chat/completions"}},
+	}
+	checker := NewChecker(Deps{Adapters: deps, Bids: deps, Models: deps, ModelConfigs: deps, ApiDetect: det}, time.Hour, 0, 0, 0, lib.NewTestLogger())
+	start := time.Now()
 	checker.checkAll(context.Background(), common.Address{})
 	require.Len(t, det.deadlines, 1)
 	require.WithinDuration(t, start.Add(detectBudget), det.deadlines[0], 300*time.Millisecond)

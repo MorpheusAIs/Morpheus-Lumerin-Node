@@ -416,14 +416,18 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 
 	// API spec: a declared apiStack is composed statically (explicit
 	// declaration wins, no probing); otherwise the detector identifies the
-	// backend within a bounded budget, for every configured model, bid or
-	// not. DeclaredAt is only refreshed when the composed spec actually
+	// backend within a bounded budget, for every configured model with a chat
+	// transport apiType, bid or not. Detection is restricted to chat
+	// transports (config.IsChatTransport — today openai and claudeai) because
+	// image adapters (prodia-*, hyperbolic-sd) have no chat API to probe:
+	// running the detector against them would cost ~16 requests per sweep for
+	// nothing. DeclaredAt is only refreshed when the composed spec actually
 	// changed, so it reflects when the spec last changed rather than every
 	// sweep.
 	var api *system.ModelApiSpec
 	if apispec.StackFor(cfg.ApiStack) != "" {
 		api = apispec.Build(cfg)
-	} else if c.deps.ApiDetect != nil && (cfg.ApiURL != "" || cfg.ModelName != "") {
+	} else if c.deps.ApiDetect != nil && config.IsChatTransport(cfg.ApiType) && (cfg.ApiURL != "" || cfg.ModelName != "") {
 		budget := c.timeout
 		if budget <= 0 || budget > detectBudget {
 			budget = detectBudget

@@ -29,6 +29,21 @@ var StackTransport = map[string]string{
 	"anthropic":  "claudeai",
 }
 
+// IsChatTransport reports whether apiType is a chat transport adapter — one
+// that some apiStack preset in StackTransport resolves to (today "openai" and
+// "claudeai"). It is derived from that table rather than a second
+// hand-written list, so a new chat-capable stack cannot drift out of sync
+// with it. Legacy image-only adapters (prodia-*, hyperbolic-sd) have no chat
+// API and are never chat transports.
+func IsChatTransport(apiType string) bool {
+	for _, transport := range StackTransport {
+		if transport == apiType {
+			return true
+		}
+	}
+	return false
+}
+
 // NormalizeApiStack trims and lowercases a configured apiStack so " vLLM "
 // and "vllm" name the same preset and a whitespace-only value means unset.
 // The loader stores the normalized value; apispec.StackFor applies the same
