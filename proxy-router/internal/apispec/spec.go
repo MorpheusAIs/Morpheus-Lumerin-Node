@@ -6,6 +6,7 @@ package apispec
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -96,6 +97,11 @@ func Compose(ev Evidence) *system.ModelApiSpec {
 func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 	var lines []string
 	tracef := func(format string, args ...any) { lines = append(lines, fmt.Sprintf(format, args...)) }
+
+	// Backend-reported lists are third-party strings bound for the public
+	// wire: sanitized once, here, before anything reads them.
+	ev.Parameters = sanitizeNames(ev.Parameters, maxParameters, "parameters", tracef)
+	ev.ReasoningEfforts = sanitizeNames(ev.ReasoningEfforts, maxReasoningEfforts, "reasoning efforts", tracef)
 
 	stack := ev.Stack
 	api := &system.ModelApiSpec{Stack: stack, Source: system.ApiSpecSourceDetected}
@@ -193,10 +199,11 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 			tracef("bindings: family default for %q skipped — stack undetermined (unknown wire vocabulary)", family)
 		case gatedStack(stack) && familyNativeVendor[family] != stack:
 			// Family defaults describe either HF chat-template kwargs (only
-			// honored by self-hosted engines) or the family's native vendor
-			// API. On any other hosted vendor or gateway they are wrong
-			// request shapes; gateways contribute their own knobs via the
-			// stack table.
+			// honored by the documented self-hosted engines) or the family's
+			// native vendor API. On any other hosted vendor, gateway or
+			// detected-only engine they are wrong or unverified request
+			// shapes; gateways contribute their own knobs via the stack
+			// table.
 			tracef("bindings: family default for %q skipped — %q does not accept it", family, stack)
 		default:
 			bindings = cloneSet(defaults)
@@ -285,6 +292,46 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 		return nil, lines
 	}
 	return api, lines
+}
+
+// Bounds on backend-reported lists (Evidence.Parameters and
+// Evidence.ReasoningEfforts): a gateway or registry listing is third-party
+// data and the spec is public (/healthcheck, pong), so what reaches the wire
+// is a bounded list of plain names. maxParameters comfortably exceeds the
+// largest documented list (OpenAI chat completions has ~22 params; an
+// OpenRouter entry ~30); LiteLLM's effort enum has 7 values.
+const (
+	maxParameters       = 64
+	maxReasoningEfforts = 16
+)
+
+// nameRe is the shape of a request parameter or effort name: what every
+// documented list on this branch uses (dots for nested keys, dashes and
+// underscores), nothing that could carry markup, whitespace or control
+// characters onto the wire.
+var nameRe = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
+
+// sanitizeNames returns a new list holding only the entries of list that
+// match nameRe, deduplicated, in their original order and capped at limit;
+// when anything was dropped one trace line reports the counts. list itself
+// is never modified (the caller's evidence stays as gathered).
+func sanitizeNames(list []string, limit int, what string, tracef func(string, ...any)) []string {
+	if len(list) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool, len(list))
+	var out []string
+	for _, name := range list {
+		if len(out) >= limit || seen[name] || !nameRe.MatchString(name) {
+			continue
+		}
+		seen[name] = true
+		out = append(out, name)
+	}
+	if dropped := len(list) - len(out); dropped > 0 {
+		tracef("%s: %d of %d backend-reported entries dropped (invalid name, duplicate or beyond the %d cap); %d kept", what, dropped, len(list), limit, len(out))
+	}
+	return out
 }
 
 // hasReasoningBindings reports whether any reasoning.* intent is bound.

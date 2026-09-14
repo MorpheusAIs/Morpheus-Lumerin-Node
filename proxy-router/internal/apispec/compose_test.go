@@ -1,6 +1,7 @@
 package apispec
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -136,6 +137,30 @@ func TestComposeHostedVendorGatesFamilyDefaults(t *testing.T) {
 	require.Equal(t, "thinking", anthropic.Bindings[system.IntentReasoningDisable].Param)
 }
 
+// Detected-only engines (tgi, lmstudio, koboldcpp) have no preset table and
+// nothing documents that they honour chat-template kwargs: the family's
+// template-kwarg defaults are gated for them like for a gateway. The family
+// and an always_on mode are still reported.
+func TestComposeDetectedOnlyEnginesGateFamilyDefaults(t *testing.T) {
+	for _, stack := range []string{"tgi", "lmstudio", "koboldcpp"} {
+		api, lines := ComposeWithTrace(Evidence{Stack: stack, ModelName: "qwen3-32b"})
+		require.NotNil(t, api, stack)
+		require.Equal(t, stack, api.Stack)
+		require.Equal(t, "qwen3", api.ModelFamily, stack)
+		require.Empty(t, api.Bindings, stack)
+		require.Nil(t, api.Thinking, stack)
+		require.Empty(t, api.Parameters, stack)
+		require.Contains(t, strings.Join(lines, "\n"), `family default for "qwen3" skipped — "`+stack+`" does not accept it`)
+
+		r1 := Compose(Evidence{Stack: stack, ModelName: "deepseek-r1-distill"})
+		require.Equal(t, system.ThinkingModeAlwaysOn, r1.Thinking.Mode, stack)
+		require.Empty(t, r1.Bindings, stack)
+	}
+	// the preset engines keep the family default
+	vllm := Compose(Evidence{Stack: "vllm", ModelName: "qwen3-32b"})
+	require.Equal(t, "chat_template_kwargs.enable_thinking", vllm.Bindings[system.IntentReasoningDisable].Param)
+}
+
 func TestComposeImportedParametersReplaceStackList(t *testing.T) {
 	api := Compose(Evidence{Stack: "openrouter", ModelName: "x/y", GatewayReasoning: true, Parameters: []string{"tools", "reasoning"}})
 	require.Equal(t, []string{"reasoning", "tools"}, api.Parameters)
@@ -242,4 +267,73 @@ func TestDescribeBinding(t *testing.T) {
 	require.Equal(t, `body_param thinking (object, value={"type":"disabled"}) — h`, s)
 	s = DescribeBinding(&system.ParamBinding{Kind: system.BindingKindTemplateKwarg, Param: "chat_template_kwargs.reasoning_effort", ParamType: "enum", EnumValues: []string{"low", "high"}})
 	require.Equal(t, "template_kwarg chat_template_kwargs.reasoning_effort (enum: low|high)", s)
+}
+
+// Backend-reported lists (LiteLLM supported_openai_params and
+// supported_reasoning_efforts, registry supported_parameters, Venice
+// capabilities) are third-party strings that reach the public wire through
+// the spec. They are sanitized once, here: only names matching
+// ^[A-Za-z0-9_.-]{1,64}$ survive, duplicates go, order is preserved, and the
+// lists are capped (64 parameters, 16 efforts); a drop is traced once with
+// the counts.
+func TestComposeSanitizesBackendReportedLists(t *testing.T) {
+	t.Run("10 000 junk parameters plus a few valid ones", func(t *testing.T) {
+		in := make([]string, 0, 10_008)
+		for i := 0; i < 10_000; i++ {
+			in = append(in, fmt.Sprintf("junk %d\n", i)) // space and newline: never a name
+		}
+		in = append(in, "", "temperature", strings.Repeat("a", 65), "tools", "tools", "top_p\x00", "reasoning_effort", "ünïcode")
+		snapshot := append([]string(nil), in...)
+
+		api, lines := ComposeWithTrace(Evidence{Stack: "litellm", ModelName: "qwen3-32b", Parameters: in})
+		require.NotNil(t, api)
+		require.Equal(t, []string{"reasoning_effort", "temperature", "tools"}, api.Parameters, "exactly the valid, deduped names")
+		require.Contains(t, strings.Join(lines, "\n"), "parameters: 10005 of 10008 backend-reported entries dropped (invalid name, duplicate or beyond the 64 cap); 3 kept")
+		require.Equal(t, snapshot, in, "the caller's list is never modified")
+	})
+
+	t.Run("cap of 64 parameters, first ones kept", func(t *testing.T) {
+		in := make([]string, 0, 100)
+		for i := 0; i < 100; i++ {
+			in = append(in, fmt.Sprintf("p%03d", i))
+		}
+		api, lines := ComposeWithTrace(Evidence{Stack: "openrouter", ModelName: "x/y", Parameters: in})
+		require.Len(t, api.Parameters, 64)
+		require.Equal(t, "p000", api.Parameters[0])
+		require.Equal(t, "p063", api.Parameters[63])
+		require.Contains(t, strings.Join(lines, "\n"), "parameters: 36 of 100 backend-reported entries dropped")
+	})
+
+	t.Run("dots and dashes are names; nothing dropped means no trace line", func(t *testing.T) {
+		api, lines := ComposeWithTrace(Evidence{Stack: "openrouter", ModelName: "x/y", Parameters: []string{"reasoning.effort", "top-k", "min_p", "seed"}})
+		require.Equal(t, []string{"min_p", "reasoning.effort", "seed", "top-k"}, api.Parameters)
+		require.NotContains(t, strings.Join(lines, "\n"), "backend-reported entries dropped")
+	})
+
+	t.Run("efforts: a none with a newline is not none", func(t *testing.T) {
+		in := []string{"low", "none\n", "high", "low"}
+		api, lines := ComposeWithTrace(Evidence{Stack: "litellm", ModelName: "claude-sonnet-4-5", GatewayReasoning: true, ReasoningEfforts: in})
+		require.Equal(t, []string{"low", "high"}, api.Bindings[system.IntentReasoningEffort].EnumValues, "order preserved, junk and duplicate dropped")
+		require.Nil(t, api.Bindings[system.IntentReasoningDisable], "no valid none: thinking cannot be switched off")
+		require.Equal(t, "low", api.Bindings[system.IntentReasoningEnable].Value)
+		require.Contains(t, strings.Join(lines, "\n"), "reasoning efforts: 2 of 4 backend-reported entries dropped (invalid name, duplicate or beyond the 16 cap); 2 kept")
+		require.Equal(t, []string{"low", "none\n", "high", "low"}, in)
+	})
+
+	t.Run("cap of 16 efforts", func(t *testing.T) {
+		in := make([]string, 0, 20)
+		for i := 0; i < 20; i++ {
+			in = append(in, fmt.Sprintf("e%02d", i))
+		}
+		api, lines := ComposeWithTrace(Evidence{Stack: "litellm", ModelName: "claude-sonnet-4-5", GatewayReasoning: true, ReasoningEfforts: in})
+		require.Len(t, api.Bindings[system.IntentReasoningEffort].EnumValues, 16)
+		require.Equal(t, "e00", api.Bindings[system.IntentReasoningEnable].Value)
+		require.Contains(t, strings.Join(lines, "\n"), "reasoning efforts: 4 of 20 backend-reported entries dropped")
+	})
+
+	t.Run("a list that is all junk is an empty list", func(t *testing.T) {
+		api := Compose(Evidence{Stack: "litellm", ModelName: "qwen3-32b", GatewayReasoning: true, Parameters: []string{"", " ", "a b"}, ReasoningEfforts: []string{"\t"}})
+		require.Contains(t, api.Parameters, "messages", "the stack's documented list stands in for an empty import")
+		require.Equal(t, stackBindings["litellm"][system.IntentReasoningEffort].EnumValues, api.Bindings[system.IntentReasoningEffort].EnumValues, "no valid efforts: the table enum stands")
+	})
 }

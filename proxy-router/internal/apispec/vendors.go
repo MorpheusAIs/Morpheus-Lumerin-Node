@@ -59,10 +59,17 @@ func isHostedVendor(stack string) bool {
 	return false
 }
 
+// detectedOnlyEngines are self-hosted engines detection can name but no
+// preset documents (no stack table on this branch): nothing establishes
+// that they honour the family's chat-template kwargs, so those are not
+// advertised for them either. Only the family and thinking facts are.
+var detectedOnlyEngines = map[string]bool{"tgi": true, "lmstudio": true, "koboldcpp": true}
+
 // gatedStack reports whether family defaults must not be advertised for
 // stack unless the family's native vendor is that stack: gateways translate
-// requests for upstream providers and hosted vendors are not HF-template
-// engines, so template kwargs / vendor-native params would be wrong shapes.
+// requests for upstream providers, hosted vendors are not HF-template
+// engines and detected-only engines have no documented table, so template
+// kwargs / vendor-native params would be wrong or unverified shapes.
 func gatedStack(stack string) bool {
-	return gatewayStacks[stack] || isHostedVendor(stack)
+	return gatewayStacks[stack] || isHostedVendor(stack) || detectedOnlyEngines[stack]
 }

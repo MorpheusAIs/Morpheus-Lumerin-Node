@@ -195,8 +195,38 @@ func TestDetectLMStudio(t *testing.T) {
 	require.NotNil(t, api)
 	require.Equal(t, "lmstudio", api.Stack)
 	require.Equal(t, "granite", api.ModelFamily)
-	require.NotNil(t, api.Thinking)
-	require.Equal(t, "chat_template_kwargs.thinking", api.Bindings[system.IntentReasoningDisable].Param)
+	// a detected-only engine: the granite template-kwarg default is not
+	// advertised (nothing documents that LM Studio honours it)
+	require.Nil(t, api.Thinking)
+	require.Empty(t, api.Bindings)
+	require.Empty(t, api.Parameters)
+}
+
+// Detected-only engines (tgi, lmstudio, koboldcpp) report the family and an
+// always_on thinking mode, never the family's template-kwarg bindings.
+func TestDetectDetectedOnlyEnginesGetNoFamilyBindings(t *testing.T) {
+	t.Run("tgi serving a hybrid family", func(t *testing.T) {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/info", jsonHandler(map[string]any{"model_id": "Qwen/Qwen3-32B", "version": "3.0.1"}))
+		srv := httptest.NewServer(mux)
+		defer srv.Close()
+		api := detect(t, srv.URL+"/v1/chat/completions", "openai", "alias")
+		require.Equal(t, "tgi", api.Stack)
+		require.Equal(t, "qwen3", api.ModelFamily)
+		require.Nil(t, api.Thinking)
+		require.Empty(t, api.Bindings)
+	})
+	t.Run("koboldcpp serving an always-on family", func(t *testing.T) {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/api/extra/version", jsonHandler(map[string]any{"result": "KoboldCpp", "version": "1.90"}))
+		srv := httptest.NewServer(mux)
+		defer srv.Close()
+		api := detect(t, srv.URL+"/v1/chat/completions", "openai", "deepseek-r1-distill")
+		require.Equal(t, "koboldcpp", api.Stack)
+		require.Equal(t, "deepseek-r1", api.ModelFamily)
+		require.Equal(t, system.ThinkingModeAlwaysOn, api.Thinking.Mode)
+		require.Empty(t, api.Bindings)
+	})
 }
 
 func TestDetectKoboldCpp(t *testing.T) {
@@ -398,10 +428,10 @@ func TestDetectRawArchitectureFallsThroughToName(t *testing.T) {
 	api := detect(t, srv.URL+"/v1/chat/completions", "openai", "gpt-oss-120b")
 	require.NotNil(t, api)
 	require.Equal(t, "gpt-oss", api.ModelFamily)
-	require.NotNil(t, api.Thinking)
-	require.Equal(t, system.ThinkingModeTunable, api.Thinking.Mode)
-	require.Nil(t, api.Bindings[system.IntentReasoningDisable])
-	require.Equal(t, "chat_template_kwargs.reasoning_effort", api.Bindings[system.IntentReasoningEffort].Param)
+	// LM Studio is a detected-only engine: the family is reported, its
+	// template-kwarg effort levels are not advertised
+	require.Nil(t, api.Thinking)
+	require.Empty(t, api.Bindings)
 }
 
 func TestDetectUnknownArchitectureDoesNotBecomeFamily(t *testing.T) {
@@ -1025,8 +1055,8 @@ func TestDetectExplicitFamilyIsNeverOverridden(t *testing.T) {
 	defer srv.Close()
 	api := newTestDetector().Detect(context.Background(), config.ModelConfig{ModelName: "alias", ApiType: "openai", ApiURL: srv.URL + "/v1/chat/completions", ModelFamily: "qwen3"})
 	require.Equal(t, "lmstudio", api.Stack)
-	require.Equal(t, "qwen3", api.ModelFamily)
-	require.Equal(t, "chat_template_kwargs.enable_thinking", api.Bindings[system.IntentReasoningDisable].Param)
+	require.Equal(t, "qwen3", api.ModelFamily, "the declared family wins over the backend's llama architecture")
+	require.Empty(t, api.Bindings, "lmstudio is a detected-only engine: no family template kwargs")
 }
 
 // R7: the cached spec is canonical; every caller gets its own copy.
