@@ -1,7 +1,5 @@
-// Package apispec composes a provider's API spec (system.ModelApiSpec) for a
-// configured model from documentation-verified knowledge: the apiStack preset
-// tables, the model-family defaults and — when the runtime detector
-// (internal/apidetect) supplies it — backend evidence. No network access.
+// Package apispec composes a model's API spec (system.ModelApiSpec) from
+// preset tables, family defaults and detector evidence.
 package apispec
 
 import (
@@ -14,82 +12,27 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 )
 
-// Evidence is everything the composer may know about one model backend.
-// Build fills only the declared part (Stack from apiStack, ModelName,
-// ModelFamily, Declared); the runtime detector fills the rest from probes.
 type Evidence struct {
-	// Stack is the apiStack preset or the detected stack / hosted vendor
-	// name; "" means undetermined — then no bindings are advertised at all
-	// (the wire vocabulary is unknown; it could be a gateway).
-	Stack string
-	// Via is the gateway the request path goes through before Stack, when
-	// the detector identified the upstream behind it ("litellm" after the
-	// LiteLLM second hop found a Venice / OpenRouter / OpenAI endpoint or a
-	// self-hosted engine at the deployment's api_base). Stamped on the spec
-	// as-is; Build never sets it.
-	Via string
-	// ModelName is the configured modelName (the local alias).
-	ModelName string
-	// ModelFamily is the explicit models-config modelFamily. When set it is
-	// never overridden by evidence; evidence only fills an empty one.
-	ModelFamily string
-	// ServedModelID is the backend's own id/path for the served model
-	// (SGLang model_path, TGI model_id, a /v1/models entry id, LiteLLM's
-	// upstream model id).
-	ServedModelID string
-	// Architecture is the model architecture the backend reports directly
-	// (Ollama general.architecture, LM Studio arch).
-	Architecture string
-	// ChatTemplate is the Jinja chat template source when the backend
-	// exposes it (llama.cpp /props, Ollama /api/show).
-	ChatTemplate string
-	// OllamaThinking is true when Ollama lists "thinking" among the model's
-	// capabilities.
-	OllamaThinking bool
-	// GatewayReasoning is true when a gateway or registry listing declares
-	// that the model reasons (LiteLLM supports_reasoning, Venice
-	// supportsReasoning, OpenRouter supported_parameters with "reasoning").
+	// "" is undetermined: the wire vocabulary is unknown (it could be a
+	// gateway), so no bindings are advertised.
+	Stack            string
+	Via              string
+	ModelName        string
+	ModelFamily      string
+	ServedModelID    string
+	Architecture     string
+	ChatTemplate     string
+	OllamaThinking   bool
 	GatewayReasoning bool
-	// RegistryBindings are per-model bindings imported from a registry
-	// listing; they win over every other binding source. No probe fills
-	// them on this branch (OpenRouter's knobs live in the openrouter stack
-	// table and are switched on by GatewayReasoning); kept for imports that
-	// carry model-specific shapes.
 	RegistryBindings map[string]*system.ParamBinding
-	// Parameters is a per-model supported-parameter list imported from a
-	// registry listing (OpenRouter supported_parameters, Venice
-	// capabilities). It replaces the stack's documented list.
-	Parameters []string
-	// ReasoningEfforts is LiteLLM's supported_reasoning_efforts for the
-	// model group: the litellm reasoning.effort enum for this model. When it
-	// lacks "none", thinking cannot be switched off through LiteLLM.
+	Parameters       []string
 	ReasoningEfforts []string
-	// LiteLLMSeen is true when the request path goes through a LiteLLM
-	// proxy — the detected stack is litellm, or Via is litellm and Stack is
-	// the upstream it fronts. It switches on the LiteLLM forwarding filter:
-	// LiteLLM forwards params it does not recognise verbatim (provider
-	// kwargs) but validates the standard OpenAI ones against its per-model
-	// map, so bindings and parameters rooted at a standard name survive only
-	// when LiteLLMSupportedParams lists that name.
-	LiteLLMSeen bool
-	// LiteLLMSupportedParams is LiteLLM's supported_openai_params for the
-	// model group: the standard OpenAI params it forwards for this model. It
-	// is a filter, not an import — the stack's own list is intersected with
-	// it. nil means the list could not be read; then only reasoning_effort
-	// (the documented rejection) is treated as not forwarded.
+	LiteLLMSeen      bool
+	// nil means the list could not be read; an empty list is a known, empty list.
 	LiteLLMSupportedParams []string
-	// Declared is true when Stack comes from models-config apiStack (Build)
-	// rather than probing. A declared gateway preset merges its reasoning
-	// knobs on family knowledge alone; a detected gateway only on probe
-	// evidence, since a gateway may hide its upstream's knob.
-	Declared bool
+	Declared               bool
 }
 
-// Build composes the spec declared by cfg.ApiStack. It returns nil when
-// cfg.ApiStack is empty or unknown: the declared api block is opt-in per
-// model and apiType (the transport adapter) plays no part in it. DeclaredAt
-// is left for the caller to stamp. Models without apiStack are handled by the
-// runtime detector, which calls Compose with what it observed.
 func Build(cfg config.ModelConfig) *system.ModelApiSpec {
 	stack := StackFor(cfg.ApiStack)
 	if stack == "" {
@@ -98,33 +41,19 @@ func Build(cfg config.ModelConfig) *system.ModelApiSpec {
 	return Compose(Evidence{Stack: stack, ModelName: cfg.ModelName, ModelFamily: cfg.ModelFamily, Declared: true})
 }
 
-// Compose turns evidence into the spec. Precedence: the explicit family wins,
-// then backend architecture > served id > configured name (a more specific
-// variant refines a generic one); bindings: registry import > Ollama
-// capability > chat-template evidence > family default (gated for gateways /
-// hosted vendors and skipped for an undetermined stack) > Ollama rewrite >
-// stack tables (reasoning knobs only when the model is known to reason) >
-// LiteLLM forwarding filter (when the path goes through LiteLLM) > thinking
-// mode. Returns nil when nothing at all is known.
 func Compose(ev Evidence) *system.ModelApiSpec {
 	api, _ := ComposeWithTrace(ev)
 	return api
 }
 
-// ComposeWithTrace is Compose plus the human-readable decisions that
-// produced the spec (which evidence decided the family, the bindings and the
-// thinking knob), for diagnostics traces.
 func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 	var lines []string
 	tracef := func(format string, args ...any) { lines = append(lines, fmt.Sprintf(format, args...)) }
 
-	// Backend-reported lists are third-party strings bound for the public
-	// wire: sanitized once, here, before anything reads them.
 	ev.Parameters = sanitizeNames(ev.Parameters, maxParameters, "parameters", tracef)
 	ev.ReasoningEfforts = sanitizeNames(ev.ReasoningEfforts, maxReasoningEfforts, "reasoning efforts", tracef)
 	if ev.LiteLLMSupportedParams != nil {
-		// A list LiteLLM did return stays a known list even when nothing in
-		// it survives (nil is reserved for "could not be read").
+		// Keep it a known list: nil means unread.
 		supported := sanitizeNames(ev.LiteLLMSupportedParams, maxParameters, "litellm supported params", tracef)
 		if supported == nil {
 			supported = []string{}
@@ -138,10 +67,6 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 		api.Source = system.ApiSpecSourceDeclared
 	}
 
-	// Family: the explicit declaration is never overridden; otherwise direct
-	// backend evidence beats name heuristics and the backend's own model id
-	// beats the local alias. Only canonical families are published: an
-	// architecture that maps to no family never short-circuits the names.
 	family := strings.ToLower(strings.TrimSpace(ev.ModelFamily))
 	if family != "" {
 		tracef("family %q: declared in models-config", family)
@@ -166,16 +91,11 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 	}
 	api.ModelFamily = family
 
-	// The name the family heuristics run against is the most
-	// backend-specific one available.
 	name := ev.ModelName
 	if ev.ServedModelID != "" {
 		name = ev.ServedModelID
 	}
 
-	// Bindings precedence: registry import > Ollama capability > chat
-	// template evidence > family default. alwaysOn marks families that
-	// reason unconditionally (no toggle can exist for them).
 	alwaysOn := false
 	var bindings bindingSet
 	if len(ev.RegistryBindings) > 0 {
@@ -183,10 +103,8 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 		tracef("bindings: from the %s model listing", stack)
 	}
 	if len(bindings) == 0 && ev.OllamaThinking {
-		// The capability only says the model thinks. Whether it can be
-		// toggled is a family fact: always-on families stay always-on, and
-		// effort-only families (gpt-oss) ignore Ollama's boolean toggle and
-		// take levels instead.
+		// The capability only says the model thinks; whether it can be toggled is
+		// a family fact.
 		famAlwaysOn, fam := bindingsForFamily(family, name)
 		switch {
 		case famAlwaysOn:
@@ -202,10 +120,6 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 	}
 	if len(bindings) == 0 && !alwaysOn {
 		if stack == "" {
-			// Like the family-default step below: an undetermined stack means
-			// the wire vocabulary is unknown, so template-kwarg bindings
-			// (chat_template_kwargs.*) cannot be advertised either — they may
-			// not even apply if the backend turns out to be a gateway.
 			if bindingsFromTemplate(ev.ChatTemplate) != nil {
 				tracef("bindings: chat template evidence skipped — stack undetermined (unknown wire vocabulary)")
 			}
@@ -213,8 +127,6 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 			tracef("bindings: from chat template source -> %s", describeBindings(bindings))
 		}
 	}
-	// familyReasons: the family is known to reason (a default set exists or
-	// it is always-on), whether or not the default applies to this stack.
 	familyReasons := false
 	if len(bindings) == 0 && !alwaysOn {
 		var defaults bindingSet
@@ -227,12 +139,6 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 		case stack == "":
 			tracef("bindings: family default for %q skipped — stack undetermined (unknown wire vocabulary)", family)
 		case gatedStack(stack) && familyNativeVendor[family] != stack:
-			// Family defaults describe either HF chat-template kwargs (only
-			// honored by the documented self-hosted engines) or the family's
-			// native vendor API. On any other hosted vendor, gateway or
-			// detected-only engine they are wrong or unverified request
-			// shapes; gateways contribute their own knobs via the stack
-			// table.
 			tracef("bindings: family default for %q skipped — %q does not accept it", family, stack)
 		default:
 			bindings = cloneSet(defaults)
@@ -240,8 +146,6 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 		}
 	}
 
-	// Ollama ignores chat_template_kwargs on its API: its own knobs are what
-	// count regardless of what the template suggests.
 	if stack == "ollama" && bindings != nil {
 		before := describeBindings(bindings)
 		rewriteBindingsForOllama(bindings)
@@ -250,11 +154,8 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 		}
 	}
 
-	// Stack-documented remaps fill every intent direct evidence did not
-	// establish. Reasoning knobs merge only when the model is known to
-	// reason: direct evidence, or — for a declared stack — family knowledge
-	// alone (a detected gateway may hide its upstream's knob, so probe
-	// evidence is required there).
+	// A detected gateway may hide its upstream's knob, so family knowledge alone
+	// counts as reasoning evidence only for a declared stack.
 	reasoningKnown := alwaysOn || ev.GatewayReasoning || hasReasoningBindings(bindings) || (ev.Declared && familyReasons)
 	if len(ev.Parameters) > 0 {
 		api.Parameters = append([]string(nil), ev.Parameters...)
@@ -275,11 +176,6 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 		tracef("bindings: no remappable knobs known for this backend")
 	}
 
-	// LiteLLM's per-model supported_reasoning_efforts narrows the litellm
-	// reasoning.effort enum; without "none" thinking cannot be switched off
-	// through LiteLLM, so the reasoning.disable knob (value none) goes. The
-	// reasoning.enable knob takes the first supported effort other than
-	// none (LiteLLM's order) and goes too when there is no such effort.
 	if stack == "litellm" && len(ev.ReasoningEfforts) > 0 {
 		if effort := api.Bindings[system.IntentReasoningEffort]; effort != nil {
 			effort.EnumValues = append([]string(nil), ev.ReasoningEfforts...)
@@ -309,7 +205,6 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 		}
 	}
 
-	// Thinking mode summary is derived from what the bindings can express.
 	switch {
 	case alwaysOn:
 		api.Thinking = &system.ThinkingSpec{Mode: system.ThinkingModeAlwaysOn}
@@ -326,27 +221,15 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 	return api, lines
 }
 
-// Bounds on backend-reported lists (Evidence.Parameters and
-// Evidence.ReasoningEfforts): a gateway or registry listing is third-party
-// data and the spec is public (/healthcheck, pong), so what reaches the wire
-// is a bounded list of plain names. maxParameters comfortably exceeds the
-// largest documented list (OpenAI chat completions has ~22 params; an
-// OpenRouter entry ~30); LiteLLM's effort enum has 7 values.
+// Largest documented lists: ~22 OpenAI params, ~30 per OpenRouter entry,
+// 7 LiteLLM efforts.
 const (
 	maxParameters       = 64
 	maxReasoningEfforts = 16
 )
 
-// nameRe is the shape of a request parameter or effort name: what every
-// documented list on this branch uses (dots for nested keys, dashes and
-// underscores), nothing that could carry markup, whitespace or control
-// characters onto the wire.
 var nameRe = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
 
-// sanitizeNames returns a new list holding only the entries of list that
-// match nameRe, deduplicated, in their original order and capped at limit;
-// when anything was dropped one trace line reports the counts. list itself
-// is never modified (the caller's evidence stays as gathered).
 func sanitizeNames(list []string, limit int, what string, tracef func(string, ...any)) []string {
 	if len(list) == 0 {
 		return nil
@@ -366,7 +249,6 @@ func sanitizeNames(list []string, limit int, what string, tracef func(string, ..
 	return out
 }
 
-// hasReasoningBindings reports whether any reasoning.* intent is bound.
 func hasReasoningBindings(b bindingSet) bool {
 	for intent := range b {
 		if strings.HasPrefix(intent, "reasoning.") {
@@ -385,13 +267,6 @@ func containsString(list []string, s string) bool {
 	return false
 }
 
-// mergeStackTables sets api.Bindings to the family bindings plus the stack's
-// documented bindings for every intent the family did not set. Reasoning
-// intents from the stack merge only when the family is known to reason;
-// for always-on families only reasoning.format merges. api.Parameters is
-// the stack's documented list unless a per-model list was already imported
-// (registry/gateway listings are authoritative). Everything is copied so the
-// shared tables are never aliased.
 func mergeStackTables(api *system.ModelApiSpec, stack string, family bindingSet, reasoningKnown, alwaysOn bool) {
 	out := bindingSet{}
 	for intent, b := range family {
@@ -424,33 +299,16 @@ func mergeStackTables(api *system.ModelApiSpec, stack string, family bindingSet,
 	}
 }
 
-// filterForLiteLLM narrows a spec whose request path goes through a LiteLLM
-// proxy to what LiteLLM actually forwards. LiteLLM treats any param it does
-// not recognise as provider-specific and passes it to the upstream verbatim
-// (venice_parameters.*, chat_template_kwargs.*, top_k, min_p, OpenRouter's
-// reasoning object, thinking, …), but validates the standard OpenAI
-// chat-completions params against its per-provider map and rejects the ones
-// not listed there (litellm.UnsupportedParamsError; the `openai/` provider
-// does not list reasoning_effort for an unknown model). So a binding whose
-// root param — the text before the first "." — is a standard name is kept
-// only when supported (LiteLLM's supported_openai_params for the model
-// group) lists it, and api.Parameters becomes its intersection with
-// supported. When supported is nil (the list could not be read) only the
-// demonstrated rejection, reasoning_effort, is treated as not forwarded.
+// LiteLLM forwards params it does not recognise verbatim as provider kwargs
+// but validates standard OpenAI chat-completions params against its
+// per-provider map and rejects unlisted ones (litellm.UnsupportedParamsError).
+// With supported nil (unread) only reasoning_effort, the demonstrated
+// rejection, is treated as not forwarded.
 //
-// Exception: when api.Stack is anthropic, api.Parameters is not this
-// intersection. stackParameters["anthropic"] is Anthropic Messages
-// vocabulary (stop_sequences, metadata, …), not LiteLLM's OpenAI-shaped
-// supported_openai_params — intersecting the two would keep only the names
-// that happen to collide across both vocabularies (model, messages, stream,
-// temperature, top_p, tools, tool_choice) and silently drop the rest,
-// including params that are in fact forwarded but merely spelled
-// differently (stop_sequences vs. OpenAI's stop). So for anthropic,
-// api.Parameters becomes supported verbatim, or nil when supported is nil —
-// still an upper bound, just not one built by intersecting two different
-// vocabularies. Bindings need no such exception: every anthropic table entry
-// (thinking.*, output_config.*, cache_control, top_k) has a non-standard
-// root, so the loop below never drops one of them anyway.
+// anthropic's documented list is Messages vocabulary: intersecting it with
+// LiteLLM's OpenAI-shaped list would keep only names that collide (model,
+// messages, stream, ...) and drop forwarded ones spelled differently
+// (stop_sequences vs. stop), so supported is reported verbatim instead.
 // https://docs.litellm.ai/docs/completion/provider_specific_params
 // https://docs.litellm.ai/docs/completion/drop_params
 func filterForLiteLLM(api *system.ModelApiSpec, supported []string, tracef func(string, ...any)) {
@@ -466,8 +324,6 @@ func filterForLiteLLM(api *system.ModelApiSpec, supported []string, tracef func(
 	if !known {
 		tracef("litellm supported_openai_params unavailable: only reasoning_effort is treated as not forwarded (the documented rejection)")
 	}
-	// forwards reports whether LiteLLM passes a param with this root on to
-	// the upstream.
 	forwards := func(root string) bool {
 		if !standard[root] {
 			return true
@@ -496,9 +352,6 @@ func filterForLiteLLM(api *system.ModelApiSpec, supported []string, tracef func(
 	}
 
 	if api.Stack == "anthropic" {
-		// See the doc comment above: anthropic's documented list is Messages
-		// vocabulary, not OpenAI's, so it is replaced by supported rather
-		// than intersected with it.
 		if !known {
 			api.Parameters = nil
 			tracef("parameters: litellm supported_openai_params unavailable — anthropic's documented list is Messages vocabulary and cannot be intersected with it; no parameters reported")
@@ -514,9 +367,6 @@ func filterForLiteLLM(api *system.ModelApiSpec, supported []string, tracef func(
 		return
 	}
 
-	// parameters: a plain intersection with the list (every stack table on
-	// the LiteLLM path lists standard OpenAI names); minus reasoning_effort
-	// when the list is unknown.
 	kept := make([]string, 0, len(api.Parameters))
 	for _, p := range api.Parameters {
 		if (known && listed[p]) || (!known && p != "reasoning_effort") {

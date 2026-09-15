@@ -819,10 +819,6 @@ func TestCheckAllBidsError(t *testing.T) {
 	require.Empty(t, checker.GetReports())
 }
 
-// The provider-declared API spec (models-config apiStack presets, see
-// internal/apispec) must ride the report for every model that declares an
-// apiStack, including one with no active bid: consumers can shape requests
-// before a session even opens.
 func TestCheckModelAttachesDeclaredApiSpec(t *testing.T) {
 	deps := &mockDeps{
 		bids:     []*structs.Bid{bidFor(modelLLM)},
@@ -846,16 +842,12 @@ func TestCheckModelAttachesDeclaredApiSpec(t *testing.T) {
 	require.Equal(t, "chat_template_kwargs.enable_thinking", llm.Api.Bindings[system.IntentReasoningDisable].Param)
 	require.NotZero(t, llm.Api.DeclaredAt)
 
-	// declared for configured models without an active bid too
 	noBid := reportByID(t, reports, modelNoBid)
 	require.Equal(t, system.ModelHealthStatusNoBid, noBid.Status)
 	require.NotNil(t, noBid.Api)
 	require.Equal(t, "ollama", noBid.Api.Stack)
 }
 
-// The api block is opt-in per model: a model configured with only a legacy
-// apiType (no apiStack) is still health-checked but its report carries no
-// api spec.
 func TestCheckModelWithoutApiStackHasNoApiSpec(t *testing.T) {
 	deps := &mockDeps{
 		bids:     []*structs.Bid{bidFor(modelLLM)},
@@ -875,11 +867,6 @@ func TestCheckModelWithoutApiStackHasNoApiSpec(t *testing.T) {
 	require.Nil(t, llm.Api, "report carries api only for models with apiStack")
 }
 
-// The declared API spec's DeclaredAt must only move when the spec itself
-// changes, not on every sweep — otherwise consumers can't tell "still the
-// same declaration" from "the provider just redeclared it". A DeclaredAt
-// value is seeded directly through setReport rather than relying on
-// wall-clock granularity between sweeps.
 func TestCheckModelDeclaredAtStableAcrossSweeps(t *testing.T) {
 	deps := &mockDeps{
 		bids:     []*structs.Bid{bidFor(modelLLM)},
@@ -898,21 +885,18 @@ func TestCheckModelDeclaredAtStableAcrossSweeps(t *testing.T) {
 	require.NotNil(t, first.Api)
 	require.NotZero(t, first.Api.DeclaredAt)
 
-	// Seed a distinguishable DeclaredAt on the stored report so the next
-	// assertions don't depend on wall-clock granularity between sweeps.
+	// Seeded directly: wall-clock granularity between sweeps is not reliable.
 	seeded := first
 	seededAPI := *first.Api
 	seededAPI.DeclaredAt = 12345
 	seeded.Api = &seededAPI
 	checker.setReport(seeded)
 
-	// Unchanged config: a second sweep must keep the seeded DeclaredAt.
 	checker.checkAll(context.Background(), common.Address{})
 	second := reportByID(t, checker.GetReports(), modelLLM)
 	require.NotNil(t, second.Api)
 	require.Equal(t, int64(12345), second.Api.DeclaredAt, "unchanged spec must keep the previous DeclaredAt")
 
-	// Changing modelFamily changes the composed spec: DeclaredAt must refresh.
 	cfg := deps.configs[modelLLM]
 	cfg.ModelFamily = "deepseek-r1"
 	deps.configs[modelLLM] = cfg
@@ -923,7 +907,6 @@ func TestCheckModelDeclaredAtStableAcrossSweeps(t *testing.T) {
 	require.NotEqual(t, int64(12345), third.Api.DeclaredAt, "changed spec must refresh DeclaredAt")
 }
 
-// R3: a spec composed from apiStack reports source: declared.
 func TestCheckModelDeclaredSpecCarriesSource(t *testing.T) {
 	deps := &mockDeps{
 		bids:     []*structs.Bid{bidFor(modelLLM)},
@@ -939,8 +922,6 @@ func TestCheckModelDeclaredSpecCarriesSource(t *testing.T) {
 	require.Equal(t, system.ApiSpecSourceDeclared, llm.Api.Source)
 }
 
-// fakeDetector implements ApiDetector: it counts calls, records the context
-// deadline it was given and returns a private copy of spec (nil stays nil).
 type fakeDetector struct {
 	mu        sync.Mutex
 	calls     int
@@ -963,8 +944,6 @@ func detectedQwen3() *system.ModelApiSpec {
 		Bindings: map[string]*system.ParamBinding{system.IntentReasoningDisable: {Kind: system.BindingKindTemplateKwarg, Param: "chat_template_kwargs.enable_thinking", ParamType: "boolean", Value: false}}}
 }
 
-// R7: every configured model without apiStack is detected, bid or not, and
-// the detected spec rides the report with source: detected.
 func TestCheckModelDetectsWhenNoApiStack(t *testing.T) {
 	det := &fakeDetector{spec: detectedQwen3()}
 	deps := &mockDeps{
@@ -989,10 +968,6 @@ func TestCheckModelDetectsWhenNoApiStack(t *testing.T) {
 	require.Equal(t, 2, det.calls)
 }
 
-// Chat transports only: an apiType with no chat API (e.g. the prodia-v2
-// image adapter) must never reach the detector, even though it has no
-// apiStack and an ApiURL — the same condition that triggers detection for a
-// chat transport like openai right beside it.
 func TestCheckModelSkipsDetectorForNonChatTransport(t *testing.T) {
 	det := &fakeDetector{spec: detectedQwen3()}
 	deps := &mockDeps{
@@ -1017,7 +992,6 @@ func TestCheckModelSkipsDetectorForNonChatTransport(t *testing.T) {
 	require.Equal(t, 1, det.calls, "the detector must be called only for the chat-transport model")
 }
 
-// R1: a declared apiStack is composed statically; the detector is not called.
 func TestCheckModelDeclaredStackSkipsDetector(t *testing.T) {
 	det := &fakeDetector{spec: detectedQwen3()}
 	deps := &mockDeps{
@@ -1033,8 +1007,6 @@ func TestCheckModelDeclaredStackSkipsDetector(t *testing.T) {
 	require.Equal(t, 0, det.calls)
 }
 
-// R6 at the checker: no detector (kill switch off) means no api block for a
-// model without apiStack, while declared presets are unaffected.
 func TestCheckModelWithoutDetectorHasNoDetectedApi(t *testing.T) {
 	deps := &mockDeps{
 		bids: []*structs.Bid{bidFor(modelLLM)}, tags: map[common.Hash][]string{modelLLM: {"llm"}},
@@ -1063,7 +1035,6 @@ func TestCheckModelDetectorNilResultHasNoApi(t *testing.T) {
 	require.Equal(t, 1, det.calls)
 }
 
-// R7: the detection budget is 10 s, capped by the checker's own timeout.
 func TestCheckModelDetectBudgetIsCappedByTimeout(t *testing.T) {
 	newDeps := func(det *fakeDetector) *mockDeps {
 		return &mockDeps{
@@ -1072,14 +1043,12 @@ func TestCheckModelDetectBudgetIsCappedByTimeout(t *testing.T) {
 			configs: map[common.Hash]config.ModelConfig{modelLLM: {ModelName: "qwen3-32b", ApiType: "openai", ApiURL: "http://llm:8000/v1/chat/completions"}},
 		}
 	}
-	// newTestChecker uses a 1 s checker timeout: the budget is capped to it.
 	det := &fakeDetector{spec: detectedQwen3()}
 	start := time.Now()
 	newTestChecker(newDeps(det)).checkAll(context.Background(), common.Address{})
 	require.Len(t, det.deadlines, 1)
 	require.WithinDuration(t, start.Add(time.Second), det.deadlines[0], 300*time.Millisecond)
 
-	// A long checker timeout: the budget is the 10 s detectBudget.
 	det = &fakeDetector{spec: detectedQwen3()}
 	deps := newDeps(det)
 	checker := NewChecker(Deps{Adapters: deps, Bids: deps, Models: deps, ModelConfigs: deps, ApiDetect: det}, time.Hour, time.Hour, 0, 0, lib.NewTestLogger())
@@ -1089,10 +1058,6 @@ func TestCheckModelDetectBudgetIsCappedByTimeout(t *testing.T) {
 	require.WithinDuration(t, start.Add(detectBudget), det.deadlines[0], 300*time.Millisecond)
 }
 
-// Budget fallback: a checker built with timeout 0 must still give the
-// detector the 10 s detectBudget rather than an already-expired
-// zero-duration context — the same `budget <= 0` fallback as an unset
-// timeout, distinct from the >detectBudget cap covered above.
 func TestCheckModelDetectBudgetFallsBackWhenTimeoutIsZero(t *testing.T) {
 	det := &fakeDetector{spec: detectedQwen3()}
 	deps := &mockDeps{
@@ -1107,8 +1072,6 @@ func TestCheckModelDetectBudgetFallsBackWhenTimeoutIsZero(t *testing.T) {
 	require.WithinDuration(t, start.Add(detectBudget), det.deadlines[0], 300*time.Millisecond)
 }
 
-// R7: declaredAt semantics are unchanged for detected specs — stable while
-// the detected spec is unchanged, refreshed when it changes.
 func TestCheckModelDetectedDeclaredAtStableAcrossSweeps(t *testing.T) {
 	det := &fakeDetector{spec: detectedQwen3()}
 	deps := &mockDeps{

@@ -386,8 +386,8 @@ func start() error {
 	// passing the nil check in the healthcheck handler
 	var modelHealthReporter system.ModelHealthReporter
 	if !cfg.Proxy.ModelHealthCheckDisabled {
-		// keep the interface nil when detection is disabled: a typed-nil
-		// *apidetect.Detector would pass the checker's nil check
+		// interface, not *apidetect.Detector: a typed nil would pass the checker's
+		// nil check
 		var apiDetect modelhealth.ApiDetector
 		if cfg.Proxy.ModelApiDetectEnabled.Bool != nil && *cfg.Proxy.ModelApiDetectEnabled.Bool {
 			apiDetect = apidetect.NewDetector(appLog, apidetect.DefaultOptions())

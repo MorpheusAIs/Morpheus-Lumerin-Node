@@ -6,9 +6,6 @@ import (
 	"sync"
 )
 
-// detectTrace collects human-readable detection steps when a trace-enabled
-// context is used. Production Detect calls carry no trace, so every tracef
-// call is a no-op there.
 type detectTrace struct {
 	mu    sync.Mutex
 	lines []string

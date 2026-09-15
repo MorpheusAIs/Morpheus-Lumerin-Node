@@ -8,10 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// apiType is the transport adapter and nothing else: each legacy value maps
-// to its engine as it did before the presets work, and an apiStack preset
-// name (vllm, anthropic, …) is not an adapter — the loader keeps those in
-// ModelConfig.ApiStack, which never reaches the factory.
 func TestApiAdapterFactoryLegacyApiTypesOnly(t *testing.T) {
 	log := lib.NewTestLogger()
 	for _, apiType := range []string{API_TYPE_OPENAI, API_TYPE_CLAUDEAI, API_TYPE_PRODIA_SD, API_TYPE_PRODIA_SDXL, API_TYPE_PRODIA_V2, API_TYPE_HYPERBOLIC_SD} {

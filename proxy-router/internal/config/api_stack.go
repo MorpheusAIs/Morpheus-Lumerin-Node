@@ -5,18 +5,10 @@ import (
 	"strings"
 )
 
-// StackTransport maps each apiStack preset (the backend API a model
-// advertises through the `api` block of its health report) to the transport
-// adapter — the apiType — that speaks its protocol. It lives here rather
-// than in internal/apispec because apispec imports config, and the loader
-// needs the table to validate a model before it is stored.
-//
-// The adapter names are string literals on purpose: config cannot import
-// internal/aiengine (aiengine imports config), so they mirror
-// aiengine.API_TYPE_OPENAI (internal/aiengine/openai.go) and
-// aiengine.API_TYPE_CLAUDEAI (internal/aiengine/claudeai.go). Legacy adapter
-// names (claudeai, prodia-*, hyperbolic-sd) are apiType values only and are
-// deliberately absent here.
+// Lives in config, not apispec, because apispec imports config and the
+// loader validates against it. Adapter names are literals because config
+// cannot import aiengine (aiengine imports config); they mirror
+// aiengine.API_TYPE_OPENAI and aiengine.API_TYPE_CLAUDEAI.
 var StackTransport = map[string]string{
 	"openai":     "openai",
 	"vllm":       "openai",
@@ -29,12 +21,8 @@ var StackTransport = map[string]string{
 	"anthropic":  "claudeai",
 }
 
-// IsChatTransport reports whether apiType is a chat transport adapter — one
-// that some apiStack preset in StackTransport resolves to (today "openai" and
-// "claudeai"). It is derived from that table rather than a second
-// hand-written list, so a new chat-capable stack cannot drift out of sync
-// with it. Legacy image-only adapters (prodia-*, hyperbolic-sd) have no chat
-// API and are never chat transports.
+// Derived from StackTransport so a new chat-capable stack cannot drift out
+// of sync.
 func IsChatTransport(apiType string) bool {
 	for _, transport := range StackTransport {
 		if transport == apiType {
@@ -44,17 +32,8 @@ func IsChatTransport(apiType string) bool {
 	return false
 }
 
-// NormalizeApiStack trims and lowercases a configured apiStack so " vLLM "
-// and "vllm" name the same preset and a whitespace-only value means unset.
-// The loader stores the normalized value; apispec.StackFor applies the same
-// rule so a ModelConfig built elsewhere resolves identically.
 func NormalizeApiStack(s string) string { return strings.ToLower(strings.TrimSpace(s)) }
 
-// ValidateApiStack checks the optional apiStack of one model: when set it
-// must be a known preset and its transport must equal the model's apiType.
-// An empty (or whitespace-only) apiStack is always valid: the api block is
-// opt-in per model. The value is normalized before the lookup and the error
-// messages report the normalized value.
 func ValidateApiStack(modelID string, cfg ModelConfig) error {
 	stack := NormalizeApiStack(cfg.ApiStack)
 	if stack == "" {

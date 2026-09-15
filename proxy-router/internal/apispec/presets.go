@@ -5,33 +5,21 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 )
 
-// Per-serving-stack request-param remap tables: what each stack documents
-// beyond the standard OpenAI chat-completions surface, keyed by canonical
-// intent. These are static tables, not introspected from a live backend;
-// every entry cites the official documentation it was verified against in
-// the doc-URL comment above its table. Keep entries literal to the docs — a
+// Static per-stack remap tables. Keep entries literal to the cited docs: a
 // wrong binding is worse than a missing one, since consumers translate
-// requests with it.
-//
-// Reasoning intents are deliberately sparse here: whether a model can think,
-// and via which template kwarg, is a model property handled by the family
-// and template layers. Stacks only contribute model-independent reasoning
-// knobs (output format, token budget, gateway-normalized effort), and those
-// merge only when reasoning evidence already exists for the model.
+// requests with it. Reasoning toggles are model properties (family and
+// template layers); stacks contribute only model-independent reasoning knobs.
 
 const (
 	bodyParam   = system.BindingKindBodyParam
 	nativeParam = system.BindingKindNativeBodyParam
 )
 
-// bindingSet is the generic remap table under construction: canonical
-// intent -> how this backend realizes it.
 type bindingSet = map[string]*system.ParamBinding
 
 var jsonObjectFormat = map[string]any{"type": "json_object"}
 
 var stackBindings = map[string]bindingSet{
-	// vLLM OpenAI-compatible server.
 	// https://docs.vllm.ai/en/latest/features/reasoning_outputs/
 	// https://docs.vllm.ai/en/latest/features/structured_outputs/
 	// https://docs.vllm.ai/en/latest/api/vllm/sampling_params/
@@ -50,7 +38,6 @@ var stackBindings = map[string]bindingSet{
 		system.IntentToolsParallel:             {Kind: bodyParam, Param: "parallel_tool_calls", ParamType: "boolean", Hint: "tool_choice auto also needs --enable-auto-tool-choice --tool-call-parser"},
 	},
 
-	// SGLang OpenAI-compatible server.
 	// https://docs.sglang.io/basic_usage/openai_api_completions.html
 	// https://docs.sglang.io/advanced_features/separate_reasoning.html
 	// https://docs.sglang.io/advanced_features/structured_outputs.html
@@ -67,7 +54,6 @@ var stackBindings = map[string]bindingSet{
 		system.IntentToolsParallel:             {Kind: bodyParam, Param: "parallel_tool_calls", ParamType: "boolean", Hint: "shapes the tool_choice grammar constraint; needs --tool-call-parser"},
 	},
 
-	// llama.cpp llama-server.
 	// https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md
 	"llamacpp": {
 		system.IntentReasoningBudget:           {Kind: bodyParam, Param: "reasoning_budget", ParamType: "number", Hint: "-1 unrestricted, 0 ends thinking immediately"},
@@ -85,9 +71,8 @@ var stackBindings = map[string]bindingSet{
 		system.IntentToolsParallel:             {Kind: bodyParam, Param: "parallel_tool_calls", ParamType: "boolean"},
 	},
 
-	// Ollama. Only the OpenAI-compatible /v1 surface is reachable through the
-	// openai adapter; Ollama-specific knobs live on the native /api endpoints
-	// and are reported as native_body_param for completeness.
+	// Native /api knobs are reported as native_body_param; only /v1 is reachable
+	// through the openai adapter.
 	// https://docs.ollama.com/api/openai-compatibility
 	// https://docs.ollama.com/api
 	// https://docs.ollama.com/capabilities/thinking
@@ -102,7 +87,6 @@ var stackBindings = map[string]bindingSet{
 		system.IntentStreamIncludeUsage:        {Kind: bodyParam, Param: "stream_options.include_usage", ParamType: "boolean", Value: true},
 	},
 
-	// OpenRouter.
 	// https://openrouter.ai/docs/api-reference/parameters
 	// https://openrouter.ai/docs/use-cases/reasoning-tokens
 	// https://openrouter.ai/docs/features/structured-outputs
@@ -124,7 +108,6 @@ var stackBindings = map[string]bindingSet{
 		system.IntentToolsParallel:             {Kind: bodyParam, Param: "parallel_tool_calls", ParamType: "boolean"},
 	},
 
-	// Venice.
 	// https://docs.venice.ai/api-reference/endpoint/chat/completions
 	"venice": {
 		system.IntentReasoningDisable:          {Kind: bodyParam, Param: "venice_parameters.disable_thinking", ParamType: "boolean", Value: true, Hint: "adds /no_think and strips the thinking block"},
@@ -139,9 +122,7 @@ var stackBindings = map[string]bindingSet{
 		system.IntentToolsParallel:             {Kind: bodyParam, Param: "parallel_tool_calls", ParamType: "boolean"},
 	},
 
-	// LiteLLM Proxy: a gateway whose unified params are translated per
-	// upstream provider. Reasoning knobs are provider-neutral here, so they
-	// are safe at stack level (still gated on reasoning evidence).
+	// Reasoning knobs are provider-neutral on LiteLLM, so they sit at stack level.
 	// https://docs.litellm.ai/docs/completion/input
 	// https://docs.litellm.ai/docs/reasoning_content
 	// https://docs.litellm.ai/docs/providers/anthropic
@@ -156,8 +137,7 @@ var stackBindings = map[string]bindingSet{
 		system.IntentToolsParallel:        {Kind: bodyParam, Param: "parallel_tool_calls", ParamType: "boolean"},
 	},
 
-	// Anthropic Messages API (what the claudeai adapter targets). The
-	// reasoning toggles come from the claude family defaults.
+	// Reasoning toggles come from the claude family defaults.
 	// https://platform.claude.com/docs/en/api/messages
 	// https://platform.claude.com/docs/en/build-with-claude/thinking
 	// https://platform.claude.com/docs/en/build-with-claude/effort
@@ -170,11 +150,6 @@ var stackBindings = map[string]bindingSet{
 	},
 }
 
-// ollamaThinkBindings maps the reasoning toggle onto what Ollama's
-// OpenAI-compatible /v1 endpoint documents: reasoning_effort, where "none"
-// turns thinking off. The native /api/chat boolean `think` is reported for
-// completeness but is unreachable through the openai adapter. Stack
-// knowledge for the "ollama" table above.
 // https://docs.ollama.com/api/openai-compatibility
 // https://docs.ollama.com/capabilities/thinking
 func ollamaThinkBindings() map[string]*system.ParamBinding {
@@ -184,12 +159,7 @@ func ollamaThinkBindings() map[string]*system.ParamBinding {
 	}
 }
 
-// rewriteBindingsForOllama rewrites template-kwarg reasoning bindings onto
-// what Ollama's /v1 endpoint honors (chat_template_kwargs is not passed
-// through): boolean toggles become the reasoning_effort "none" / medium
-// pair, effort enums keep their levels on reasoning_effort. Intents with no
-// Ollama equivalent (e.g. a numeric budget kwarg) are dropped. Stack
-// knowledge for the "ollama" table above.
+// Ollama's /v1 endpoint does not pass chat_template_kwargs through.
 func rewriteBindingsForOllama(bindings map[string]*system.ParamBinding) {
 	if bindings == nil {
 		return
@@ -218,39 +188,27 @@ func rewriteBindingsForOllama(bindings map[string]*system.ParamBinding) {
 	}
 }
 
-// stackParameters lists the standard OpenAI chat-completions params each
-// stack documents as supported on its OpenAI-compatible endpoint (composition
-// rule 5: `parameters` is the preset's documented list). See the doc-URL
-// comments on each stack's stackBindings table above for the sources.
+// Sources: the URLs on each stack's stackBindings table.
 var stackParameters = map[string][]string{
 	"vllm":       {"model", "messages", "temperature", "top_p", "n", "stream", "stream_options", "stop", "max_tokens", "max_completion_tokens", "presence_penalty", "frequency_penalty", "logit_bias", "logprobs", "top_logprobs", "seed", "response_format", "tools", "tool_choice", "parallel_tool_calls", "reasoning_effort"},
 	"sglang":     {"model", "messages", "temperature", "top_p", "n", "stream", "stream_options", "stop", "max_tokens", "max_completion_tokens", "presence_penalty", "frequency_penalty", "logit_bias", "logprobs", "top_logprobs", "user", "seed", "response_format", "tools", "tool_choice", "parallel_tool_calls", "reasoning_effort"},
 	"llamacpp":   {"model", "messages", "temperature", "top_p", "n", "stream", "stream_options", "stop", "max_tokens", "max_completion_tokens", "presence_penalty", "frequency_penalty", "logit_bias", "logprobs", "top_logprobs", "seed", "response_format", "tools", "tool_choice", "parallel_tool_calls", "reasoning_effort"},
 	"ollama":     {"model", "messages", "temperature", "top_p", "stream", "stream_options", "stop", "max_tokens", "presence_penalty", "frequency_penalty", "seed", "response_format", "tools", "reasoning_effort"},
 	"openrouter": {"model", "messages", "temperature", "top_p", "stream", "stream_options", "stop", "max_tokens", "max_completion_tokens", "presence_penalty", "frequency_penalty", "logit_bias", "logprobs", "top_logprobs", "user", "seed", "response_format", "tools", "tool_choice", "parallel_tool_calls", "reasoning_effort"},
-	// Venice. https://docs.venice.ai/api-reference/endpoint/chat/completions
-	// (logit_bias is not documented by Venice — deliberately omitted)
+	// https://docs.venice.ai/api-reference/endpoint/chat/completions (logit_bias
+	// undocumented, omitted)
 	"venice":  {"model", "messages", "temperature", "top_p", "n", "stream", "stream_options", "stop", "max_tokens", "max_completion_tokens", "presence_penalty", "frequency_penalty", "logprobs", "top_logprobs", "user", "seed", "response_format", "tools", "tool_choice", "parallel_tool_calls", "reasoning_effort"},
 	"litellm": {"model", "messages", "temperature", "top_p", "n", "stream", "stream_options", "stop", "max_tokens", "max_completion_tokens", "presence_penalty", "frequency_penalty", "logit_bias", "logprobs", "top_logprobs", "user", "seed", "response_format", "tools", "tool_choice", "parallel_tool_calls", "reasoning_effort"},
-	// Anthropic Messages API wire names (not OpenAI's): the claudeai adapter
-	// targets /v1/messages. https://platform.claude.com/docs/en/api/messages
+	// Anthropic Messages names, not OpenAI's.
+	// https://platform.claude.com/docs/en/api/messages
 	"anthropic": {"model", "messages", "system", "max_tokens", "stream", "temperature", "top_p", "top_k", "stop_sequences", "tools", "tool_choice", "metadata"},
-	// OpenAI's own API defines the standard surface.
 	// https://platform.openai.com/docs/api-reference/chat/create
 	"openai": openaiChatParameters,
 }
 
-// openaiChatParameters is the standard OpenAI chat-completions request
-// surface, by definition supported on api.openai.com.
 var openaiChatParameters = []string{"model", "messages", "temperature", "top_p", "n", "stream", "stream_options", "stop", "max_tokens", "max_completion_tokens", "presence_penalty", "frequency_penalty", "logit_bias", "logprobs", "top_logprobs", "user", "seed", "response_format", "tools", "tool_choice", "parallel_tool_calls", "reasoning_effort"}
 
-// StackFor returns the spec stack name for a configured apiStack, or ""
-// when it is empty or not one of the nine presets (no chat API spec). The
-// preset table is config.StackTransport (config cannot import this package),
-// so the loader's validation and this package agree on the nine presets;
-// legacy adapter names are apiType values and never resolve to a stack. The
-// value is normalized the way the loader stores it (config.NormalizeApiStack)
-// so a ModelConfig built elsewhere with " vLLM " still resolves.
+// Normalized again so a ModelConfig built outside the loader still resolves.
 func StackFor(stack string) string {
 	stack = config.NormalizeApiStack(stack)
 	if _, ok := config.StackTransport[stack]; ok {
@@ -259,14 +217,8 @@ func StackFor(stack string) string {
 	return ""
 }
 
-// gatewayStacks are OpenAI-compatible gateways / hosted vendors that
-// translate requests for upstream providers: model-family template kwargs
-// and vendor-native params do not apply to them.
 var gatewayStacks = map[string]bool{"venice": true, "openrouter": true, "litellm": true, "anthropic": true, "openai": true}
 
-// familyNativeVendor maps a family to the stack whose own API its
-// body-param defaults describe. o-series' default is the standard OpenAI
-// reasoning_effort body param, valid wherever the generic openai preset
-// forwards standard fields. gemini has no native vendor here (no gemini
-// preset exists yet) and stays unreachable on gateway stacks.
+// The stack whose own API a family's body-param defaults describe. gemini
+// is absent: no gemini preset exists.
 var familyNativeVendor = map[string]string{"claude": "anthropic", "o-series": "openai"}

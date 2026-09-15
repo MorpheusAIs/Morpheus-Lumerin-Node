@@ -151,13 +151,11 @@ func TestPongResponseModelsCarryApiSpecOutsideSignature(t *testing.T) {
 	res, err := rpc.PongResponce("req-1", prKeyBytes, lib.HexString{0x01, 0x02}, "1.0.0", models)
 	assert.NoError(t, err)
 
-	// Check raw JSON contains the api spec
 	raw, err := json.Marshal(res)
 	assert.NoError(t, err)
 	assert.Contains(t, string(raw), `"api":{"stack":"venice"`)
 	assert.Contains(t, string(raw), `"venice_parameters.disable_thinking"`)
 
-	// Verify signature excludes models
 	var pong PongRes
 	assert.NoError(t, json.Unmarshal(*res.Result, &pong))
 	signature := pong.Signature

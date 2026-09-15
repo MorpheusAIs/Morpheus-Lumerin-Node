@@ -14,16 +14,12 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apispec"
 )
 
-// maxProbeBody caps how much of a service-endpoint probe response is read.
-const maxProbeBody = 2 << 20 // 2 MB
+const maxProbeBody = 2 << 20
 
-// maxRegistryBody caps a registry model listing, which grows with the
-// vendor's catalogue (OpenRouter's is ~0.7 MB today). A var so tests can
-// exercise the truncation path.
-var maxRegistryBody int64 = 16 << 20 // 16 MB
+// Registry listings grow with the vendor's catalogue (OpenRouter ~0.7 MB).
+// Variable so tests can exercise truncation.
+var maxRegistryBody int64 = 16 << 20
 
-// baseCandidates derives base URLs to probe from the configured endpoint URL:
-// the endpoint with known inference suffixes stripped, then the bare origin.
 func baseCandidates(apiURL string) []string {
 	u, err := url.Parse(apiURL)
 	if err != nil || u.Host == "" {
@@ -47,8 +43,6 @@ func baseCandidates(apiURL string) []string {
 	return bases
 }
 
-// getJSON fetches urlStr and decodes the JSON object response into a map.
-// Returns nil on any transport error, non-2xx status or non-object payload.
 func (d *Detector) getJSON(ctx context.Context, urlStr, apiKey string) map[string]any {
 	return d.requestJSON(ctx, http.MethodGet, urlStr, apiKey, nil, maxProbeBody)
 }
@@ -94,8 +88,6 @@ func (d *Detector) requestJSON(ctx context.Context, method, urlStr, apiKey strin
 	return out
 }
 
-// countingReader counts bytes read so a decode failure can be attributed
-// to truncation rather than malformed JSON.
 type countingReader struct {
 	r io.Reader
 	n int64
@@ -107,7 +99,6 @@ func (c *countingReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// mapKeys returns the object's top-level keys, sorted, for trace output.
 func mapKeys(m map[string]any) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
@@ -117,15 +108,10 @@ func mapKeys(m map[string]any) []string {
 	return keys
 }
 
-// maxTracedKeys caps how many JSON object keys a trace line prints: a
-// third-party response (the LiteLLM second hop reads unauthenticated JSON)
-// may carry an unbounded number of keys, and the trace must stay bounded.
 const maxTracedKeys = 20
 
-// tracedKeys renders keys for a trace line: each key quoted, so control
-// characters or stray formatting verbs in a third-party key are never
-// echoed raw, and the list capped at maxTracedKeys with a trailing "…" when
-// truncated.
+// Keys are quoted: a third-party key may carry control characters or
+// formatting verbs.
 func tracedKeys(keys []string) string {
 	truncated := len(keys) > maxTracedKeys
 	if truncated {
@@ -142,12 +128,6 @@ func tracedKeys(keys []string) string {
 	return "[" + joined + "]"
 }
 
-// fingerprintEngines identifies a self-hosted serving stack by probing each
-// engine's distinctive service endpoint, most distinctive first. It fills the
-// stack and whatever evidence that engine exposes. introspectLiteLLM is
-// false on the second hop through a LiteLLM proxy: an upstream that is
-// itself LiteLLM is then only identified by its liveliness endpoint, never
-// introspected (no model group, no deployments, no third hop).
 func (d *Detector) fingerprintEngines(ctx context.Context, bases []string, modelName, apiKey string, ev *apispec.Evidence, introspectLiteLLM bool) {
 	for _, base := range bases {
 		if d.probeOllama(ctx, base, modelName, apiKey, ev) ||
@@ -268,8 +248,6 @@ func (d *Detector) probeKoboldCpp(ctx context.Context, base, apiKey string, ev *
 	return true
 }
 
-// getText fetches urlStr and returns the body as text (bounded), or "" on
-// transport error / non-2xx.
 func (d *Detector) getText(ctx context.Context, urlStr, apiKey string) string {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlStr, nil)
 	if err != nil {
@@ -297,15 +275,6 @@ func (d *Detector) getText(ctx context.Context, urlStr, apiKey string) string {
 	return text
 }
 
-// probeLiteLLM recognizes a LiteLLM proxy by its unauthenticated liveliness
-// endpoint, whose body is the JSON string "I'm alive!", then — when
-// introspect is set — imports the model group's declared capabilities (needs
-// the configured key) and, with Options.TwoHop, follows the deployment to
-// its upstream once. With introspect false (the second hop's own
-// fingerprint) recognition is all that happens: nothing is read from an
-// upstream LiteLLM, so there is never a third hop.
-// https://docs.litellm.ai/docs/proxy/health
-// https://docs.litellm.ai/docs/proxy/model_management
 func (d *Detector) probeLiteLLM(ctx context.Context, base, modelName, apiKey string, ev *apispec.Evidence, introspect bool) bool {
 	body := d.getText(ctx, base+"/health/liveliness", apiKey)
 	if body == "" {
@@ -316,8 +285,6 @@ func (d *Detector) probeLiteLLM(ctx context.Context, base, modelName, apiKey str
 		return false
 	}
 	ev.Stack = "litellm"
-	// The request path goes through LiteLLM from here on, whatever the hop
-	// below identifies behind it: the composer applies the forwarding filter.
 	ev.LiteLLMSeen = true
 	tracef(ctx, "identified litellm by /health/liveliness")
 
@@ -335,9 +302,7 @@ func (d *Detector) probeLiteLLM(ctx context.Context, base, modelName, apiKey str
 		}
 		if group != nil {
 			if params, ok := group["supported_openai_params"].([]any); ok {
-				// The standard params LiteLLM forwards for this group: a
-				// filter on the composed stack's list, not an import (the
-				// list stays non-nil even when empty — nil means unread).
+				// Non-nil even when empty: nil means the list could not be read.
 				supported := make([]string, 0, len(params))
 				for _, p := range params {
 					if s, ok := p.(string); ok {
@@ -408,12 +373,6 @@ func (d *Detector) probeVLLM(ctx context.Context, base, modelName, apiKey string
 	return true
 }
 
-// matchModelEntry finds the model list entry whose id equals modelName; when
-// there is no exact match, the bare id (inline "key=value" parameters some
-// vendors append, e.g. Venice's ":include_venice_system_prompt=false",
-// stripped) is tried next, then a single-entry list is treated as
-// unambiguous, and otherwise an entry whose id ends with "/<name>" — for
-// modelName or its bare form — is accepted.
 func matchModelEntry(data []any, modelName string) map[string]any {
 	var entries []map[string]any
 	for _, item := range data {
@@ -448,8 +407,6 @@ func matchModelEntry(data []any, modelName string) map[string]any {
 	return nil
 }
 
-// veniceCapabilityNames maps Venice capability flags to normalized parameter
-// names shared with the OpenRouter import.
 var veniceCapabilityNames = map[string]string{
 	"supportsReasoning":       "reasoning",
 	"supportsFunctionCalling": "tools",
@@ -459,10 +416,6 @@ var veniceCapabilityNames = map[string]string{
 	"supportsLogProbs":        "logprobs",
 }
 
-// probeRegistryShape detects registry-style hosted APIs by the shape of their
-// model listing: OpenRouter entries carry supported_parameters, Venice entries
-// carry model_spec.capabilities. It imports the declared parameter list and,
-// for OpenRouter, the unified reasoning knob.
 func (d *Detector) probeRegistryShape(ctx context.Context, bases []string, modelName, apiKey string, ev *apispec.Evidence) {
 	for _, base := range bases {
 		list := d.requestJSON(ctx, http.MethodGet, base+"/models", apiKey, nil, maxRegistryBody)
@@ -492,9 +445,6 @@ func (d *Detector) probeRegistryShape(ctx context.Context, bases []string, model
 			sort.Strings(ev.Parameters)
 			for _, p := range ev.Parameters {
 				if p == "reasoning" {
-					// OpenRouter's unified reasoning object; the knobs are the
-					// openrouter stack table, this only says the model reasons.
-					// https://openrouter.ai/docs/use-cases/reasoning-tokens
 					ev.GatewayReasoning = true
 					tracef(ctx, "openrouter listing reports reasoning support for %q", modelName)
 					break
@@ -516,7 +466,6 @@ func (d *Detector) probeRegistryShape(ctx context.Context, bases []string, model
 				}
 				sort.Strings(ev.Parameters)
 				if reasons, ok := caps["supportsReasoning"].(bool); ok && reasons {
-					// The knobs themselves come from the venice stack table.
 					ev.GatewayReasoning = true
 					tracef(ctx, "venice listing reports supportsReasoning")
 				}

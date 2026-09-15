@@ -30,13 +30,11 @@ func TestFormatResultRendersBindingsAndTrace(t *testing.T) {
 	require.Contains(t, out, "tools")
 	require.Contains(t, out, "identified vllm by /version")
 
-	// a stack reached through a gateway prints the via line; a direct one does not
 	require.NotContains(t, out, "via:")
 	viaOut := formatResult(&system.ModelApiSpec{Stack: "venice", Via: "litellm", Source: system.ApiSpecSourceDetected}, nil)
 	require.Contains(t, viaOut, "stack:       venice")
 	require.Contains(t, viaOut, "via:         litellm")
 
-	// nil result still renders something sensible
 	out = formatResult(nil, []string{"nothing worked"})
 	require.Contains(t, out, "nothing detected")
 	require.Contains(t, out, "nothing worked")

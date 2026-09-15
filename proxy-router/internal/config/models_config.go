@@ -40,21 +40,9 @@ type ModelConfigLoader struct {
 }
 
 type ModelConfig struct {
-	ModelName string `json:"modelName" validate:"required"`
-	// ApiType is the transport adapter (openai, claudeai, prodia-sd,
-	// prodia-sdxl, prodia-v2, hyperbolic-sd) — see aiengine.ApiAdapterFactory.
-	ApiType string `json:"apiType" validate:"required"`
-	// ApiStack optionally names the backend API preset (vllm, ollama,
-	// anthropic…) that feeds the advertised `api` block of the model's health
-	// report. It never selects the adapter: its transport must match ApiType
-	// (ValidateApiStack). Empty means the backend API is detected at runtime
-	// (internal/apidetect). The loader stores it normalized
-	// (NormalizeApiStack) and clears an invalid value for that model with an
-	// error log instead of rejecting the file.
-	ApiStack string `json:"apiStack"`
-	// ModelFamily optionally pins the canonical model family (qwen3,
-	// deepseek-v3.1, gpt-oss, claude…) used to pick reasoning-control
-	// bindings; inferred from ModelName when empty.
+	ModelName       string            `json:"modelName" validate:"required"`
+	ApiType         string            `json:"apiType" validate:"required"`
+	ApiStack        string            `json:"apiStack"`
 	ModelFamily     string            `json:"modelFamily"`
 	ApiURL          string            `json:"apiUrl" validate:"required,url"`
 	ApiKey          string            `json:"apiKey"`
@@ -153,14 +141,8 @@ func (e *ModelConfigLoader) Init() error {
 	return nil
 }
 
-// loadApiStack returns the apiStack value to store for one model: the
-// normalized preset when it is valid, "" otherwise. An unknown preset or a
-// transport mismatch is a mistake in an advertisement-only field, so it
-// degrades that one model rather than rejecting the whole file — main.go
-// only warns on an Init error and would otherwise run with zero models. The
-// error is logged and the model's backend API is detected at runtime, as if
-// apiStack were omitted — the same way an unknown modelFamily only warns
-// (modelhealth checker).
+// An invalid apiStack degrades only that model: main.go merely warns on an
+// Init error and would otherwise run with zero models.
 func (e *ModelConfigLoader) loadApiStack(modelID string, cfg ModelConfig) string {
 	if err := ValidateApiStack(modelID, cfg); err != nil {
 		e.log.Errorf("%s — apiStack ignored for this model; its backend API will be detected at runtime", err)

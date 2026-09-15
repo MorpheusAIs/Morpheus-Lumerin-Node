@@ -8,8 +8,7 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 )
 
-// familyRule maps a substring (or regexp for the basename) of the lowercased
-// model name to a canonical family. Order matters: first match wins.
+// Ordered: first match wins.
 type familyRule struct {
 	substr string
 	family string
@@ -53,12 +52,9 @@ var familyRules = []familyRule{
 	{"command", "command"},
 }
 
-// oSeriesRe matches OpenAI reasoning-series basenames: o1, o3-mini, o4-mini...
 var oSeriesRe = regexp.MustCompile(`^o[0-9]+(-|$)`)
 
-// knownFamilies is every label FamilyFromName can produce: the familyRules
-// table plus o-series (matched by oSeriesRe). Built from the table so the
-// two can't drift.
+// Built from familyRules so the two cannot drift.
 var knownFamilies = func() map[string]bool {
 	m := map[string]bool{"o-series": true}
 	for _, r := range familyRules {
@@ -67,8 +63,6 @@ var knownFamilies = func() map[string]bool {
 	return m
 }()
 
-// FamilyFromName infers the canonical model family from a model name or
-// registry id (e.g. "Qwen/Qwen3-235B-A22B", "deepseek-r1:70b").
 func FamilyFromName(name string) string {
 	n := strings.ToLower(strings.TrimSpace(name))
 	if n == "" {
@@ -89,8 +83,6 @@ func FamilyFromName(name string) string {
 	return ""
 }
 
-// kwargBoolBindings maps reasoning.disable/enable onto a boolean
-// chat-template kwarg (vLLM / SGLang / llama.cpp convention).
 func kwargBoolBindings(kwarg string) bindingSet {
 	param := "chat_template_kwargs." + kwarg
 	return bindingSet{
@@ -118,13 +110,6 @@ func budgetKwargBindings() bindingSet {
 	}
 }
 
-// bindingsForFamily returns the family's default reasoning bindings, used
-// when the backend exposes no direct evidence (no chat template, no
-// capability list). The model name refines the family answer: a "-thinking"
-// variant of a hybrid family reasons unconditionally, and gemma, kimi,
-// minimax and exaone only bind for the members whose official docs describe
-// a reasoning mode. alwaysOn is reported separately since it is a mode with
-// no bindings at all.
 func bindingsForFamily(family, modelName string) (alwaysOn bool, b bindingSet) {
 	if strings.Contains(strings.ToLower(modelName), "thinking") {
 		return true, nil
@@ -170,7 +155,6 @@ func bindingsForFamily(family, modelName string) (alwaysOn bool, b bindingSet) {
 	return false, nil
 }
 
-// containsAny reports whether the lowercased name contains any of subs.
 func containsAny(name string, subs ...string) bool {
 	n := strings.ToLower(name)
 	for _, sub := range subs {
@@ -181,25 +165,11 @@ func containsAny(name string, subs ...string) bool {
 	return false
 }
 
-// gemmaBindings: only Gemma 4 has a thinking mode, and it is off unless the
-// enable_thinking chat-template kwarg is passed. Verified against the Google
-// model card https://huggingface.co/google/gemma-4-31B-it ("To enable
-// reasoning, set `enable_thinking=True`"), its chat template
-// https://huggingface.co/google/gemma-4-31B-it/raw/main/chat_template.jinja
-// (`enable_thinking | default(false)`),
-// https://ai.google.dev/gemma/docs/capabilities/thinking and the vLLM note at
-// https://docs.vllm.ai/en/latest/features/reasoning_outputs/ ("Gemma 4
-// reasoning is disabled by default; to enable it, pass enable_thinking=True
-// in your chat_template_kwargs"). Gemma 3 and older have no thinking mode
-// (the Gemma 4 card's own comparison column is "Gemma 3 27B (no think)" and
-// https://ai.google.dev/gemma/docs/core/model_card_3 documents none), so
-// they get no bindings.
-//
-// gemma4Re matches the Gemma 4 generation token (gemma-4-31b-it,
-// gemma-4-26b-a4b-it, gemma4:31b, gemma_4_12b) and not a 4B size token:
-// google/medgemma-4b-it "is built based on Gemma 3"
-// (https://huggingface.co/google/medgemma-4b-it) and has no thinking mode,
-// so a plain "gemma-4" substring test would bind it wrongly.
+// Gemma 4 only, off by default: https://huggingface.co/google/gemma-4-31B-it,
+// https://ai.google.dev/gemma/docs/capabilities/thinking. Gemma 3 has no
+// thinking mode: https://ai.google.dev/gemma/docs/core/model_card_3.
+// gemma4Re must not match a 4B size token: google/medgemma-4b-it is Gemma 3
+// based (https://huggingface.co/google/medgemma-4b-it).
 var gemma4Re = regexp.MustCompile(`gemma[-_]?4(?:[-_:.]|$)`)
 
 func gemmaBindings(modelName string) (alwaysOn bool, b bindingSet) {
@@ -209,24 +179,10 @@ func gemmaBindings(modelName string) (alwaysOn bool, b bindingSet) {
 	return false, nil
 }
 
-// kimiBindings covers Moonshot's Kimi K2 / K3 line, per the official model
-// cards:
-//   - Kimi-K3 (https://huggingface.co/moonshotai/Kimi-K3): "Kimi K3 always
-//     has thinking enabled, and will return reasoning_content" — always on.
-//     (Its encoding_k3.py carries a thinking flag, but no deploy guide
-//     documents it as a chat-template kwarg, so no toggle is advertised.)
-//   - Kimi-K2-Thinking (https://huggingface.co/moonshotai/Kimi-K2-Thinking):
-//     a thinking model whose template and deploy guide expose no toggle —
-//     always on; the generic "thinking" name rule above already handles it.
-//   - Kimi-K2.7-Code (https://huggingface.co/moonshotai/Kimi-K2.7-Code):
-//     "forces thinking and preserve_thinking as True. [...] Instant mode is
-//     not supported." — always on.
-//   - Kimi-K2.5 / Kimi-K2.6 (https://huggingface.co/moonshotai/Kimi-K2.5,
-//     https://huggingface.co/moonshotai/Kimi-K2.6): thinking on by default;
-//     "To use instant mode, you need to pass {'chat_template_kwargs':
-//     {"thinking": False}}" — the same boolean kwarg shape as deepseek-v3.1.
-//   - Kimi-K2-Instruct (https://huggingface.co/moonshotai/Kimi-K2-Instruct):
-//     "a reflex-grade model without long thinking" — no bindings.
+// https://huggingface.co/moonshotai/Kimi-K3 (always on; no documented kwarg toggle)
+// https://huggingface.co/moonshotai/Kimi-K2.7-Code (always on)
+// https://huggingface.co/moonshotai/Kimi-K2.5, https://huggingface.co/moonshotai/Kimi-K2.6 (thinking kwarg, on by default)
+// https://huggingface.co/moonshotai/Kimi-K2-Instruct (no thinking mode)
 func kimiBindings(modelName string) (alwaysOn bool, b bindingSet) {
 	switch {
 	case containsAny(modelName, "kimi-k3", "kimi_k3"):
@@ -239,26 +195,10 @@ func kimiBindings(modelName string) (alwaysOn bool, b bindingSet) {
 	return false, nil
 }
 
-// minimaxBindings: MiniMax-M2 and every M2.x (M2.1, M2.5, M2.7, -highspeed)
-// are interleaved-thinking models with no off switch. Verified against
-// https://huggingface.co/MiniMaxAI/MiniMax-M2 ("MiniMax-M2 is an interleaved
-// thinking model [...] Do not remove the <think>...</think> part"; its chat
-// template pre-fills "<think>\n" unconditionally and reads no kwarg) and
-// https://platform.minimax.io/docs/api-reference/text-chat-openai ("For M2.x
-// models, thinking cannot be disabled").
-// MiniMax-M3 (https://huggingface.co/MiniMaxAI/MiniMax-M3) is hybrid: "M3
-// supports three reasoning modes through the `thinking` parameter:
-// enabled / adaptive / disabled". Its chat template
-// (https://huggingface.co/MiniMaxAI/MiniMax-M3/raw/main/chat_template.jinja)
-// reads the thinking_mode kwarg ("enabled" | "disabled" | "adaptive", and
-// takes the adaptive branch when it is undefined), and the platform docs
-// expose the same switch as thinking.type ("When omitted, adaptive thinking
-// is enabled by default"; "disabled: Skip thinking for MiniMax-M3 and answer
-// directly"). MiniMax-Text-01
-// (https://huggingface.co/MiniMaxAI/MiniMax-Text-01) has no thinking mode.
-// MiniMax-M1 (https://huggingface.co/MiniMaxAI/MiniMax-M1-80k) emits <think>
-// blocks, but no official source says whether that can be turned off, so it
-// is deliberately left without bindings rather than guessed.
+// https://huggingface.co/MiniMaxAI/MiniMax-M2, https://platform.minimax.io/docs/api-reference/text-chat-openai (M2.x: no off switch)
+// https://huggingface.co/MiniMaxAI/MiniMax-M3/raw/main/chat_template.jinja (thinking_mode; adaptive when unset)
+// https://huggingface.co/MiniMaxAI/MiniMax-Text-01 (no thinking mode)
+// https://huggingface.co/MiniMaxAI/MiniMax-M1-80k (emits <think>; no source says whether it can be disabled, so unbound)
 func minimaxBindings(modelName string) (alwaysOn bool, b bindingSet) {
 	switch {
 	case containsAny(modelName, "minimax-m2"):
@@ -274,23 +214,9 @@ func minimaxBindings(modelName string) (alwaysOn bool, b bindingSet) {
 	return false, nil
 }
 
-// exaoneBindings covers LG AI Research's EXAONE line, per the official
-// LGAI-EXAONE model cards:
-//   - EXAONE Deep (https://huggingface.co/LGAI-EXAONE/EXAONE-Deep-32B): the
-//     template unconditionally opens <thought> ("Ensure the model starts
-//     with `<thought>\n` for reasoning steps") and documents no toggle —
-//     always on.
-//   - EXAONE 4.0 / 4.0.1 (https://huggingface.co/LGAI-EXAONE/EXAONE-4.0-32B,
-//     https://huggingface.co/LGAI-EXAONE/EXAONE-4.0.1-32B): "You can activate
-//     reasoning mode by using the `enable_thinking=True` argument"; the chat
-//     template emits a closed, empty <think> block unless enable_thinking is
-//     true, so the default is off.
-//   - EXAONE 3.5 and older
-//     (https://huggingface.co/LGAI-EXAONE/EXAONE-3.5-32B-Instruct): no
-//     reasoning mode.
-//
-// Like the gemma rule, the 4.x token also accepts the hyphen-less Ollama-tag
-// and GGUF-architecture spellings (exaone4:32b, exaone4, exaone_4).
+// https://huggingface.co/LGAI-EXAONE/EXAONE-Deep-32B (always on)
+// https://huggingface.co/LGAI-EXAONE/EXAONE-4.0-32B, https://huggingface.co/LGAI-EXAONE/EXAONE-4.0.1-32B (enable_thinking, off by default)
+// https://huggingface.co/LGAI-EXAONE/EXAONE-3.5-32B-Instruct (no reasoning mode)
 func exaoneBindings(modelName string) (alwaysOn bool, b bindingSet) {
 	switch {
 	case containsAny(modelName, "exaone-deep"):
@@ -301,20 +227,12 @@ func exaoneBindings(modelName string) (alwaysOn bool, b bindingSet) {
 	return false, nil
 }
 
-// IsKnownFamily reports whether name is a family label FamilyFromName can
-// produce (the familyRules table plus o-series), so an explicit modelFamily
-// never warns when the inferred value would not. Labels without bindings
-// (llama, mistral, phi...) are known too: Build accepts any value and
-// reports it as modelFamily, the warning only flags labels that no name
-// would ever infer. Comparison is case-insensitive to match Build's own
-// normalization of ModelFamily.
 func IsKnownFamily(name string) bool {
 	return knownFamilies[strings.ToLower(strings.TrimSpace(name))]
 }
 
-// claudeVersionRe extracts the first major[.minor] number pair from a Claude
-// model name (claude-opus-4-6, claude-sonnet-4-5-20250929, claude-3-7-sonnet,
-// claude-opus-5). A minor of three or more digits is a date, not a version.
+// Minor is capped at two digits: three or more is a date
+// (claude-sonnet-4-5-20250929).
 var claudeVersionRe = regexp.MustCompile(`(\d+)(?:[-.](\d{1,2}))?(?:[-.]|$)`)
 
 func claudeVersion(name string) (major, minor int, ok bool) {
@@ -333,16 +251,8 @@ func claudeVersion(name string) (major, minor int, ok bool) {
 	return major, minor, true
 }
 
-// claudeBindings returns the Anthropic Messages API reasoning knobs for a
-// Claude model generation. Verified against
-// https://platform.claude.com/docs/en/build-with-claude/thinking and
-// https://platform.claude.com/docs/en/build-with-claude/effort:
-//   - Fable / Mythos: always-on adaptive reasoning; only effort is tunable.
-//   - 4.6 and newer (incl. 5.x): thinking {type: adaptive|disabled},
-//     output_config.effort; budget_tokens is gone.
-//   - 4.5: thinking {type: enabled, budget_tokens}|{type: disabled},
-//     effort low|medium|high.
-//   - older: thinking {type: enabled, budget_tokens}|{type: disabled}.
+// https://platform.claude.com/docs/en/build-with-claude/thinking
+// https://platform.claude.com/docs/en/build-with-claude/effort
 func claudeBindings(modelName string) (alwaysOn bool, b bindingSet) {
 	name := strings.ToLower(modelName)
 	disable := &system.ParamBinding{Kind: system.BindingKindBodyParam, Param: "thinking", ParamType: "object", Value: map[string]any{"type": "disabled"}}
@@ -351,9 +261,8 @@ func claudeBindings(modelName string) (alwaysOn bool, b bindingSet) {
 	budget := &system.ParamBinding{Kind: system.BindingKindBodyParam, Param: "thinking.budget_tokens", ParamType: "number", Hint: "minimum 1024; must be below max_tokens"}
 
 	if strings.Contains(name, "fable") || strings.Contains(name, "mythos") {
-		// Always reasons (thinking.type enabled/disabled are rejected) but
-		// effort is tunable, so it is reported as tunable with only the
-		// effort binding.
+		// thinking.type is rejected and only effort is tunable, so reported as
+		// tunable rather than always_on.
 		return false, bindingSet{system.IntentReasoningEffort: effortAll}
 	}
 
@@ -382,8 +291,6 @@ func claudeBindings(modelName string) (alwaysOn bool, b bindingSet) {
 	}
 }
 
-// refinesFamily reports whether candidate is a more specific variant of
-// base (e.g. "deepseek-r1" refines "deepseek"), or base is unknown.
 func refinesFamily(base, candidate string) bool {
 	if candidate == "" {
 		return false
@@ -391,15 +298,10 @@ func refinesFamily(base, candidate string) bool {
 	return base == "" || strings.HasPrefix(candidate, base+"-")
 }
 
-// jinjaStmtRe extracts {% ... %} statement blocks from a chat template.
 var jinjaStmtRe = regexp.MustCompile(`(?s)\{%.*?%\}`)
 
-// bareThinkingRe matches the word `thinking` used as a template variable.
 var bareThinkingRe = regexp.MustCompile(`(^|[^a-zA-Z0-9_])thinking($|[^a-zA-Z0-9_])`)
 
-// bindingsFromTemplate derives the reasoning bindings from chat template
-// source — the template is the authoritative definition of which kwargs it
-// honors.
 func bindingsFromTemplate(tpl string) bindingSet {
 	if tpl == "" {
 		return nil

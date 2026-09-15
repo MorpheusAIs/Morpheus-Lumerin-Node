@@ -3275,7 +3275,6 @@
             "type": "object",
             "properties": {
                 "apiStack": {
-                    "description": "apiStack preset the model advertises; empty when none",
                     "type": "string"
                 },
                 "apiType": {
@@ -4913,7 +4912,7 @@
             "type": "object",
             "properties": {
                 "bindings": {
-                    "description": "Bindings maps canonical request intents to how this backend spells them.\nAn absent intent means the backend has no way to express it.",
+                    "description": "Bindings maps canonical request intents to how this backend expresses\nthem; an absent intent cannot be expressed.",
                     "type": "object",
                     "additionalProperties": {
                         "$ref": "#/definitions/system.ParamBinding"
@@ -4923,26 +4922,26 @@
                     "type": "integer"
                 },
                 "modelFamily": {
-                    "description": "ModelFamily is the canonical model family (qwen3, deepseek-r1, claude…).",
+                    "description": "ModelFamily is the canonical model family (qwen3, deepseek-r1, claude, ...).",
                     "type": "string"
                 },
                 "parameters": {
-                    "description": "Parameters lists the request parameters the stack documents as\naccepted, in the stack's own request vocabulary — OpenAI\nchat-completions names for every stack except anthropic, which uses\nAnthropic Messages names (an upper bound: server-side flags are\ninvisible). Behind a LiteLLM gateway (Via, or Stack litellm) the list\nis narrowed to what LiteLLM lists as supported for the model.",
+                    "description": "Parameters lists the request parameters the stack documents as accepted,\nin its own vocabulary: OpenAI chat-completions names, or Anthropic\nMessages names for anthropic. Behind LiteLLM, narrowed to what LiteLLM\nsupports for the model.",
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
                 },
                 "source": {
-                    "description": "Source says how the block was obtained: declared (models-config\napiStack preset) or detected (runtime probing of the backend's service\nendpoints, never inference requests). A detected block reports only\nwhat this struct carries — no upstream model id, api_base or hostname.",
+                    "description": "Source is declared (models-config apiStack preset) or detected (runtime\nprobing of the backend's service endpoints).",
                     "type": "string"
                 },
                 "stack": {
-                    "description": "Stack is the serving stack / vendor preset: vllm | sglang | llamacpp |\nollama | venice | openrouter | litellm | anthropic | openai. A detected\nblock may also report engines that are not presets (tgi, lmstudio,\nkoboldcpp) or a hosted vendor recognised by hostname (together,\nfireworks, groq, deepinfra, hyperbolic, mistral, gemini, xai, deepseek,\nmoonshot, nvidia-nim, cerebras, sambanova); those carry no bindings table.\nWhen a detected block carries Via, Stack is the upstream the provider's\ngateway fronts and the bindings are in that upstream's vocabulary.",
+                    "description": "Stack is the serving stack or vendor: vllm | sglang | llamacpp | ollama |\nvenice | openrouter | litellm | anthropic | openai, or a detected engine or\nhosted vendor without a bindings table (tgi, lmstudio, koboldcpp, groq,\ntogether, ...). With Via set, Stack is the upstream behind the gateway and\nBindings use that upstream's vocabulary.",
                     "type": "string"
                 },
                 "thinking": {
-                    "description": "Thinking summarizes reasoning controllability; knobs live in Bindings.",
+                    "description": "Thinking summarizes reasoning controllability; the knobs are in Bindings.",
                     "allOf": [
                         {
                             "$ref": "#/definitions/system.ThinkingSpec"
@@ -4950,7 +4949,7 @@
                     ]
                 },
                 "via": {
-                    "description": "Via names the gateway the request path goes through before Stack, when\ndetection identified the upstream behind it: today only \"litellm\" (a\nLiteLLM proxy whose deployment points at a Venice / OpenRouter / OpenAI\nendpoint or a self-hosted engine). LiteLLM forwards upstream-native\nparams verbatim and validates standard OpenAI params per model, so the\nbindings are the upstream's own, narrowed to what LiteLLM forwards for\nthis model. Absent when the backend is reached directly or the upstream\ncould not be identified (then Stack is the gateway itself). Only the\ngateway's name is reported — never the upstream's endpoint or model id.",
+                    "description": "Via is the gateway in front of Stack when detection identified the\nupstream behind it; today only \"litellm\". Absent when the backend is\nreached directly or the upstream is unknown (then Stack is the gateway).",
                     "type": "string"
                 }
             }
@@ -4959,7 +4958,7 @@
             "type": "object",
             "properties": {
                 "api": {
-                    "description": "Api is the API spec for this model (see internal/apispec and internal/apidetect): serving stack, model family and the request-param bindings a consumer needs to translate canonical fields. Composed from models-config presets (source: declared) or from probing the backend's service endpoints (source: detected) — never the backend URL, key, hostnames or the private model string.",
+                    "description": "Api describes the API serving this model: stack, model family, thinking\ncontrol and request-param bindings. Never carries the backend URL, key or\nhostname. Absent when nothing is known.",
                     "allOf": [
                         {
                             "$ref": "#/definitions/system.ModelApiSpec"
@@ -5029,7 +5028,7 @@
                     "type": "string"
                 },
                 "value": {
-                    "description": "Value is the fixed value realizing the intent (e.g. false for\nreasoning.disable via enable_thinking). Nil for caller-supplied values."
+                    "description": "Value is the fixed value realizing the intent; nil when the caller\nsupplies it."
                 }
             }
         },
@@ -5059,7 +5058,7 @@
             "type": "object",
             "properties": {
                 "mode": {
-                    "description": "always_on | controllable | tunable",
+                    "description": "always_on (cannot be disabled) | controllable (reasoning.disable/enable bindings) | tunable (effort/budget bindings only)",
                     "type": "string"
                 }
             }

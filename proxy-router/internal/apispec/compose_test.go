@@ -17,7 +17,6 @@ const qwen3Template = `{%- if messages %}{% generation %}{% endgeneration %}{%- 
 const deepseekV31Template = `{% if not thinking is defined %}{% set thinking = false %}{% endif %}
 {% if thinking %}<think>{% endif %}`
 
-// R2: Build is exactly Compose over the declared evidence, for every preset.
 func TestBuildIsComposeOverDeclaredEvidence(t *testing.T) {
 	names := []string{"Qwen/Qwen3-235B-A22B", "deepseek-r1", "gpt-oss:120b", "claude-opus-4-6", "o4-mini", "meta-llama/Llama-3.3-70B-Instruct", "seed-oss:36b", "MiniMaxAI/MiniMax-M3", "some-embedder"}
 	for stack, apiType := range config.StackTransport {
@@ -37,7 +36,6 @@ func TestComposeRegistryBindingsWinOverEverything(t *testing.T) {
 	api := Compose(Evidence{Stack: "vllm", ModelName: "qwen3-32b", ChatTemplate: qwen3Template, OllamaThinking: true, RegistryBindings: registry})
 	require.Equal(t, "registry.off", api.Bindings[system.IntentReasoningDisable].Param)
 	require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
-	// the stack table still fills the other intents; the input map is not aliased
 	require.Equal(t, "top_k", api.Bindings[system.IntentSamplingTopK].Param)
 	api.Bindings[system.IntentReasoningDisable].Param = "mutated"
 	require.Equal(t, "registry.off", registry[system.IntentReasoningDisable].Param)
@@ -52,7 +50,6 @@ func TestComposeOllamaCapabilityBeatsTemplate(t *testing.T) {
 }
 
 func TestComposeTemplateBeatsFamilyDefault(t *testing.T) {
-	// the template says `thinking`; the qwen3 family default would say enable_thinking
 	api := Compose(Evidence{Stack: "llamacpp", ModelName: "qwen3-32b", ChatTemplate: deepseekV31Template})
 	require.Equal(t, "chat_template_kwargs.thinking", api.Bindings[system.IntentReasoningDisable].Param)
 }
@@ -62,8 +59,6 @@ func TestComposeFamilyDefaultWhenNoEvidence(t *testing.T) {
 	require.Equal(t, "chat_template_kwargs.enable_thinking", api.Bindings[system.IntentReasoningDisable].Param)
 }
 
-// R4: an undetermined stack never carries bindings — at most the family and
-// an always_on mode; nothing known at all composes to nil.
 func TestComposeUndeterminedStackHasNoBindings(t *testing.T) {
 	api := Compose(Evidence{ModelName: "qwen3-32b"})
 	require.NotNil(t, api)
@@ -81,7 +76,6 @@ func TestComposeUndeterminedStackHasNoBindings(t *testing.T) {
 	require.Nil(t, Compose(Evidence{}))
 }
 
-// R1: an explicit modelFamily is never overridden by backend evidence.
 func TestComposeExplicitFamilyIsNeverOverridden(t *testing.T) {
 	api := Compose(Evidence{Stack: "vllm", ModelName: "alias", ModelFamily: "llama", Architecture: "qwen3", ServedModelID: "deepseek-ai/DeepSeek-R1"})
 	require.Equal(t, "llama", api.ModelFamily)
@@ -89,20 +83,16 @@ func TestComposeExplicitFamilyIsNeverOverridden(t *testing.T) {
 }
 
 func TestComposeFamilyEvidenceChain(t *testing.T) {
-	// architecture beats served id beats name, unless the later one refines
 	api := Compose(Evidence{Stack: "lmstudio", ModelName: "deepseek-r1-distill", Architecture: "deepseek2"})
 	require.Equal(t, "deepseek-r1", api.ModelFamily)
 	api = Compose(Evidence{Stack: "sglang", ModelName: "whatever-local-alias", ServedModelID: "deepseek-ai/DeepSeek-R1"})
 	require.Equal(t, "deepseek-r1", api.ModelFamily)
 	api = Compose(Evidence{Stack: "lmstudio", ModelName: "some-embedder", Architecture: "bert"})
 	require.Equal(t, "", api.ModelFamily)
-	// the served id, not the alias, drives the -thinking refinement
 	api = Compose(Evidence{Stack: "vllm", ModelName: "alias", ServedModelID: "Qwen/Qwen3-235B-A22B-Thinking-2507"})
 	require.Equal(t, system.ThinkingModeAlwaysOn, api.Thinking.Mode)
 }
 
-// A declared gateway preset merges its reasoning knobs on family knowledge
-// alone (today's Build); a detected gateway needs probe evidence.
 func TestComposeDetectedGatewayNeedsReasoningEvidence(t *testing.T) {
 	detected := Compose(Evidence{Stack: "litellm", ModelName: "qwen3-32b"})
 	require.Nil(t, detected.Thinking)
@@ -116,7 +106,6 @@ func TestComposeDetectedGatewayNeedsReasoningEvidence(t *testing.T) {
 	evidenced := Compose(Evidence{Stack: "litellm", ModelName: "qwen3-32b", GatewayReasoning: true})
 	require.Equal(t, system.ThinkingModeControllable, evidenced.Thinking.Mode)
 
-	// always-on families need no evidence on either path
 	r1 := Compose(Evidence{Stack: "litellm", ModelName: "deepseek-r1"})
 	require.Equal(t, system.ThinkingModeAlwaysOn, r1.Thinking.Mode)
 	require.Nil(t, r1.Bindings[system.IntentReasoningEffort])
@@ -133,15 +122,10 @@ func TestComposeHostedVendorGatesFamilyDefaults(t *testing.T) {
 	together := Compose(Evidence{Stack: "together", ModelName: "claude-sonnet-4-5"})
 	require.Empty(t, together.Bindings)
 
-	// the family's native vendor keeps its defaults
 	anthropic := Compose(Evidence{Stack: "anthropic", ModelName: "claude-sonnet-4-5"})
 	require.Equal(t, "thinking", anthropic.Bindings[system.IntentReasoningDisable].Param)
 }
 
-// Detected-only engines (tgi, lmstudio, koboldcpp) have no preset table and
-// nothing documents that they honour chat-template kwargs: the family's
-// template-kwarg defaults are gated for them like for a gateway. The family
-// and an always_on mode are still reported.
 func TestComposeDetectedOnlyEnginesGateFamilyDefaults(t *testing.T) {
 	for _, stack := range []string{"tgi", "lmstudio", "koboldcpp"} {
 		api, lines := ComposeWithTrace(Evidence{Stack: stack, ModelName: "qwen3-32b"})
@@ -157,7 +141,6 @@ func TestComposeDetectedOnlyEnginesGateFamilyDefaults(t *testing.T) {
 		require.Equal(t, system.ThinkingModeAlwaysOn, r1.Thinking.Mode, stack)
 		require.Empty(t, r1.Bindings, stack)
 	}
-	// the preset engines keep the family default
 	vllm := Compose(Evidence{Stack: "vllm", ModelName: "qwen3-32b"})
 	require.Equal(t, "chat_template_kwargs.enable_thinking", vllm.Bindings[system.IntentReasoningDisable].Param)
 }
@@ -169,8 +152,6 @@ func TestComposeImportedParametersReplaceStackList(t *testing.T) {
 	require.Equal(t, "top_a", api.Bindings[system.IntentSamplingTopA].Param)
 }
 
-// R5 addendum: LiteLLM's supported_reasoning_efforts narrow the litellm
-// reasoning.effort enum; without "none" the reasoning.disable knob goes.
 func TestComposeLiteLLMSupportedReasoningEfforts(t *testing.T) {
 	api := Compose(Evidence{Stack: "litellm", ModelName: "claude-sonnet-4-5", GatewayReasoning: true, ReasoningEfforts: []string{"low", "medium", "high"}})
 	require.Equal(t, []string{"low", "medium", "high"}, api.Bindings[system.IntentReasoningEffort].EnumValues)
@@ -181,40 +162,30 @@ func TestComposeLiteLLMSupportedReasoningEfforts(t *testing.T) {
 	require.Equal(t, []string{"none", "low", "high"}, withNone.Bindings[system.IntentReasoningEffort].EnumValues)
 	require.Equal(t, "none", withNone.Bindings[system.IntentReasoningDisable].Value)
 
-	// supports_reasoning=false: efforts alone add nothing
 	off := Compose(Evidence{Stack: "litellm", ModelName: "llama-3.3-70b", ReasoningEfforts: []string{"low"}})
 	require.Nil(t, off.Thinking)
 	require.Nil(t, off.Bindings[system.IntentReasoningEffort])
 
-	// the shared table is untouched
 	require.Equal(t, []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}, stackBindings["litellm"][system.IntentReasoningEffort].EnumValues)
 }
 
-// OQ1 ruling: the litellm reasoning.enable knob follows
-// supported_reasoning_efforts too — its value becomes the first listed effort
-// other than none (LiteLLM's order), and when the list has no such effort the
-// knob is dropped. The thinking mode is derived after the fixup.
 func TestComposeLiteLLMReasoningEnableFollowsSupportedEfforts(t *testing.T) {
 	api := Compose(Evidence{Stack: "litellm", ModelName: "claude-sonnet-4-5", GatewayReasoning: true, ReasoningEfforts: []string{"low", "medium", "high"}})
 	require.Equal(t, "low", api.Bindings[system.IntentReasoningEnable].Value)
 	require.Equal(t, "reasoning_effort", api.Bindings[system.IntentReasoningEnable].Param)
 	require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
 
-	// none is skipped; the next entry in LiteLLM's order is taken
 	withNone := Compose(Evidence{Stack: "litellm", ModelName: "claude-sonnet-4-5", GatewayReasoning: true, ReasoningEfforts: []string{"none", "high", "max"}})
 	require.Equal(t, "high", withNone.Bindings[system.IntentReasoningEnable].Value)
 	require.Equal(t, "none", withNone.Bindings[system.IntentReasoningDisable].Value)
 	require.Equal(t, system.ThinkingModeControllable, withNone.Thinking.Mode)
 
-	// nothing but none: thinking cannot be switched on through LiteLLM
 	onlyNone := Compose(Evidence{Stack: "litellm", ModelName: "claude-sonnet-4-5", GatewayReasoning: true, ReasoningEfforts: []string{"none"}})
 	require.Nil(t, onlyNone.Bindings[system.IntentReasoningEnable])
 	require.Equal(t, "none", onlyNone.Bindings[system.IntentReasoningDisable].Value)
 	require.Equal(t, []string{"none"}, onlyNone.Bindings[system.IntentReasoningEffort].EnumValues)
 	require.Equal(t, system.ThinkingModeControllable, onlyNone.Thinking.Mode)
 
-	// without the efforts list the table value stands, and the table itself
-	// is never touched
 	plain := Compose(Evidence{Stack: "litellm", ModelName: "claude-sonnet-4-5", GatewayReasoning: true})
 	require.Equal(t, "medium", plain.Bindings[system.IntentReasoningEnable].Value)
 	require.Equal(t, "medium", stackBindings["litellm"][system.IntentReasoningEnable].Value)
@@ -239,17 +210,12 @@ func TestComposeWithTraceExplainsDecisions(t *testing.T) {
 	require.Contains(t, strings.Join(lines, "\n"), "stack undetermined")
 }
 
-// R3: the composer stamps where the block came from.
 func TestComposeSetsSource(t *testing.T) {
 	require.Equal(t, system.ApiSpecSourceDeclared, Build(config.ModelConfig{ModelName: "qwen3-32b", ApiType: "openai", ApiStack: "vllm", ApiURL: "http://h/v1"}).Source)
 	require.Equal(t, system.ApiSpecSourceDetected, Compose(Evidence{Stack: "vllm", ModelName: "qwen3-32b"}).Source)
 	require.Equal(t, system.ApiSpecSourceDetected, Compose(Evidence{ModelName: "qwen3-32b"}).Source, "a family-only detected spec still says detected")
 }
 
-// Rider (post-Task-1 review, closes an R4 gap): chat-template evidence must
-// not bypass the "undetermined stack" guard the family-default step already
-// enforces — an unknown wire vocabulary means no template-kwarg bindings
-// either, not just no family default.
 func TestComposeUndeterminedStackSkipsTemplateEvidence(t *testing.T) {
 	api := Compose(Evidence{Stack: "", ModelName: "Qwen3-8B", ChatTemplate: qwen3Template})
 	require.NotNil(t, api)
@@ -270,19 +236,11 @@ func TestDescribeBinding(t *testing.T) {
 	require.Equal(t, "template_kwarg chat_template_kwargs.reasoning_effort (enum: low|high)", s)
 }
 
-// Backend-reported lists (registry supported_parameters, Venice
-// capabilities, LiteLLM supported_reasoning_efforts — and its
-// supported_openai_params, see TestComposeSanitizesLiteLLMSupportedParams)
-// are third-party strings that reach the public wire through the spec. They
-// are sanitized once, here: only names matching
-// ^[A-Za-z0-9_.-]{1,64}$ survive, duplicates go, order is preserved, and the
-// lists are capped (64 parameters, 16 efforts); a drop is traced once with
-// the counts.
 func TestComposeSanitizesBackendReportedLists(t *testing.T) {
 	t.Run("10 000 junk parameters plus a few valid ones", func(t *testing.T) {
 		in := make([]string, 0, 10_008)
 		for i := 0; i < 10_000; i++ {
-			in = append(in, fmt.Sprintf("junk %d\n", i)) // space and newline: never a name
+			in = append(in, fmt.Sprintf("junk %d\n", i))
 		}
 		in = append(in, "", "temperature", strings.Repeat("a", 65), "tools", "tools", "top_p\x00", "reasoning_effort", "ünïcode")
 		snapshot := append([]string(nil), in...)
@@ -340,8 +298,6 @@ func TestComposeSanitizesBackendReportedLists(t *testing.T) {
 	})
 }
 
-// CR4/U2: Via is stamped from the evidence (the gateway the provider fronts
-// the upstream with); Build never sets it.
 func TestComposeViaIsStamped(t *testing.T) {
 	api := Compose(Evidence{Stack: "venice", Via: "litellm", ModelName: "deepseek-v4-pro", LiteLLMSeen: true})
 	require.Equal(t, "venice", api.Stack)
@@ -354,13 +310,6 @@ func TestComposeViaIsStamped(t *testing.T) {
 	require.Equal(t, "", Compose(Evidence{Stack: "litellm", ModelName: "deepseek-v4-pro", LiteLLMSeen: true}).Via, "a plain LiteLLM backend has no via")
 }
 
-// CR4/U3: the LiteLLM forwarding filter. LiteLLM validates known OpenAI
-// params against its per-provider map and forwards unknown params verbatim
-// as provider kwargs, so a binding whose root param is a standard OpenAI
-// name is kept only when LiteLLM lists it in supported_openai_params, while
-// upstream-native roots (venice_parameters, chat_template_kwargs, top_k,
-// thinking, reasoning …) always pass. parameters is the stack's list
-// intersected with the supported list. Thinking is derived afterwards.
 func TestComposeLiteLLMForwardingFilter(t *testing.T) {
 	supported := []string{"temperature", "tools", "response_format", "stream_options", "max_tokens"}
 
@@ -429,7 +378,6 @@ func TestComposeLiteLLMForwardingFilter(t *testing.T) {
 		require.Equal(t, []string{"max_tokens", "response_format", "stream_options", "temperature", "tools"}, api.Parameters)
 		require.Contains(t, strings.Join(lines, "\n"), "bindings: reasoning.disable dropped — litellm does not forward reasoning_effort for this model")
 
-		// nothing reasoning-related left at all when the budget knob is absent too
 		llama := Compose(Evidence{Stack: "litellm", ModelName: "llama-3.3-70b", LiteLLMSeen: true, LiteLLMSupportedParams: supported})
 		require.Nil(t, llama.Thinking)
 	})
@@ -487,14 +435,6 @@ func TestComposeLiteLLMForwardingFilter(t *testing.T) {
 		require.NotNil(t, stackBindings["litellm"][system.IntentReasoningDisable])
 	})
 
-	// U7 controller ruling: an anthropic upstream identified behind litellm
-	// is Messages vocabulary, not OpenAI's — stackParameters["anthropic"]
-	// (stop_sequences, metadata, model, messages, …) must not be intersected
-	// with LiteLLM's OpenAI-shaped supported_openai_params (that would keep
-	// only the handful of names that happen to collide across the two
-	// vocabularies and silently drop stop_sequences, the actual equivalent of
-	// OpenAI's stop). parameters is supported verbatim instead; bindings are
-	// unaffected since every anthropic table entry has a non-standard root.
 	t.Run("anthropic behind litellm: parameters is litellm's list verbatim, never intersected with the anthropic table", func(t *testing.T) {
 		api := Compose(Evidence{Stack: "anthropic", Via: "litellm", ModelName: "claude-opus-4-6", LiteLLMSeen: true, LiteLLMSupportedParams: supported})
 		require.Equal(t, "anthropic", api.Stack)
@@ -511,10 +451,6 @@ func TestComposeLiteLLMForwardingFilter(t *testing.T) {
 	})
 }
 
-// LiteLLM's supported_openai_params is third-party data like every other
-// backend-reported list: sanitized (junk names and duplicates dropped, capped
-// at 64) before it filters anything; a list that sanitizes to nothing is
-// still a known list, not an unknown one.
 func TestComposeSanitizesLiteLLMSupportedParams(t *testing.T) {
 	in := []string{"temperature", "junk name\n", "tools", "tools", "response_format", ""}
 	snapshot := append([]string(nil), in...)

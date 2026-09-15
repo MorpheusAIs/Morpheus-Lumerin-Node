@@ -6,12 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestLoadConfigModelApiDetectEnabledFromEnv drives the real env-loading path
-// cmd/main.go uses (LoadConfig, not a hand-built Config) to confirm
-// MODEL_API_DETECT_ENABLED actually reaches Proxy.ModelApiDetectEnabled, and
-// that leaving it unset still resolves to the SetDefaults default of true.
-// BLOCKSCOUT_API_URL is set only because it is the one other required field
-// with no default, so LoadConfig's validation step passes.
+// BLOCKSCOUT_API_URL: the only other required field with no default.
 func TestLoadConfigModelApiDetectEnabledFromEnv(t *testing.T) {
 	valid, err := NewValidator()
 	require.NoError(t, err)

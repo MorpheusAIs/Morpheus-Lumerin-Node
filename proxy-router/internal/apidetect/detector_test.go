@@ -33,8 +33,6 @@ func jsonHandler(v any) http.HandlerFunc {
 	}
 }
 
-// --- self-hosted engine fingerprinting ---
-
 const qwen3Template = `{%- if messages %}{% generation %}{% endgeneration %}{%- endif %}
 {%- if enable_thinking is defined and enable_thinking is false %}<think></think>{%- endif %}`
 
@@ -104,8 +102,6 @@ func TestDetectOllama(t *testing.T) {
 	require.Equal(t, "qwen3", api.ModelFamily)
 	require.NotNil(t, api.Thinking)
 	require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
-	// Ollama's /v1 endpoint documents reasoning_effort, with "none" as off
-	// and any other level (medium) as on.
 	disable := api.Bindings[system.IntentReasoningDisable]
 	require.NotNil(t, disable)
 	require.Equal(t, system.BindingKindBodyParam, disable.Kind)
@@ -116,7 +112,6 @@ func TestDetectOllama(t *testing.T) {
 	require.Equal(t, system.BindingKindBodyParam, enable.Kind)
 	require.Equal(t, "reasoning_effort", enable.Param)
 	require.Equal(t, "medium", enable.Value)
-	// stack table adds the /v1 effort levels and the documented native knobs
 	require.Equal(t, "reasoning_effort", api.Bindings[system.IntentReasoningEffort].Param)
 	require.Equal(t, "options.num_ctx", api.Bindings[system.IntentContextNumCtx].Param)
 	require.Equal(t, system.BindingKindNativeBodyParam, api.Bindings[system.IntentContextNumCtx].Kind)
@@ -137,7 +132,6 @@ func TestDetectSGLangAlwaysOnReasoner(t *testing.T) {
 	require.Equal(t, "deepseek-r1", api.ModelFamily)
 	require.NotNil(t, api.Thinking)
 	require.Equal(t, system.ThinkingModeAlwaysOn, api.Thinking.Mode)
-	// no toggle exists, but the stack's model-independent knobs still apply
 	require.Nil(t, api.Bindings[system.IntentReasoningDisable])
 	require.Nil(t, api.Bindings[system.IntentReasoningEnable])
 	require.Equal(t, "separate_reasoning", api.Bindings[system.IntentReasoningFormat].Param)
@@ -195,15 +189,11 @@ func TestDetectLMStudio(t *testing.T) {
 	require.NotNil(t, api)
 	require.Equal(t, "lmstudio", api.Stack)
 	require.Equal(t, "granite", api.ModelFamily)
-	// a detected-only engine: the granite template-kwarg default is not
-	// advertised (nothing documents that LM Studio honours it)
 	require.Nil(t, api.Thinking)
 	require.Empty(t, api.Bindings)
 	require.Empty(t, api.Parameters)
 }
 
-// Detected-only engines (tgi, lmstudio, koboldcpp) report the family and an
-// always_on thinking mode, never the family's template-kwarg bindings.
 func TestDetectDetectedOnlyEnginesGetNoFamilyBindings(t *testing.T) {
 	t.Run("tgi serving a hybrid family", func(t *testing.T) {
 		mux := http.NewServeMux()
@@ -242,8 +232,6 @@ func TestDetectKoboldCpp(t *testing.T) {
 	require.Equal(t, "koboldcpp", api.Stack)
 	require.Equal(t, "llama", api.ModelFamily)
 }
-
-// --- registry-style hosted APIs detected by response shape ---
 
 func TestDetectOpenRouterByShape(t *testing.T) {
 	mux := http.NewServeMux()
@@ -305,8 +293,6 @@ func TestDetectVeniceByShape(t *testing.T) {
 	require.NotContains(t, api.Parameters, "vision")
 }
 
-// --- hosted vendors recognized by hostname, no probing ---
-
 func TestDetectHostedVendorSkipsProbing(t *testing.T) {
 	d := newTestDetector()
 	api := d.Detect(context.Background(), config.ModelConfig{
@@ -323,15 +309,12 @@ func TestDetectHostedVendorSkipsProbing(t *testing.T) {
 	require.Equal(t, "thinking", disable.Param)
 	require.Equal(t, map[string]any{"type": "disabled"}, disable.Value)
 	require.Equal(t, "output_config.effort", api.Bindings[system.IntentReasoningEffort].Param)
-	// stack table: Messages API extras
 	require.Equal(t, "output_config.format", api.Bindings[system.IntentResponseFormatSchema].Param)
 	require.Equal(t, "thinking.display", api.Bindings[system.IntentReasoningFormat].Param)
 	require.Contains(t, api.Parameters, "max_tokens")
 	require.Contains(t, api.Parameters, "stop_sequences")
 	require.NotContains(t, api.Parameters, "stop")
 }
-
-// --- caching ---
 
 func TestDetectCachesResult(t *testing.T) {
 	var calls int32
@@ -352,8 +335,6 @@ func TestDetectCachesResult(t *testing.T) {
 	require.Equal(t, first.Stack, second.Stack)
 	require.Equal(t, int32(1), atomic.LoadInt32(&calls))
 }
-
-// --- tracing: DetectWithTrace explains every step and bypasses the cache ---
 
 func TestDetectWithTraceExplainsSteps(t *testing.T) {
 	var calls int32
@@ -379,10 +360,8 @@ func TestDetectWithTraceExplainsSteps(t *testing.T) {
 	require.Contains(t, joined, "chat template")
 	require.Contains(t, joined, "enable_thinking")
 	require.Contains(t, joined, "qwen3")
-	// misses are traced too: the ollama probe ran before /props matched
 	require.Contains(t, joined, "/api/tags")
 
-	// trace runs bypass the cache: a second call probes again
 	_, _ = d.DetectWithTrace(context.Background(), cfg)
 	require.Equal(t, int32(2), atomic.LoadInt32(&calls))
 }
@@ -400,8 +379,6 @@ func TestDetectWithTraceHostedVendor(t *testing.T) {
 	require.Contains(t, joined, "claude")
 }
 
-// --- nothing detectable: fall back to name heuristics only ---
-
 func TestDetectNothingReachableFallsBackToName(t *testing.T) {
 	srv := httptest.NewServer(http.NotFoundHandler())
 	defer srv.Close()
@@ -413,10 +390,7 @@ func TestDetectNothingReachableFallsBackToName(t *testing.T) {
 	require.Equal(t, system.ThinkingModeAlwaysOn, api.Thinking.Mode)
 }
 
-// --- review regressions: family resolution, hosted gating, ollama rewrite, secrets ---
-
 func TestDetectRawArchitectureFallsThroughToName(t *testing.T) {
-	// LM Studio reports the GGUF architecture "gptoss"; the name still refines it.
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v0/models", jsonHandler(map[string]any{
 		"object": "list",
@@ -428,8 +402,6 @@ func TestDetectRawArchitectureFallsThroughToName(t *testing.T) {
 	api := detect(t, srv.URL+"/v1/chat/completions", "openai", "gpt-oss-120b")
 	require.NotNil(t, api)
 	require.Equal(t, "gpt-oss", api.ModelFamily)
-	// LM Studio is a detected-only engine: the family is reported, its
-	// template-kwarg effort levels are not advertised
 	require.Nil(t, api.Thinking)
 	require.Empty(t, api.Bindings)
 }
@@ -465,8 +437,6 @@ func TestDetectServedIDRefinesGenericArchitecture(t *testing.T) {
 }
 
 func TestDetectHostedVendorSkipsTemplateKwargDefaults(t *testing.T) {
-	// Groq serves qwen3 but is not an HF-template engine: chat_template_kwargs
-	// would be rejected, so no family default may be advertised.
 	d := newTestDetector()
 	api := d.Detect(context.Background(), config.ModelConfig{
 		ModelName: "qwen/qwen3-32b",
@@ -481,7 +451,6 @@ func TestDetectHostedVendorSkipsTemplateKwargDefaults(t *testing.T) {
 }
 
 func TestDetectHostedVendorKeepsNativeFamilyDefaults(t *testing.T) {
-	// claude defaults describe Anthropic's own API: valid there, not elsewhere.
 	d := newTestDetector()
 	api := d.Detect(context.Background(), config.ModelConfig{
 		ModelName: "claude-sonnet-4-5",
@@ -494,9 +463,6 @@ func TestDetectHostedVendorKeepsNativeFamilyDefaults(t *testing.T) {
 }
 
 func TestDetectOllamaRewritesBudgetFamily(t *testing.T) {
-	// seed-oss default is a numeric template-kwarg budget; on Ollama only the
-	// reasoning_effort toggle exists, so the budget intent must be dropped and
-	// both toggle directions must remain.
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/tags", jsonHandler(map[string]any{"models": []map[string]any{{"name": "seed-oss:36b"}}}))
 	mux.HandleFunc("/api/show", jsonHandler(map[string]any{"template": "{{ .Prompt }}"}))
@@ -530,9 +496,7 @@ func TestDetectOpenRouterImportsAllReasoningBindings(t *testing.T) {
 	require.Equal(t, "reasoning.effort", api.Bindings[system.IntentReasoningEffort].Param)
 	require.Equal(t, "reasoning.max_tokens", api.Bindings[system.IntentReasoningBudget].Param)
 	require.Equal(t, "reasoning.exclude", api.Bindings[system.IntentReasoningFormat].Param)
-	// the registry list is authoritative: the stack's default param list must not replace it
 	require.Equal(t, []string{"reasoning"}, api.Parameters)
-	// stack table still contributes request shapes
 	require.Equal(t, "top_a", api.Bindings[system.IntentSamplingTopA].Param)
 }
 
@@ -555,7 +519,6 @@ func TestTraceNeverContainsApiKeyOrURLCredentials(t *testing.T) {
 
 func TestRedactURL(t *testing.T) {
 	require.Equal(t, "https://h.example/v1", RedactURL("https://u:p@h.example/v1?k=v#f"))
-	// never echo input that could not be parsed (it may be a pasted secret)
 	require.Equal(t, "<unparseable url>", RedactURL("not a url"))
 	require.Equal(t, "<unparseable url>", RedactURL("http://[::1"))
 	require.Equal(t, "<unparseable url>", RedactURL(""))
@@ -578,8 +541,6 @@ func TestCacheKeyChangesWithApiKeyStackAndFamily(t *testing.T) {
 	require.Equal(t, a, cacheKey(base))
 }
 
-// --- stack tables end-to-end ---
-
 func TestDetectVLLMStackTableForReasoningModel(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/version", jsonHandler(map[string]any{"version": "0.18.0"}))
@@ -592,7 +553,6 @@ func TestDetectVLLMStackTableForReasoningModel(t *testing.T) {
 	api := detect(t, srv.URL+"/v1/chat/completions", "openai", "Qwen/Qwen3-32B")
 	require.NotNil(t, api)
 	require.Equal(t, "vllm", api.Stack)
-	// family layer owns the toggle; stack layer adds model-independent knobs
 	require.Equal(t, "chat_template_kwargs.enable_thinking", api.Bindings[system.IntentReasoningDisable].Param)
 	require.Equal(t, "thinking_token_budget", api.Bindings[system.IntentReasoningBudget].Param)
 	require.Equal(t, "include_reasoning", api.Bindings[system.IntentReasoningFormat].Param)
@@ -614,7 +574,6 @@ func TestDetectVLLMStackTableForPlainModelHasNoReasoning(t *testing.T) {
 	require.NotNil(t, api)
 	require.Equal(t, "vllm", api.Stack)
 	require.Equal(t, "llama", api.ModelFamily)
-	// a stack's reasoning knobs must not make a non-reasoning model look tunable
 	require.Nil(t, api.Thinking)
 	for intent := range api.Bindings {
 		require.False(t, strings.HasPrefix(intent, "reasoning."), intent)
@@ -655,9 +614,6 @@ func TestDetectSGLangStackTable(t *testing.T) {
 }
 
 func TestDetectOllamaGptOssTunesEffortOnly(t *testing.T) {
-	// Ollama lists the thinking capability for gpt-oss, but booleans are
-	// ignored for it: the family default (effort levels) is what applies,
-	// rewritten onto /v1 reasoning_effort, with no disable.
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/tags", jsonHandler(map[string]any{"models": []map[string]any{{"name": "gpt-oss:120b"}}}))
 	mux.HandleFunc("/api/show", jsonHandler(map[string]any{
@@ -709,8 +665,6 @@ func TestDetectLiteLLM(t *testing.T) {
 	require.Equal(t, "Bearer sk-litellm", sawAuth)
 	require.Equal(t, "claude-sonnet-4-5", sawGroup)
 	require.Equal(t, []string{"reasoning_effort", "response_format", "temperature", "tools"}, api.Parameters)
-	// claude family defaults describe Anthropic's own API, not a gateway:
-	// litellm's provider-neutral reasoning knobs apply instead
 	require.Equal(t, "reasoning_effort", api.Bindings[system.IntentReasoningDisable].Param)
 	require.Equal(t, "none", api.Bindings[system.IntentReasoningDisable].Value)
 	require.Equal(t, "thinking.budget_tokens", api.Bindings[system.IntentReasoningBudget].Param)
@@ -722,8 +676,6 @@ func TestDetectLiteLLMWithoutReasoningSupportSkipsReasoning(t *testing.T) {
 	mux.HandleFunc("/health/liveliness", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`"I'm alive!"`))
 	})
-	// response_format is listed so the non-reasoning knob is forwarded (CR4:
-	// standard params LiteLLM does not list for the group are dropped).
 	mux.HandleFunc("/model_group/info", jsonHandler(map[string]any{"data": []map[string]any{{
 		"model_group": "llama-3.3-70b", "supported_openai_params": []string{"temperature", "response_format"}, "supports_reasoning": false,
 	}}}))
@@ -741,11 +693,7 @@ func TestDetectLiteLLMWithoutReasoningSupportSkipsReasoning(t *testing.T) {
 	require.Equal(t, []string{"response_format", "temperature"}, api.Parameters, "the litellm list narrowed to what the group supports")
 }
 
-// --- second-review regressions ---
-
 func TestDetectAlwaysOnFamilyOnLiteLLMGetsNoToggle(t *testing.T) {
-	// deepseek-r1 reasons unconditionally; a gateway's generic toggle must
-	// not be advertised for it alongside an always_on mode.
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health/liveliness", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(`"I'm alive!"`)) })
 	mux.HandleFunc("/model_group/info", jsonHandler(map[string]any{"data": []map[string]any{{
@@ -798,7 +746,6 @@ func TestDetectVeniceReasoningModel(t *testing.T) {
 	require.Equal(t, true, api.Bindings[system.IntentReasoningDisable].Value)
 	require.Equal(t, "reasoning_effort", api.Bindings[system.IntentReasoningEffort].Param)
 	require.Equal(t, "venice_parameters.strip_thinking_response", api.Bindings[system.IntentReasoningFormat].Param)
-	// the family's template kwargs never apply on a gateway
 	require.NotEqual(t, system.BindingKindTemplateKwarg, api.Bindings[system.IntentReasoningDisable].Kind)
 }
 
@@ -817,9 +764,8 @@ func TestDetectVeniceNonReasoningModelHasNoReasoning(t *testing.T) {
 }
 
 func TestDetectLiteLLMDegradedIntrospection(t *testing.T) {
-	// 401 on model_group/info: stack still identified, nothing imported.
 	mux := http.NewServeMux()
-	mux.HandleFunc("/health/liveliness", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(`I'm alive!`)) }) // unquoted variant
+	mux.HandleFunc("/health/liveliness", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(`I'm alive!`)) })
 	mux.HandleFunc("/model_group/info", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusUnauthorized) })
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -828,15 +774,13 @@ func TestDetectLiteLLMDegradedIntrospection(t *testing.T) {
 	require.NotNil(t, api)
 	require.Equal(t, "litellm", api.Stack)
 	require.Nil(t, api.Thinking)
-	require.Contains(t, api.Parameters, "messages") // stack default list
+	require.Contains(t, api.Parameters, "messages")
 	require.NotContains(t, api.Parameters, "reasoning_effort", "the supported list is unknown: only reasoning_effort is assumed not forwarded (CR4)")
 	require.Nil(t, api.Bindings[system.IntentReasoningDisable])
 	require.Equal(t, "response_format", api.Bindings[system.IntentResponseFormatJSON].Param, "other standard params stay when the list is unknown")
 
-	// bare-object (no data wrapper) response shape is accepted too
 	mux2 := http.NewServeMux()
 	mux2.HandleFunc("/health/liveliness", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(`"I'm alive!"`)) })
-	// (reasoning_effort listed so the litellm toggle is forwarded, CR4)
 	mux2.HandleFunc("/model_group/info", jsonHandler(map[string]any{
 		"model_group": "qwen3-32b", "supported_openai_params": []string{"tools", "reasoning_effort"}, "supports_reasoning": true,
 	}))
@@ -866,7 +810,6 @@ func TestDetectRegistryListingOverLimitIsIgnoredNotFatal(t *testing.T) {
 	d := newTestDetector()
 	api, trace := d.DetectWithTrace(context.Background(), config.ModelConfig{ModelName: "x/y", ApiType: "openai", ApiURL: srv.URL + "/api/v1/chat/completions"})
 	require.Contains(t, strings.Join(trace, "\n"), "exceeds the 512-byte limit")
-	// name heuristics still run; nothing crashes
 	_ = api
 }
 
@@ -879,9 +822,6 @@ func TestDetectOpenAIHostAdvertisesStandardParameters(t *testing.T) {
 }
 
 func TestIgnoreHostVendorsFallsBackToShapeDetection(t *testing.T) {
-	// A venice-shaped listing must identify the stack even when hostname
-	// recognition is off (custom-domain scenario); and a listing that lacks
-	// the configured model is reported as config drift rather than silence.
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/models", jsonHandler(map[string]any{
 		"data": []map[string]any{
@@ -908,9 +848,6 @@ func TestIgnoreHostVendorsFallsBackToShapeDetection(t *testing.T) {
 	require.Equal(t, "mistral", api.ModelFamily)
 }
 
-// --- rulings R1, R3, R4, R7 and the R5 addendum's probe side ---
-
-// R3: everything the detector composes says where it came from.
 func TestDetectSetsDetectedSource(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/props", jsonHandler(map[string]any{"total_slots": 1, "chat_template": qwen3Template}))
@@ -924,7 +861,6 @@ func TestDetectSetsDetectedSource(t *testing.T) {
 	require.Equal(t, system.ApiSpecSourceDetected, unreachable.Source)
 }
 
-// R1: a declared apiStack is composed statically; the backend is never probed.
 func TestDetectDeclaredStackSkipsProbing(t *testing.T) {
 	var hits int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -945,9 +881,6 @@ func TestDetectDeclaredStackSkipsProbing(t *testing.T) {
 	require.Equal(t, int32(0), atomic.LoadInt32(&hits))
 }
 
-// R1 is evaluated first: a declared apiStack composes statically even when
-// the config names neither an endpoint nor a model (nothing to detect, but
-// something to declare).
 func TestDetectDeclaredStackWinsOverEmptyEndpoint(t *testing.T) {
 	d := newTestDetector()
 	cfg := config.ModelConfig{ApiStack: "litellm"}
@@ -964,8 +897,6 @@ func TestDetectDeclaredStackWinsOverEmptyEndpoint(t *testing.T) {
 	require.Contains(t, trace[0], "nothing to detect")
 }
 
-// Probes carry the configured key: a redirect may only be followed to the
-// same host over the same or a better scheme.
 func TestRefuseCrossHostRedirect(t *testing.T) {
 	hop := func(from, to string) (*http.Request, []*http.Request) {
 		prev, err := http.NewRequest(http.MethodGet, from, nil)
@@ -992,7 +923,6 @@ func TestRefuseCrossHostRedirect(t *testing.T) {
 	for _, c := range refused {
 		require.ErrorIs(t, refuseCrossHostRedirect(hop(c.from, c.to)), http.ErrUseLastResponse, "%s -> %s", c.from, c.to)
 	}
-	// the standard 10-hop cap is kept
 	next, via := hop("https://h.example/0", "https://h.example/11")
 	for len(via) < 10 {
 		via = append(via, via[0])
@@ -1040,8 +970,6 @@ func TestProbesRefuseCrossHostRedirects(t *testing.T) {
 	})
 }
 
-// R4: when nothing answers, a family with default bindings still gets none —
-// the wire vocabulary is unknown; only the family (and always_on) is reported.
 func TestDetectUnreachableKnownFamilyHasNoBindings(t *testing.T) {
 	srv := httptest.NewServer(http.NotFoundHandler())
 	defer srv.Close()
@@ -1055,7 +983,6 @@ func TestDetectUnreachableKnownFamilyHasNoBindings(t *testing.T) {
 	require.Nil(t, detect(t, srv.URL+"/v1/chat/completions", "openai", "unknown-model-x"), "nothing known at all: no api block")
 }
 
-// R1: detection never overrides an explicit modelFamily.
 func TestDetectExplicitFamilyIsNeverOverridden(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v0/models", jsonHandler(map[string]any{"object": "list", "data": []map[string]any{{"id": "alias", "arch": "llama", "type": "llm"}}}))
@@ -1067,7 +994,6 @@ func TestDetectExplicitFamilyIsNeverOverridden(t *testing.T) {
 	require.Empty(t, api.Bindings, "lmstudio is a detected-only engine: no family template kwargs")
 }
 
-// R7: the cached spec is canonical; every caller gets its own copy.
 func TestDetectReturnsIndependentCopies(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/props", jsonHandler(map[string]any{"total_slots": 1, "chat_template": qwen3Template}))
@@ -1090,8 +1016,6 @@ func TestDetectReturnsIndependentCopies(t *testing.T) {
 	d.mu.Unlock()
 }
 
-// A pass cut short by the caller's deadline must not pin its partial
-// result for the cache TTL.
 func TestDetectDoesNotCacheTimedOutPass(t *testing.T) {
 	var calls int32
 	mux := http.NewServeMux()
@@ -1113,9 +1037,6 @@ func TestDetectDoesNotCacheTimedOutPass(t *testing.T) {
 	require.Equal(t, int32(1), atomic.LoadInt32(&calls))
 }
 
-// R5 addendum (probe side): supported_reasoning_efforts from
-// /model_group/info narrows the litellm effort enum and drops the disable
-// knob when "none" is not offered.
 func TestDetectLiteLLMSupportedReasoningEfforts(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health/liveliness", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(`"I'm alive!"`)) })
@@ -1132,11 +1053,6 @@ func TestDetectLiteLLMSupportedReasoningEfforts(t *testing.T) {
 	require.NotNil(t, api.Bindings[system.IntentReasoningEnable])
 }
 
-// A detected stack whose transport (config.StackTransport) is not the
-// model's apiType cannot be what the proxy-router actually speaks to: the
-// stack and everything in its vocabulary (bindings, parameters) are dropped,
-// while the family and an always_on thinking mode — facts about the model,
-// not the wire — stay.
 func TestDetectDropsStackContradictingTransport(t *testing.T) {
 	t.Run("claudeai model whose backend fingerprints as vllm", func(t *testing.T) {
 		vllm, _ := vllmServer(t, "Qwen/Qwen3-32B")
@@ -1151,7 +1067,6 @@ func TestDetectDropsStackContradictingTransport(t *testing.T) {
 		require.Empty(t, api.Parameters)
 		require.Contains(t, strings.Join(lines, "\n"), `detected stack "vllm" speaks "openai" but apiType is "claudeai" — stack dropped`)
 
-		// the same backend on its own transport keeps everything
 		consistent := d.Detect(context.Background(), config.ModelConfig{ModelName: "Qwen/Qwen3-32B", ApiType: "openai", ApiURL: vllm.URL + "/v1/chat/completions"})
 		require.Equal(t, "vllm", consistent.Stack)
 		require.NotEmpty(t, consistent.Bindings)
@@ -1180,9 +1095,6 @@ func TestDetectDropsStackContradictingTransport(t *testing.T) {
 	})
 }
 
-// The cache stays bounded under fresh-key churn (key rotation or config
-// edits faster than the TTL): when the expiry sweep frees nothing, the
-// oldest entries are evicted down to half the sweep threshold.
 func TestDetectCacheBoundedUnderFreshKeyChurn(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/props", jsonHandler(map[string]any{"total_slots": 1, "chat_template": qwen3Template}))
@@ -1191,7 +1103,7 @@ func TestDetectCacheBoundedUnderFreshKeyChurn(t *testing.T) {
 
 	d := newTestDetector()
 	const seeded = 299
-	base := time.Now().Add(-time.Minute) // all fresh: well within the TTL
+	base := time.Now().Add(-time.Minute)
 	d.mu.Lock()
 	for i := 0; i < seeded; i++ {
 		d.cache[fmt.Sprintf("k%03d", i)] = cacheEntry{at: base.Add(time.Duration(i) * time.Millisecond)}
@@ -1199,7 +1111,7 @@ func TestDetectCacheBoundedUnderFreshKeyChurn(t *testing.T) {
 	d.mu.Unlock()
 
 	cfg := config.ModelConfig{ModelName: "qwen3-32b", ApiType: "openai", ApiURL: srv.URL + "/v1/chat/completions"}
-	require.NotNil(t, d.Detect(context.Background(), cfg)) // the 300th fresh key
+	require.NotNil(t, d.Detect(context.Background(), cfg))
 
 	d.mu.Lock()
 	defer d.mu.Unlock()

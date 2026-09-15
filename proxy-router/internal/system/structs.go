@@ -78,40 +78,29 @@ type ModelHealthReport struct {
 	// when the probe failed with a non-200 response (e.g. 402, 429).
 	// Zero when the probe succeeded or never got an HTTP response.
 	HttpStatus int `json:"httpStatus,omitempty"`
-	// Api is the API spec for this model (see internal/apispec and internal/apidetect): serving stack, model family and the request-param bindings a consumer needs to translate canonical fields. Composed from models-config presets (source: declared) or from probing the backend's service endpoints (source: detected) — never the backend URL, key, hostnames or the private model string.
+	// Api describes the API serving this model: stack, model family, thinking
+	// control and request-param bindings. Never carries the backend URL, key or
+	// hostname. Absent when nothing is known.
 	Api *ModelApiSpec `json:"api,omitempty"`
 }
 
 const (
-	ThinkingModeAlwaysOn = "always_on"
-	// ThinkingModeControllable means thinking can be switched: a
-	// reasoning.disable or reasoning.enable binding exists.
+	ThinkingModeAlwaysOn     = "always_on"
 	ThinkingModeControllable = "controllable"
-	// ThinkingModeTunable means thinking intensity can be adjusted but never
-	// fully disabled (effort/budget bindings only, e.g. gpt-oss).
-	ThinkingModeTunable = "tunable"
+	ThinkingModeTunable      = "tunable"
 )
 
-// Binding kinds: the mechanism a ParamBinding uses.
 const (
-	// BindingKindBodyParam is a request body param addressed by dotted path
-	// on the OpenAI-compatible chat endpoint (e.g. "reasoning_effort",
-	// "venice_parameters.disable_thinking").
 	BindingKindBodyParam = "body_param"
-	// BindingKindTemplateKwarg is a chat-template variable passed via
-	// chat_template_kwargs (vLLM / SGLang / llama.cpp); Param starts with
-	// "chat_template_kwargs.".
+	// Param starts with "chat_template_kwargs.".
 	BindingKindTemplateKwarg = "template_kwarg"
-	// BindingKindSystemPrompt means the intent is realized by magic text in
-	// the system prompt (Hint carries the text).
+	// Param is empty; Hint carries the text.
 	BindingKindSystemPrompt = "system_prompt"
-	// BindingKindNativeBodyParam exists only on the stack's native
-	// (non-OpenAI-compatible) endpoint; informational, Hint names the endpoint.
+	// Informational only, unreachable on the OpenAI-compatible endpoint; Hint
+	// names the endpoint.
 	BindingKindNativeBodyParam = "native_body_param"
 )
 
-// Canonical request intents bindings are keyed by. Open-ended: new groups
-// join without schema changes.
 const (
 	IntentReasoningDisable = "reasoning.disable"
 	IntentReasoningEnable  = "reasoning.enable"
@@ -136,80 +125,55 @@ const (
 	IntentToolsParallel      = "tools.parallel"
 )
 
-// ApiSpecSource* say where a model's api block came from.
 const (
-	// ApiSpecSourceDeclared: composed from the models-config apiStack preset.
 	ApiSpecSourceDeclared = "declared"
-	// ApiSpecSourceDetected: composed from runtime probing of the backend's
-	// service endpoints (no apiStack declared); never from inference requests.
 	ApiSpecSourceDetected = "detected"
 )
 
-// ModelApiSpec describes the API serving a model, as declared by the
-// provider's apiStack preset or detected at runtime from the backend's
-// service endpoints (internal/apispec, internal/apidetect). Self-reported
-// and unverified: consumers treat it as a routing/translation hint, not truth.
 type ModelApiSpec struct {
-	// Stack is the serving stack / vendor preset: vllm | sglang | llamacpp |
-	// ollama | venice | openrouter | litellm | anthropic | openai. A detected
-	// block may also report engines that are not presets (tgi, lmstudio,
-	// koboldcpp) or a hosted vendor recognised by hostname (together,
-	// fireworks, groq, deepinfra, hyperbolic, mistral, gemini, xai, deepseek,
-	// moonshot, nvidia-nim, cerebras, sambanova); those carry no bindings table.
-	// When a detected block carries Via, Stack is the upstream the provider's
-	// gateway fronts and the bindings are in that upstream's vocabulary.
+	// Stack is the serving stack or vendor: vllm | sglang | llamacpp | ollama |
+	// venice | openrouter | litellm | anthropic | openai, or a detected engine or
+	// hosted vendor without a bindings table (tgi, lmstudio, koboldcpp, groq,
+	// together, ...). With Via set, Stack is the upstream behind the gateway and
+	// Bindings use that upstream's vocabulary.
 	Stack string `json:"stack,omitempty"`
-	// Via names the gateway the request path goes through before Stack, when
-	// detection identified the upstream behind it: today only "litellm" (a
-	// LiteLLM proxy whose deployment points at a Venice / OpenRouter / OpenAI
-	// endpoint or a self-hosted engine). LiteLLM forwards upstream-native
-	// params verbatim and validates standard OpenAI params per model, so the
-	// bindings are the upstream's own, narrowed to what LiteLLM forwards for
-	// this model. Absent when the backend is reached directly or the upstream
-	// could not be identified (then Stack is the gateway itself). Only the
-	// gateway's name is reported — never the upstream's endpoint or model id.
+	// Via is the gateway in front of Stack when detection identified the
+	// upstream behind it; today only "litellm". Absent when the backend is
+	// reached directly or the upstream is unknown (then Stack is the gateway).
 	Via string `json:"via,omitempty"`
-	// ModelFamily is the canonical model family (qwen3, deepseek-r1, claude…).
+	// ModelFamily is the canonical model family (qwen3, deepseek-r1, claude, ...).
 	ModelFamily string `json:"modelFamily,omitempty"`
-	// Thinking summarizes reasoning controllability; knobs live in Bindings.
+	// Thinking summarizes reasoning controllability; the knobs are in Bindings.
 	Thinking *ThinkingSpec `json:"thinking,omitempty"`
-	// Bindings maps canonical request intents to how this backend spells them.
-	// An absent intent means the backend has no way to express it.
+	// Bindings maps canonical request intents to how this backend expresses
+	// them; an absent intent cannot be expressed.
 	Bindings map[string]*ParamBinding `json:"bindings,omitempty"`
-	// Parameters lists the request parameters the stack documents as
-	// accepted, in the stack's own request vocabulary — OpenAI
-	// chat-completions names for every stack except anthropic, which uses
-	// Anthropic Messages names (an upper bound: server-side flags are
-	// invisible). Behind a LiteLLM gateway (Via, or Stack litellm) the list
-	// is narrowed to what LiteLLM lists as supported for the model.
+	// Parameters lists the request parameters the stack documents as accepted,
+	// in its own vocabulary: OpenAI chat-completions names, or Anthropic
+	// Messages names for anthropic. Behind LiteLLM, narrowed to what LiteLLM
+	// supports for the model.
 	Parameters []string `json:"parameters,omitempty"`
-	// Source says how the block was obtained: declared (models-config
-	// apiStack preset) or detected (runtime probing of the backend's service
-	// endpoints, never inference requests). A detected block reports only
-	// what this struct carries — no upstream model id, api_base or hostname.
+	// Source is declared (models-config apiStack preset) or detected (runtime
+	// probing of the backend's service endpoints).
 	Source     string `json:"source,omitempty"`
 	DeclaredAt int64  `json:"declaredAt,omitempty"`
 }
 
-// ThinkingSpec summarizes whether reasoning output can be controlled.
 type ThinkingSpec struct {
-	Mode string `json:"mode"` // always_on | controllable | tunable
+	Mode string `json:"mode"` // always_on (cannot be disabled) | controllable (reasoning.disable/enable bindings) | tunable (effort/budget bindings only)
 }
 
-// ParamBinding says how one canonical intent maps onto this backend.
 type ParamBinding struct {
 	Kind      string `json:"kind"`
 	Param     string `json:"param,omitempty"`     // dotted path within the mechanism
 	ParamType string `json:"paramType,omitempty"` // boolean | number | enum | string | object | array
-	// Value is the fixed value realizing the intent (e.g. false for
-	// reasoning.disable via enable_thinking). Nil for caller-supplied values.
+	// Value is the fixed value realizing the intent; nil when the caller
+	// supplies it.
 	Value      any      `json:"value,omitempty"`
 	EnumValues []string `json:"enumValues,omitempty"`
 	Hint       string   `json:"hint,omitempty"`
 }
 
-// Clone returns a deep copy (nil for a nil receiver): cached specs are handed
-// out as copies so callers can stamp DeclaredAt or edit bindings freely.
 func (s *ModelApiSpec) Clone() *ModelApiSpec {
 	if s == nil {
 		return nil
@@ -231,8 +195,6 @@ func (s *ModelApiSpec) Clone() *ModelApiSpec {
 	return &c
 }
 
-// Clone returns a deep copy of the binding (nil for nil): EnumValues and an
-// object Value are copied so shared tables are never aliased.
 func (b *ParamBinding) Clone() *ParamBinding {
 	if b == nil {
 		return nil

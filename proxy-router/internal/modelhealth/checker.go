@@ -70,10 +70,6 @@ type TeeStatusProvider interface {
 	ReattestBackend(ctx context.Context, modelID string, endpoint string) error
 }
 
-// ApiDetector identifies the API serving a configured model backend at
-// runtime (implemented by apidetect.Detector, which caches internally).
-// Optional dependency; results are attached to the health report so they
-// surface on /healthcheck and in the morrpc pong models list.
 type ApiDetector interface {
 	Detect(ctx context.Context, cfg config.ModelConfig) *system.ModelApiSpec
 }
@@ -84,9 +80,7 @@ type ApiDetector interface {
 // next scheduled probe sweep.
 const DefaultMaxConsecutiveErrors = 3
 
-// detectBudget caps API detection per model inside a sweep so a cold
-// detector cache (many probes per unknown backend) cannot consume the
-// whole model-health timeout before any probe result lands.
+// A cold detector cache must not consume the whole model-health timeout.
 const detectBudget = 10 * time.Second
 
 // modelMeta caches the public on-chain facts about a model so each sweep
@@ -172,10 +166,6 @@ type Deps struct {
 	// first sweep relies on the startup attestation), and models whose
 	// attestation does not pass are reported as tee_unverified.
 	TeeStatus TeeStatusProvider
-	// ApiDetect is optional; when set, every configured model without an
-	// apiStack has its backend API detected on each sweep (cached by the
-	// detector) and reported with source: detected. Nil (kill switch
-	// MODEL_API_DETECT_ENABLED=false) means such models report no api block.
 	ApiDetect ApiDetector
 }
 
@@ -414,16 +404,8 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 		c.log.Warnf("model %s: unknown modelFamily %q — no family bindings will be advertised", lib.Short(modelID), cfg.ModelFamily)
 	}
 
-	// API spec: a declared apiStack is composed statically (explicit
-	// declaration wins, no probing); otherwise the detector identifies the
-	// backend within a bounded budget, for every configured model with a chat
-	// transport apiType, bid or not. Detection is restricted to chat
-	// transports (config.IsChatTransport — today openai and claudeai) because
-	// image adapters (prodia-*, hyperbolic-sd) have no chat API to probe:
-	// running the detector against them would cost ~16 requests per sweep for
-	// nothing. DeclaredAt is only refreshed when the composed spec actually
-	// changed, so it reflects when the spec last changed rather than every
-	// sweep.
+	// Image adapters (prodia-*, hyperbolic-sd) have no chat API to probe;
+	// detecting them would cost ~16 requests per sweep for nothing.
 	var api *system.ModelApiSpec
 	if apispec.StackFor(cfg.ApiStack) != "" {
 		api = apispec.Build(cfg)
@@ -580,8 +562,6 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 	c.setReport(report)
 }
 
-// sameApiSpecIgnoringDeclaredAt reports whether a and b describe the same
-// declared API spec, disregarding their DeclaredAt timestamps.
 func sameApiSpecIgnoringDeclaredAt(a, b *system.ModelApiSpec) bool {
 	ac, bc := *a, *b
 	ac.DeclaredAt, bc.DeclaredAt = 0, 0

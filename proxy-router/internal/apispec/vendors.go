@@ -5,11 +5,6 @@ import (
 	"strings"
 )
 
-// hostVendors maps well-known hosted API hostnames to a stack identifier.
-// Matched exactly or as a domain suffix, so api.eu.example vanity subdomains
-// of the same vendor still resolve. Hostname recognition is knowledge, not
-// I/O: the runtime detector (internal/apidetect) calls StackFromHost and
-// Compose gates family defaults on the result.
 var hostVendors = map[string]string{
 	"api.openai.com":                    "openai",
 	"api.anthropic.com":                 "anthropic",
@@ -32,8 +27,6 @@ var hostVendors = map[string]string{
 	"api.sambanova.ai":                  "sambanova",
 }
 
-// StackFromHost recognizes hosted vendors by hostname; returns "" for
-// self-hosted / unknown hosts (those are fingerprinted by probing instead).
 func StackFromHost(apiURL string) string {
 	u, err := url.Parse(apiURL)
 	if err != nil {
@@ -48,8 +41,6 @@ func StackFromHost(apiURL string) string {
 	return ""
 }
 
-// isHostedVendor reports whether stack names a hosted API vendor (as opposed
-// to a self-hosted serving engine or an unrecognized host).
 func isHostedVendor(stack string) bool {
 	for _, vendor := range hostVendors {
 		if vendor == stack {
@@ -59,17 +50,13 @@ func isHostedVendor(stack string) bool {
 	return false
 }
 
-// detectedOnlyEngines are self-hosted engines detection can name but no
-// preset documents (no stack table on this branch): nothing establishes
-// that they honour the family's chat-template kwargs, so those are not
-// advertised for them either. Only the family and thinking facts are.
+// Engines detection can name but no preset documents: nothing establishes
+// that they honour chat-template kwargs.
 var detectedOnlyEngines = map[string]bool{"tgi": true, "lmstudio": true, "koboldcpp": true}
 
-// gatedStack reports whether family defaults must not be advertised for
-// stack unless the family's native vendor is that stack: gateways translate
-// requests for upstream providers, hosted vendors are not HF-template
-// engines and detected-only engines have no documented table, so template
-// kwargs / vendor-native params would be wrong or unverified shapes.
+// Family defaults are HF chat-template kwargs or a vendor's native params:
+// wrong or unverified on gateways, other hosted vendors and undocumented
+// engines.
 func gatedStack(stack string) bool {
 	return gatewayStacks[stack] || isHostedVendor(stack) || detectedOnlyEngines[stack]
 }

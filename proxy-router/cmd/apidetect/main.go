@@ -1,20 +1,6 @@
-// Command apidetect runs backend API detection (internal/apidetect) for every
-// model in a models-config.json and prints, per model, what was detected and
-// the exact steps that led to it — every probe attempted, what each returned,
-// and which evidence source decided the serving stack, model family and
-// thinking knob. Diagnostics tool for providers; sends no inference requests.
-//
-// Usage:
-//
-//	go run ./cmd/apidetect [-config models-config.json] [-model <substring>] [-ignore-host] [-two-hop=false] [-timeout 15s] [-json]
-//
-// -model runs only models whose name or ID contains the substring;
-// -ignore-host skips hostname recognition so hosted vendors must be
-// identified by their endpoints and listing shape alone (what an unknown
-// custom domain would get); -two-hop=false disables the LiteLLM second hop
-// (GET /model/info and the anonymous read of its upstream, which — when it
-// identifies the upstream — becomes the reported stack, printed with a
-// "via: litellm" line).
+// Command apidetect runs backend API detection for every model in a
+// models-config.json and prints, per model, what was detected and the probe
+// trace that led to it.
 package main
 
 import (
@@ -34,8 +20,6 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 )
 
-// formatResult renders one model's detection outcome and trace as
-// indented text.
 func formatResult(api *system.ModelApiSpec, trace []string) string {
 	var b strings.Builder
 
@@ -87,7 +71,6 @@ func orDash(s string) string {
 	return s
 }
 
-// jsonReport is the machine-readable per-model output for -json mode.
 type jsonReport struct {
 	ModelID   string               `json:"modelId"`
 	ModelName string               `json:"modelName"`

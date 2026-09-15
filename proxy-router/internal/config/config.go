@@ -207,9 +207,6 @@ func (cfg *Config) SetDefaults() {
 		cfg.Proxy.ForwardChatContext = &lib.Bool{Bool: &val}
 	}
 	if cfg.Proxy.ModelApiDetectEnabled.Bool == nil {
-		// Default ON: models without apiStack get their api block from
-		// endpoint probing (internal/apidetect). MODEL_API_DETECT_ENABLED=false
-		// is the kill switch.
 		val := true
 		cfg.Proxy.ModelApiDetectEnabled = &lib.Bool{Bool: &val}
 	}

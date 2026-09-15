@@ -8,10 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// StackFor answers only for the nine apiStack presets (config.StackTransport,
-// whose contents config's TestStackTransportTable pins): legacy adapter names
-// are apiType values and never resolve to a stack, and the value is
-// normalized the way the loader stores it.
 func TestStackFor(t *testing.T) {
 	for stack := range config.StackTransport {
 		require.Equal(t, stack, StackFor(stack))
@@ -25,9 +21,6 @@ func TestStackFor(t *testing.T) {
 	require.Equal(t, "", StackFor(" "), "whitespace-only means unset")
 }
 
-// The stack tables here and config.StackTransport must describe the same
-// nine presets, or a preset could validate at load but build no spec (or
-// the reverse).
 func TestStackTablesMatchConfigPresets(t *testing.T) {
 	for stack := range stackBindings {
 		require.Contains(t, config.StackTransport, stack, "stackBindings key %q is not a config.StackTransport preset", stack)
@@ -40,9 +33,6 @@ func TestStackTablesMatchConfigPresets(t *testing.T) {
 	}
 }
 
-// assertWellFormed checks a binding set: known kind, a param (except
-// system_prompt), known type, enum values iff enum type, object values only
-// with object type, endpoint hint on native params.
 func assertWellFormed(t *testing.T, where string, b map[string]*system.ParamBinding) {
 	t.Helper()
 	kinds := map[string]bool{system.BindingKindBodyParam: true, system.BindingKindTemplateKwarg: true, system.BindingKindSystemPrompt: true, system.BindingKindNativeBodyParam: true}
@@ -80,9 +70,6 @@ func TestAllTablesWellFormed(t *testing.T) {
 		require.NotEmpty(t, params, stack)
 		require.Contains(t, params, "messages", stack)
 	}
-	// Every stack with a bindings table must also have a documented parameter
-	// list (composition rule 5: `parameters` is the preset's documented
-	// list) — a stack that binds params it doesn't also advertise is a gap.
 	for stack := range stackBindings {
 		require.NotEmpty(t, stackParameters[stack], "stack %q has bindings but no stackParameters entry", stack)
 	}
@@ -107,10 +94,6 @@ func TestAllTablesWellFormed(t *testing.T) {
 	}
 }
 
-// IsKnownFamily accepts exactly the labels FamilyFromName can produce (the
-// familyRules table plus o-series), so an explicit modelFamily never warns
-// when the inferred value would not — including families without bindings
-// such as llama.
 func TestIsKnownFamily(t *testing.T) {
 	require.True(t, IsKnownFamily("qwen3"))
 	require.True(t, IsKnownFamily("llama"))
@@ -143,8 +126,6 @@ func TestFamilyFromName(t *testing.T) {
 	require.Equal(t, "", FamilyFromName("some-embedder"))
 }
 
-// requireKwargBool asserts a family binding set is exactly the boolean
-// chat-template kwarg toggle for kwarg (disable=false, enable=true).
 func requireKwargBool(t *testing.T, b bindingSet, kwarg, name string) {
 	t.Helper()
 	param := "chat_template_kwargs." + kwarg
@@ -157,7 +138,6 @@ func requireKwargBool(t *testing.T, b bindingSet, kwarg, name string) {
 	require.Equal(t, true, b[system.IntentReasoningEnable].Value, name)
 }
 
-// requireNoReasoning asserts a member gets neither always-on nor bindings.
 func requireNoReasoning(t *testing.T, family, name string) {
 	t.Helper()
 	alwaysOn, b := bindingsForFamily(family, name)
@@ -165,7 +145,6 @@ func requireNoReasoning(t *testing.T, family, name string) {
 	require.Nil(t, b, name)
 }
 
-// requireAlwaysOn asserts a member reasons unconditionally, with no bindings.
 func requireAlwaysOn(t *testing.T, family, name string) {
 	t.Helper()
 	alwaysOn, b := bindingsForFamily(family, name)
@@ -173,9 +152,6 @@ func requireAlwaysOn(t *testing.T, family, name string) {
 	require.Nil(t, b, name)
 }
 
-// Gemma: only Gemma 4 has a (default-off) thinking mode toggled by
-// enable_thinking; Gemma 3 and older have none. The generation token must
-// not be confused with a 4B size token: MedGemma 4B is Gemma 3 based.
 func TestBindingsForFamilyGemma(t *testing.T) {
 	for _, name := range []string{"gemma-4-31b", "google/gemma-4-31B-it", "gemma-4-26b-a4b-it", "gemma4-e4b", "gemma_4_12b", "gemma4:31b", "gemma-4"} {
 		alwaysOn, b := bindingsForFamily("gemma", name)
@@ -192,9 +168,6 @@ func TestBindingsForFamilyGemma(t *testing.T) {
 	requireNoReasoning(t, "gemma", "gemma")
 }
 
-// Kimi: K3, K2 Thinking and K2.7-Code always reason, K2.5 / K2.6 are hybrid
-// via the `thinking` chat-template kwarg (on by default), K2 Instruct has no
-// thinking mode.
 func TestBindingsForFamilyKimi(t *testing.T) {
 	requireNoReasoning(t, "kimi", "Kimi-K2-Instruct")
 	requireNoReasoning(t, "kimi", "moonshotai/Kimi-K2-Instruct-0905")
@@ -210,11 +183,6 @@ func TestBindingsForFamilyKimi(t *testing.T) {
 	}
 }
 
-// MiniMax: M2 and every M2.x are interleaved-thinking models with no off
-// switch; M3 is hybrid via the string-valued thinking_mode chat-template
-// kwarg (adaptive when unset); Text-01 has no thinking mode; M1 is left
-// without bindings because no official source states whether its thinking
-// can be disabled.
 func TestBindingsForFamilyMinimax(t *testing.T) {
 	for _, name := range []string{"MiniMax-M2", "MiniMaxAI/MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.7-highspeed"} {
 		requireAlwaysOn(t, "minimax", name)
@@ -236,9 +204,6 @@ func TestBindingsForFamilyMinimax(t *testing.T) {
 	requireNoReasoning(t, "minimax", "minimax")
 }
 
-// EXAONE: 4.x is hybrid via enable_thinking (default off), Deep always
-// reasons, 3.5 and older have no reasoning mode. The 4.x token also matches
-// the hyphen-less Ollama-tag / GGUF-architecture spellings.
 func TestBindingsForFamilyExaone(t *testing.T) {
 	for _, name := range []string{"EXAONE-4.0-32B", "LGAI-EXAONE/EXAONE-4.0.1-32B", "exaone-4.0-1.2b", "exaone4:32b", "exaone4", "exaone_4"} {
 		alwaysOn, b := bindingsForFamily("exaone", name)
@@ -252,7 +217,6 @@ func TestBindingsForFamilyExaone(t *testing.T) {
 	requireNoReasoning(t, "exaone", "exaone")
 }
 
-// withStackTable temporarily registers a stack's tables for a test.
 func withStackTable(t *testing.T, stack string, b bindingSet, params []string) {
 	t.Helper()
 	prevB, hadB := stackBindings[stack]
@@ -282,7 +246,6 @@ func TestMergeStackBindingsFillsMissingIntentsOnly(t *testing.T) {
 
 	api := &system.ModelApiSpec{Stack: "teststack"}
 	established := bindingSet{
-		// evidence-derived reasoning binding must win over the stack default
 		system.IntentReasoningDisable: {Kind: system.BindingKindTemplateKwarg, Param: "chat_template_kwargs.enable_thinking", ParamType: "boolean", Value: false},
 	}
 	mergeStackTables(api, "teststack", established, true, false)
@@ -292,7 +255,6 @@ func TestMergeStackBindingsFillsMissingIntentsOnly(t *testing.T) {
 	require.Equal(t, "response_format", api.Bindings[system.IntentResponseFormatJSON].Param)
 	require.Equal(t, []string{"temperature", "top_p"}, api.Parameters)
 
-	// the shared table must not be aliased: mutating the result leaves the table intact
 	api.Bindings[system.IntentSamplingTopK].Param = "mutated"
 	require.Equal(t, "top_k", stackBindings["teststack"][system.IntentSamplingTopK].Param)
 }
@@ -302,7 +264,6 @@ func TestMergeStackTablesKeepsRegistryParameters(t *testing.T) {
 
 	api := &system.ModelApiSpec{Stack: "teststack", Parameters: []string{"tools", "reasoning"}}
 	mergeStackTables(api, "teststack", nil, false, false)
-	// a registry-imported list (per-model, authoritative) is never replaced by the stack default
 	require.Equal(t, []string{"tools", "reasoning"}, api.Parameters)
 }
 
@@ -319,7 +280,6 @@ func TestMergeStackTablesGatesReasoningOnEvidence(t *testing.T) {
 		system.IntentSamplingTopK:    {Kind: system.BindingKindBodyParam, Param: "top_k", ParamType: "number"},
 	}, nil)
 
-	// no reasoning evidence: the stack's reasoning knob must not imply the model thinks
 	api := &system.ModelApiSpec{Stack: "teststack"}
 	mergeStackTables(api, "teststack", nil, false, false)
 	require.Nil(t, api.Bindings[system.IntentReasoningBudget])

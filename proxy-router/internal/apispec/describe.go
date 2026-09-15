@@ -9,8 +9,6 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 )
 
-// DescribeBinding renders one ParamBinding as a human-readable line, shared
-// by trace output and diagnostics tooling.
 func DescribeBinding(b *system.ParamBinding) string {
 	if b == nil {
 		return "unknown"
@@ -39,7 +37,6 @@ func DescribeBinding(b *system.ParamBinding) string {
 	return s
 }
 
-// formatValue renders a binding value the way it appears on the wire.
 func formatValue(v any) string {
 	switch v.(type) {
 	case map[string]any, []any, []string:
@@ -50,7 +47,6 @@ func formatValue(v any) string {
 	return fmt.Sprintf("%v", v)
 }
 
-// describeBindings renders a whole binding set compactly, intents sorted.
 func describeBindings(b map[string]*system.ParamBinding) string {
 	intents := make([]string, 0, len(b))
 	for intent := range b {

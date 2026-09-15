@@ -9,9 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// build composes the spec for an apiStack preset. apiType is the preset's
-// transport adapter from config.StackTransport (openai when the preset is
-// unknown) so every case is a config the loader would accept.
 func build(stack, name, family string) *system.ModelApiSpec {
 	apiType, ok := config.StackTransport[stack]
 	if !ok {
@@ -31,7 +28,6 @@ func TestBuildVLLMQwen3(t *testing.T) {
 	require.Equal(t, "chat_template_kwargs.enable_thinking", disable.Param)
 	require.Equal(t, false, disable.Value)
 	require.Equal(t, true, api.Bindings[system.IntentReasoningEnable].Value)
-	// stack layer adds model-independent knobs
 	require.Equal(t, "thinking_token_budget", api.Bindings[system.IntentReasoningBudget].Param)
 	require.Equal(t, "top_k", api.Bindings[system.IntentSamplingTopK].Param)
 	require.Equal(t, map[string]any{"type": "json_object"}, api.Bindings[system.IntentResponseFormatJSON].Value)
@@ -62,12 +58,6 @@ func TestBuildAlwaysOnKeepsOnlyReasoningFormat(t *testing.T) {
 	require.Equal(t, "separate_reasoning", api.Bindings[system.IntentReasoningFormat].Param)
 }
 
-// TestBuildGptOssOnLlamacppReasoningBindings covers a thinking-capable family
-// (gpt-oss contributes only reasoning.effort) combined with llama.cpp's
-// stack-level reasoning_budget param. Per the llama-server README,
-// reasoning_budget: 0 ends thinking immediately, so llama.cpp can disable
-// thinking even though gpt-oss's own kwarg has no explicit off switch — that
-// makes the mode controllable, not merely tunable.
 func TestBuildGptOssOnLlamacppReasoningBindings(t *testing.T) {
 	api := build("llamacpp", "gpt-oss-120b", "")
 	require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
@@ -88,9 +78,6 @@ func TestBuildOllamaRewritesToReasoningEffort(t *testing.T) {
 	api := build("ollama", "qwen3:32b", "")
 	require.Equal(t, "reasoning_effort", api.Bindings[system.IntentReasoningDisable].Param)
 	require.Equal(t, "none", api.Bindings[system.IntentReasoningDisable].Value)
-	// mirrors litellm: reasoning_effort (any level but none) also works on
-	// ollama's OpenAI-compatible /v1 surface, so gateways can enable thinking
-	// without the native-only `think` boolean.
 	require.Equal(t, system.BindingKindBodyParam, api.Bindings[system.IntentReasoningEnable].Kind)
 	require.Equal(t, "reasoning_effort", api.Bindings[system.IntentReasoningEnable].Param)
 	require.Equal(t, "medium", api.Bindings[system.IntentReasoningEnable].Value)
@@ -113,8 +100,6 @@ func TestBuildGatewayPresetsSkipFamilyTemplateKwargs(t *testing.T) {
 	for intent, b := range venice.Bindings {
 		require.NotEqual(t, system.BindingKindTemplateKwarg, b.Kind, intent)
 	}
-	// composition rule 5: parameters must be the preset's documented list,
-	// never nil, even when the preset's bindings table is sparse.
 	require.NotEmpty(t, venice.Parameters, "venice preset must advertise its documented parameter list")
 	require.Contains(t, venice.Parameters, "messages")
 	require.Contains(t, venice.Parameters, "reasoning_effort")
@@ -142,8 +127,6 @@ func TestBuildAnthropicIsGenerationAware(t *testing.T) {
 	require.Equal(t, "output_config.format", api.Bindings[system.IntentResponseFormatSchema].Param)
 	require.Contains(t, api.Parameters, "stop_sequences")
 
-	// apiStack: anthropic declared on the claudeai transport adapter — the
-	// only apiType it is valid with.
 	onClaudeai := Build(config.ModelConfig{ModelName: "claude-sonnet-4-5-20250929", ApiType: "claudeai", ApiStack: "anthropic", ApiURL: "https://api.anthropic.com/v1/messages"})
 	require.NotNil(t, onClaudeai)
 	require.Equal(t, "anthropic", onClaudeai.Stack)
@@ -166,8 +149,6 @@ func TestBuildGenericOpenAIIsConservative(t *testing.T) {
 	require.Equal(t, system.ThinkingModeAlwaysOn, r1.Thinking.Mode)
 }
 
-// The api block is opt-in per model: without apiStack Build returns nil
-// whatever the transport adapter, and an unknown apiStack is nil too.
 func TestBuildNilWithoutApiStack(t *testing.T) {
 	for _, apiType := range []string{"openai", "claudeai", "prodia-v2", "hyperbolic-sd"} {
 		require.Nil(t, Build(config.ModelConfig{ModelName: "qwen3-32b", ApiType: apiType, ApiURL: "http://h/v1"}), apiType)
@@ -176,7 +157,6 @@ func TestBuildNilWithoutApiStack(t *testing.T) {
 	require.Nil(t, build("bogus", "sd-xl", ""))
 }
 
-// Every apiStack preset builds a spec that reports itself as the stack.
 func TestBuildEveryPresetBuilds(t *testing.T) {
 	for stack := range config.StackTransport {
 		api := build(stack, "qwen3-32b", "")
@@ -193,10 +173,6 @@ func TestBuildResultIsNotAliasedToTables(t *testing.T) {
 	require.Equal(t, "top_k", b.Bindings[system.IntentSamplingTopK].Param)
 }
 
-// TestBuildOSeriesOnOpenAIPreset covers controller ruling 2: the o-series
-// family's native vendor is the generic openai preset (standard
-// reasoning_effort body param), so o4-mini on the openai preset must still
-// get a tunable reasoning spec even though openai is a gateway stack.
 func TestBuildOSeriesOnOpenAIPreset(t *testing.T) {
 	api := build("openai", "o4-mini", "")
 	require.NotNil(t, api)
@@ -209,10 +185,6 @@ func TestBuildOSeriesOnOpenAIPreset(t *testing.T) {
 	require.Nil(t, api.Bindings[system.IntentReasoningDisable])
 }
 
-// TestBuildFamilyWinsOverStackTableForSameIntent covers precedence: when
-// both the family layer and the stack table bind the same intent, the
-// family's binding (the model-specific one) must win, not the stack's more
-// generic one.
 func TestBuildFamilyWinsOverStackTableForSameIntent(t *testing.T) {
 	api := build("ollama", "gpt-oss:120b", "")
 	effort := api.Bindings[system.IntentReasoningEffort]
@@ -220,9 +192,6 @@ func TestBuildFamilyWinsOverStackTableForSameIntent(t *testing.T) {
 	require.Equal(t, []string{"low", "medium", "high"}, effort.EnumValues, "family's enum values must win over the ollama stack table's [low medium high max none]")
 }
 
-// TestBuildResultDeepCopiesNestedValues covers the deep-copy invariant:
-// mutating a returned spec's nested map/slice values must not corrupt the
-// shared static tables that a subsequent Build reads from.
 func TestBuildResultDeepCopiesNestedValues(t *testing.T) {
 	a := build("vllm", "gpt-oss-120b", "")
 	jsonFormat, ok := a.Bindings[system.IntentResponseFormatJSON].Value.(map[string]any)
@@ -235,9 +204,6 @@ func TestBuildResultDeepCopiesNestedValues(t *testing.T) {
 	require.Equal(t, []string{"low", "medium", "high"}, b.Bindings[system.IntentReasoningEffort].EnumValues)
 }
 
-// TestBuildThinkingNameOverridesFamilyDefault covers the "-thinking" model
-// name override: a model name containing "thinking" reasons unconditionally
-// regardless of what its family would otherwise default to.
 func TestBuildThinkingNameOverridesFamilyDefault(t *testing.T) {
 	api := build("vllm", "qwen3-235b-a22b-thinking-2507", "")
 	require.NotNil(t, api.Thinking)
@@ -245,9 +211,6 @@ func TestBuildThinkingNameOverridesFamilyDefault(t *testing.T) {
 	require.Nil(t, api.Bindings[system.IntentReasoningDisable])
 }
 
-// TestBuildNameAwareFamilies covers families whose bindings depend on the
-// member: the inferred family is reported for every member, but only the
-// documented reasoning members get a thinking mode.
 func TestBuildNameAwareFamilies(t *testing.T) {
 	g4 := build("vllm", "google/gemma-4-31B-it", "")
 	require.Equal(t, "gemma", g4.ModelFamily)
@@ -259,7 +222,6 @@ func TestBuildNameAwareFamilies(t *testing.T) {
 	require.Nil(t, g3.Thinking)
 	require.Nil(t, g3.Bindings[system.IntentReasoningDisable])
 
-	// MedGemma 4B is Gemma 3 based: its 4B size token is not a Gemma 4 token.
 	mg := build("vllm", "google/medgemma-4b-it", "")
 	require.Equal(t, "gemma", mg.ModelFamily)
 	require.Nil(t, mg.Thinking)
@@ -276,8 +238,6 @@ func TestBuildNameAwareFamilies(t *testing.T) {
 	require.Equal(t, "disabled", m3.Bindings[system.IntentReasoningDisable].Value)
 	require.Equal(t, "enabled", m3.Bindings[system.IntentReasoningEnable].Value)
 
-	// On Ollama the string-valued kwarg toggle is rewritten onto the /v1
-	// reasoning_effort none/medium pair, like every other template-kwarg toggle.
 	m3o := build("ollama", "minimax-m3", "")
 	require.Equal(t, system.ThinkingModeControllable, m3o.Thinking.Mode)
 	require.Equal(t, system.BindingKindBodyParam, m3o.Bindings[system.IntentReasoningDisable].Kind)

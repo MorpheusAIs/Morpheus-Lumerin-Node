@@ -1,6 +1,5 @@
-// Package modelsfile loads a provider's models-config.json for diagnostics
-// commands, accepting both the V2 ({"models": [...]}) and the legacy
-// (modelId -> config map) layouts that config.ModelConfigLoader accepts.
+// Package modelsfile loads a models-config.json (V2 or legacy layout) for
+// diagnostics commands.
 package modelsfile
 
 import (
@@ -13,13 +12,11 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 )
 
-// Entry pairs a model ID with its backend config.
 type Entry struct {
 	ID  string
 	Cfg config.ModelConfig
 }
 
-// Load reads and parses the file, returning entries sorted by model ID.
 func Load(path string) ([]Entry, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -54,8 +51,6 @@ func Load(path string) ([]Entry, error) {
 	return entries, nil
 }
 
-// Filter keeps entries whose model name or ID contains needle
-// (case-insensitive); an empty needle keeps everything.
 func Filter(entries []Entry, needle string) []Entry {
 	if needle == "" {
 		return entries

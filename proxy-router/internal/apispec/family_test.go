@@ -45,30 +45,25 @@ func TestFamilyFromNameTable(t *testing.T) {
 }
 
 func TestBindingsForFamilyDefaults(t *testing.T) {
-	// qwen3 → template kwarg enable_thinking, both directions
 	_, b := bindingsForFamily("qwen3", "qwen3-32b")
 	require.Equal(t, "chat_template_kwargs.enable_thinking", b[system.IntentReasoningDisable].Param)
 	require.Equal(t, false, b[system.IntentReasoningDisable].Value)
 	require.Equal(t, true, b[system.IntentReasoningEnable].Value)
 
-	// name carrying "thinking" wins over the family default: not disableable
 	alwaysOn, b := bindingsForFamily("qwen3", "qwen3-235b-thinking-2507")
 	require.True(t, alwaysOn)
 	require.Empty(t, b)
 
-	// always-on reasoners
 	for _, f := range []string{"qwq", "deepseek-r1"} {
 		alwaysOn, _ := bindingsForFamily(f, "m")
 		require.True(t, alwaysOn, f)
 	}
 
-	// deepseek v3.1 and granite use the bare `thinking` kwarg
 	_, b = bindingsForFamily("deepseek-v3.1", "m")
 	require.Equal(t, "chat_template_kwargs.thinking", b[system.IntentReasoningDisable].Param)
 	_, b = bindingsForFamily("granite", "m")
 	require.Equal(t, "chat_template_kwargs.thinking", b[system.IntentReasoningDisable].Param)
 
-	// gpt-oss tunes effort only: no disable intent at all
 	_, b = bindingsForFamily("gpt-oss", "gpt-oss-120b")
 	require.Nil(t, b[system.IntentReasoningDisable])
 	effort := b[system.IntentReasoningEffort]
@@ -77,20 +72,16 @@ func TestBindingsForFamilyDefaults(t *testing.T) {
 	require.Equal(t, "enum", effort.ParamType)
 	require.ElementsMatch(t, []string{"low", "medium", "high"}, effort.EnumValues)
 
-	// seed-oss uses a numeric budget; 0 realizes disable
 	_, b = bindingsForFamily("seed-oss", "m")
 	require.Equal(t, "chat_template_kwargs.thinking_budget", b[system.IntentReasoningBudget].Param)
 	require.Equal(t, "number", b[system.IntentReasoningBudget].ParamType)
 	require.Equal(t, 0, b[system.IntentReasoningDisable].Value)
 
-	// nemotron toggles via system prompt text, both directions
 	_, b = bindingsForFamily("nemotron", "m")
 	require.Equal(t, system.BindingKindSystemPrompt, b[system.IntentReasoningDisable].Kind)
 	require.NotEmpty(t, b[system.IntentReasoningDisable].Hint)
 	require.NotEmpty(t, b[system.IntentReasoningEnable].Hint)
 
-	// hosted API families
-	// claude defaults depend on the model generation
 	_, b = bindingsForFamily("claude", "claude-opus-4-6")
 	require.Equal(t, map[string]any{"type": "disabled"}, b[system.IntentReasoningDisable].Value)
 	require.Equal(t, map[string]any{"type": "adaptive"}, b[system.IntentReasoningEnable].Value)
@@ -114,7 +105,6 @@ func TestBindingsForFamilyDefaults(t *testing.T) {
 	require.Equal(t, "generationConfig.thinkingConfig.thinkingBudget", b[system.IntentReasoningDisable].Param)
 	require.Equal(t, 0, b[system.IntentReasoningDisable].Value)
 
-	// plain families have no bindings
 	for _, f := range []string{"llama", "mistral", ""} {
 		alwaysOn, b := bindingsForFamily(f, "m")
 		require.False(t, alwaysOn, f)
@@ -144,7 +134,6 @@ func TestBindingsFromTemplate(t *testing.T) {
 	require.Equal(t, "chat_template_kwargs.thinking", bindingsFromTemplate(deepseekV31Template)[system.IntentReasoningDisable].Param)
 	require.Equal(t, "chat_template_kwargs.reasoning_effort", bindingsFromTemplate(`{% if reasoning_effort %}x{% endif %}`)[system.IntentReasoningEffort].Param)
 	require.Equal(t, "chat_template_kwargs.thinking_budget", bindingsFromTemplate(`{% set b = thinking_budget %}`)[system.IntentReasoningBudget].Param)
-	// the bare word only counts inside a {% %} statement, not in prose
 	require.Nil(t, bindingsFromTemplate("You are a thinking assistant. {{ messages }}"))
 	require.Nil(t, bindingsFromTemplate(""))
 }

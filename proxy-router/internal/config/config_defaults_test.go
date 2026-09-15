@@ -8,8 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// SetDefaults dereferences the pointer fields the env loader allocates, so a
-// hand-built Config must allocate them too.
+// SetDefaults dereferences these; a hand-built Config must allocate them.
 func newConfigForDefaults() *Config {
 	cfg := &Config{}
 	cfg.Blockchain.Multicall3Addr = &common.Address{}
@@ -19,7 +18,6 @@ func newConfigForDefaults() *Config {
 	return cfg
 }
 
-// R6: MODEL_API_DETECT_ENABLED defaults to true and an explicit false survives.
 func TestSetDefaultsModelApiDetectEnabled(t *testing.T) {
 	cfg := newConfigForDefaults()
 	cfg.SetDefaults()

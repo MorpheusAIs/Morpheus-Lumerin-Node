@@ -1,17 +1,5 @@
-// Package apidetect identifies, at runtime, what API actually serves a
-// configured model backend: the serving stack or hosted vendor (vLLM, SGLang,
-// llama.cpp, Ollama, TGI, LM Studio, KoboldCpp, LiteLLM, OpenRouter, Venice,
-// OpenAI, Anthropic, ...), the model family and — where derivable — the knob
-// that controls thinking. Detection is non-inference introspection: hostname
-// recognition, distinctive service endpoints (/props, /api/tags,
-// /get_model_info, /info, /version, /health/liveliness, ...), chat-template
-// source parsing and registry model listings. No inference request is ever
-// sent. The package only gathers apispec.Evidence; apispec.Compose turns it
-// into the spec, so the stack/family/binding knowledge lives in one place.
-//
-// Results feed system.ModelHealthReport.Api (source: detected) and therefore
-// surface on the public /healthcheck endpoint and in the morrpc pong models
-// list. Everything reported is self-observed and unverified.
+// Package apidetect identifies, without sending inference requests, the API
+// serving a configured model backend and hands the evidence to apispec.
 package apidetect
 
 import (
@@ -34,46 +22,23 @@ import (
 )
 
 const (
-	// cacheTTL bounds how long a detection result is reused before the
-	// backend is re-inspected, so config/backend changes surface without a
-	// restart while sweeps stay cheap.
-	cacheTTL = 30 * time.Minute
-	// probeTimeout caps each individual probe request.
-	probeTimeout = 2 * time.Second
-	// detectTimeout caps one whole detection pass when the caller's context
-	// has no earlier deadline.
+	cacheTTL      = 30 * time.Minute
+	probeTimeout  = 2 * time.Second
 	detectTimeout = 10 * time.Second
-	// cacheSweepAt is the cache size at which expired entries are evicted on
-	// insert; when that frees nothing the oldest entries go down to half of
-	// it, so key rotation or config churn cannot grow the cache unbounded.
-	cacheSweepAt = 256
+	cacheSweepAt  = 256
 )
 
-// stackFromHost is apispec.StackFromHost behind a variable so tests can map
-// an httptest host to a hosted vendor.
+// Variable so tests can map an httptest host to a vendor.
 var stackFromHost = apispec.StackFromHost
 
-// Options tunes a Detector. Production wiring uses DefaultOptions.
 type Options struct {
-	// IgnoreHostVendors disables hostname recognition so hosted vendors are
-	// identified purely by their endpoints and model-listing shape, as an
-	// unknown custom domain would be. Diagnostics only (cmd/apidetect
-	// -ignore-host); leave false in the sweep path. Does not apply to the
-	// LiteLLM second hop, where recognising api_base's host is the point of
-	// the hop.
+	// Diagnostics only. Not applied to the LiteLLM second hop, where
+	// recognising api_base's host is the point.
 	IgnoreHostVendors bool
-	// ProbeTimeout overrides the 2 s per-probe timeout (tests only; 0 keeps
-	// the default).
-	ProbeTimeout time.Duration
-	// TwoHop follows a LiteLLM proxy to the deployment behind the model
-	// (GET /model/info) and reads its upstream once, without credentials:
-	// an identified upstream becomes the reported stack (via litellm),
-	// otherwise the hop yields family / reasoning evidence only. Production
-	// default: on.
-	TwoHop bool
+	ProbeTimeout      time.Duration
+	TwoHop            bool
 }
 
-// DefaultOptions is the production configuration.
 func DefaultOptions() Options { return Options{TwoHop: true} }
 
 type cacheEntry struct {
@@ -81,14 +46,8 @@ type cacheEntry struct {
 	at  time.Time
 }
 
-// Detector performs cached runtime API detection for model backends.
 type Detector struct {
-	log lib.ILogger
-	// client serves the probes against the configured backend (own host,
-	// provider key). hopClient serves the LiteLLM second hop only: same
-	// timeout and redirect policy, but its dialer refuses the addresses
-	// hopAddrAllowed refuses, so a third-party api_base whose hostname
-	// resolves to a link-local or multicast address is stopped at dial time.
+	log       lib.ILogger
 	client    *http.Client
 	hopClient *http.Client
 	opts      Options
@@ -113,8 +72,6 @@ func NewDetector(log lib.ILogger, opts Options) *Detector {
 	}
 }
 
-// clientFor returns the client a request under ctx goes through: the hop
-// client for the LiteLLM second hop (hopCtxKey), the probe client otherwise.
 func (d *Detector) clientFor(ctx context.Context) *http.Client {
 	if ctx.Value(hopCtxKey{}) != nil {
 		return d.hopClient
@@ -122,13 +79,8 @@ func (d *Detector) clientFor(ctx context.Context) *http.Client {
 	return d.client
 }
 
-// refuseCrossHostRedirect is the probe client's redirect policy: probes may
-// carry the configured bearer key, so a redirect is followed only to the
-// same host (host:port as written) over the same or a better scheme — a
-// trailing-slash 301 and the like. One to another host, a subdomain or
-// another port included, or from https down to http is not followed: the
-// redirect response itself is returned (ErrUseLastResponse), which the
-// probes treat as a non-2xx miss. The standard 10-hop cap is kept.
+// Probes may carry the configured bearer key: a redirect to another
+// host:port, or from https down to http, is not followed.
 func refuseCrossHostRedirect(req *http.Request, via []*http.Request) error {
 	if len(via) >= 10 {
 		return errors.New("stopped after 10 redirects")
@@ -140,13 +92,6 @@ func refuseCrossHostRedirect(req *http.Request, via []*http.Request) error {
 	return nil
 }
 
-// Detect returns the API spec of cfg's backend, or nil when nothing could be
-// determined. A declared apiStack short-circuits to the static apispec.Build
-// (explicit declaration wins, before anything else is looked at; the backend
-// is not probed). Detection results are cached per (apiUrl, modelName,
-// apiStack, modelFamily, apiKey) for the cache TTL; a pass cut short by the
-// caller's deadline is returned but not cached. The returned spec is the
-// caller's own copy. Safe for concurrent use.
 func (d *Detector) Detect(ctx context.Context, cfg config.ModelConfig) *system.ModelApiSpec {
 	if apispec.StackFor(cfg.ApiStack) != "" {
 		return apispec.Build(cfg)
@@ -186,9 +131,6 @@ func (d *Detector) Detect(ctx context.Context, cfg config.ModelConfig) *system.M
 			}
 		}
 		if len(d.cache) >= cacheSweepAt {
-			// Still full of fresh entries (keys rotating faster than the
-			// TTL): evict the oldest down to half the threshold so the cache
-			// stays bounded whatever the churn.
 			keys := make([]string, 0, len(d.cache))
 			for k := range d.cache {
 				keys = append(keys, k)
@@ -204,10 +146,6 @@ func (d *Detector) Detect(ctx context.Context, cfg config.ModelConfig) *system.M
 	return api.Clone()
 }
 
-// DetectWithTrace runs one fresh detection pass (bypassing and not touching
-// the cache) and returns, alongside the result, the human-readable steps that
-// produced it: every probe attempted, what it returned, and which evidence
-// source decided the family and thinking knob. Diagnostics tooling only.
 func (d *Detector) DetectWithTrace(ctx context.Context, cfg config.ModelConfig) (*system.ModelApiSpec, []string) {
 	if stack := apispec.StackFor(cfg.ApiStack); stack != "" {
 		return apispec.Build(cfg), []string{fmt.Sprintf("apiStack %q declared in models-config: static spec, no probing", stack)}
@@ -227,7 +165,6 @@ func (d *Detector) DetectWithTrace(ctx context.Context, cfg config.ModelConfig) 
 	return api, trace.lines
 }
 
-// detect gathers evidence over HTTP and hands it to the composer.
 func (d *Detector) detect(ctx context.Context, cfg config.ModelConfig) *system.ModelApiSpec {
 	ev := apispec.Evidence{ModelName: cfg.ModelName, ModelFamily: cfg.ModelFamily}
 
@@ -245,9 +182,6 @@ func (d *Detector) detect(ctx context.Context, cfg config.ModelConfig) *system.M
 			apiURLText = RedactURL(cfg.ApiURL)
 		}
 		tracef(ctx, "host of %s is not a known hosted vendor; fingerprinting engines at %v", apiURLText, bases)
-		// Self-hosted or unrecognized host: fingerprint the engine, and when
-		// that yields nothing, check for a registry-shaped model listing
-		// (OpenRouter-compatible proxies on custom domains).
 		d.fingerprintEngines(ctx, bases, cfg.ModelName, cfg.ApiKey, &ev, true)
 		if ev.Stack == "" {
 			tracef(ctx, "no engine fingerprint matched; checking for a registry-shaped model listing")
@@ -268,22 +202,11 @@ func (d *Detector) detect(ctx context.Context, cfg config.ModelConfig) *system.M
 		return nil
 	}
 
-	// A detected stack must be one the model's transport adapter can speak
-	// to: a preset whose transport (config.StackTransport) is not cfg.ApiType
-	// cannot be what serves this model, so the stack and everything in its
-	// vocabulary (bindings, parameters, the gateway it was reached through)
-	// go, exactly as for an undetermined stack (R4). This check only applies
-	// to a stack reached directly (api.Via == ""): when the stack is an
-	// upstream the LiteLLM second hop identified (api.Via == "litellm"), the
-	// wire transport the proxy-router actually speaks is LiteLLM's own
-	// OpenAI-compatible surface, not the preset's documented one — an
-	// identified anthropic upstream, for example, is still reached over
-	// cfg.ApiType "openai" (LiteLLM is what speaks Anthropic Messages to it),
-	// so config.StackTransport["anthropic"] == "claudeai" says nothing about
-	// whether this model's transport can reach it. The family and an
-	// always_on thinking mode are facts about the model, not the wire, and
-	// stay; when neither is known there is no api block, as the composer
-	// would have decided.
+	// A stack whose transport is not cfg.ApiType cannot be what this model
+	// speaks to, so it and its vocabulary go. Not applied behind a gateway
+	// (Via set): the wire is then LiteLLM's OpenAI-compatible surface whatever
+	// the upstream's own transport. Family and always_on describe the model,
+	// not the wire, and stay.
 	if transport, ok := config.StackTransport[api.Stack]; ok && transport != cfg.ApiType && api.Via == "" {
 		tracef(ctx, "detected stack %q speaks %q but apiType is %q — stack dropped", api.Stack, transport, cfg.ApiType)
 		api.Stack = ""
@@ -301,23 +224,16 @@ func (d *Detector) detect(ctx context.Context, cfg config.ModelConfig) *system.M
 	return api
 }
 
-// cacheKey identifies a backend for result caching. The API key is folded
-// in as a hash so a rotated key re-inspects the backend instead of reusing a
-// result that may have failed auth; apiStack and modelFamily are part of the
-// key because they change what is composed.
+// The key hash is part of the cache key so a rotated key re-inspects a
+// backend whose cached result may have failed auth.
 func cacheKey(cfg config.ModelConfig) string {
 	sum := sha256.Sum256([]byte(cfg.ApiKey))
 	return strings.Join([]string{cfg.ApiURL, cfg.ModelName, cfg.ApiStack, cfg.ModelFamily, hex.EncodeToString(sum[:8])}, "|")
 }
 
-// redactedURL replaces a URL that does not parse (or has no host) in logs
-// and traces: the raw input is never echoed, since it may be a pasted
-// secret rather than a URL.
 const redactedURL = "<unparseable url>"
 
-// RedactURL strips userinfo and query from a URL for logs and traces, so
-// credentials embedded in a configured endpoint never surface. Input that
-// is not a URL with a host is replaced by redactedURL, never echoed.
+// Input that is not a URL with a host may be a pasted secret: never echoed.
 func RedactURL(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" {

@@ -33,10 +33,6 @@ func TestStackFromHost(t *testing.T) {
 	}
 }
 
-// Gated: gateways, hosted vendors and the detected-only engines (tgi,
-// lmstudio, koboldcpp — no preset table documents that they honour the
-// family's template kwargs). Not gated: the preset engines and an
-// undetermined stack (which Compose skips on its own).
 func TestGatedStack(t *testing.T) {
 	for _, s := range []string{"venice", "openrouter", "litellm", "anthropic", "openai", "groq", "together", "gemini", "moonshot", "tgi", "lmstudio", "koboldcpp"} {
 		require.True(t, gatedStack(s), s)

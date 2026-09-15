@@ -29,9 +29,6 @@ func TestModelConfigModelFamilyAndApiStackAreOptional(t *testing.T) {
 	require.Equal(t, "", cfg.ApiStack)
 }
 
-// StackTransport is the single preset→adapter table: exactly the nine
-// presets, all on the openai adapter except anthropic on claudeai, and no
-// legacy adapter names (those are apiType values, not stacks).
 func TestStackTransportTable(t *testing.T) {
 	require.Len(t, StackTransport, 9)
 	for _, stack := range []string{"openai", "vllm", "sglang", "llamacpp", "ollama", "venice", "openrouter", "litellm"} {
@@ -43,9 +40,6 @@ func TestStackTransportTable(t *testing.T) {
 	}
 }
 
-// IsChatTransport must accept exactly the transports StackTransport actually
-// serves chat over, and reject a legacy image-only apiType and the empty
-// value.
 func TestIsChatTransport(t *testing.T) {
 	require.True(t, IsChatTransport("openai"))
 	require.True(t, IsChatTransport("claudeai"))
@@ -62,7 +56,6 @@ func TestValidateApiStackAcceptsEveryPresetOnItsTransport(t *testing.T) {
 func TestValidateApiStackRejectsUnknown(t *testing.T) {
 	err := ValidateApiStack("0x01", ModelConfig{ApiType: "openai", ApiStack: "bogus"})
 	require.EqualError(t, err, `model 0x01: unknown apiStack "bogus"`)
-	// a legacy adapter name is an apiType, never an apiStack
 	err = ValidateApiStack("0x02", ModelConfig{ApiType: "claudeai", ApiStack: "claudeai"})
 	require.EqualError(t, err, `model 0x02: unknown apiStack "claudeai"`)
 }
@@ -79,10 +72,6 @@ func TestValidateApiStackEmptyIsAcceptedForEveryLegacyApiType(t *testing.T) {
 		require.NoError(t, ValidateApiStack("0x01", ModelConfig{ApiType: legacy}), legacy)
 	}
 }
-
-// --- Init()-level coverage: the loader applies ValidateApiStack on both
-// config shapes, stores the normalized value, and degrades a model with an
-// invalid apiStack (field cleared, model kept) instead of rejecting the file.
 
 type noopValidator struct{}
 
@@ -116,10 +105,6 @@ func TestInitV2AcceptsApiStackAndLegacyApiTypes(t *testing.T) {
 	require.Equal(t, "", l.ModelConfigFromID("0x03").ApiStack)
 }
 
-// An invalid apiStack is a mistake in an advertisement-only field: the loader
-// logs it, clears the field for that model and keeps serving every model.
-// Rejecting the file would silently serve nothing, because main.go only
-// warns on an Init error.
 func TestInitV2IgnoresBadApiStackAndKeepsEveryModel(t *testing.T) {
 	l := newTestLoader(t, `{"models":[
 		{"modelId":"0x01","modelName":"ok","apiType":"openai","apiStack":"vllm","apiUrl":"http://h/v1"},
@@ -144,9 +129,6 @@ func TestInitLegacyMapIgnoresUnknownApiStack(t *testing.T) {
 	require.Equal(t, "m", l.ModelConfigFromID("0x01").ModelName)
 }
 
-// apiStack is trimmed and lowercased before validation, so " vLLM " is the
-// vllm preset and a whitespace-only value means unset — a stray space in an
-// existing file must not change what the provider serves.
 func TestValidateApiStackNormalizesWhitespaceAndCase(t *testing.T) {
 	require.Equal(t, "vllm", NormalizeApiStack(" vLLM\t"))
 	require.Equal(t, "", NormalizeApiStack("   "))
@@ -155,7 +137,6 @@ func TestValidateApiStackNormalizesWhitespaceAndCase(t *testing.T) {
 	for _, legacy := range []string{"openai", "claudeai", "prodia-sd", "prodia-sdxl", "prodia-v2", "hyperbolic-sd"} {
 		require.NoError(t, ValidateApiStack("0x01", ModelConfig{ApiType: legacy, ApiStack: " "}), legacy)
 	}
-	// errors report the normalized value
 	require.EqualError(t, ValidateApiStack("0x02", ModelConfig{ApiType: "openai", ApiStack: " Bogus "}), `model 0x02: unknown apiStack "bogus"`)
 	require.EqualError(t, ValidateApiStack("0x03", ModelConfig{ApiType: "openai", ApiStack: "ANTHROPIC"}), `model 0x03: apiStack "anthropic" requires apiType "claudeai", got "openai"`)
 }

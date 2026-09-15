@@ -19,7 +19,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// requestLog records every request a fake server saw.
 type requestLog struct {
 	mu      sync.Mutex
 	paths   []string
@@ -65,8 +64,6 @@ func (l *requestLog) requireAnonymous(t *testing.T) {
 	}
 }
 
-// loggingServer serves mux and records every request, handled or not (a
-// 404 on a probe is still a request the upstream saw).
 func loggingServer(t *testing.T, mux *http.ServeMux) (*httptest.Server, *requestLog) {
 	t.Helper()
 	log := &requestLog{}
@@ -78,8 +75,6 @@ func loggingServer(t *testing.T, mux *http.ServeMux) (*httptest.Server, *request
 	return srv, log
 }
 
-// litellmServer fakes a LiteLLM proxy: liveliness, one model group and the
-// /model/info deployment list.
 func litellmServer(t *testing.T, group map[string]any, deployments []map[string]any) (*httptest.Server, *requestLog) {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -89,7 +84,6 @@ func litellmServer(t *testing.T, group map[string]any, deployments []map[string]
 	return loggingServer(t, mux)
 }
 
-// registryServer fakes a Venice- or OpenRouter-shaped /api/v1/models listing.
 func registryServer(t *testing.T, entry map[string]any, status int) (*httptest.Server, *requestLog) {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -103,8 +97,6 @@ func registryServer(t *testing.T, entry map[string]any, status int) (*httptest.S
 	return loggingServer(t, mux)
 }
 
-// ollamaServer fakes an Ollama at an arbitrary (unrecognised) host: /api/tags
-// plus /api/show for the model, with the given capabilities.
 func ollamaServer(t *testing.T, arch string, capabilities []string) (*httptest.Server, *requestLog) {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -117,7 +109,6 @@ func ollamaServer(t *testing.T, arch string, capabilities []string) (*httptest.S
 	return loggingServer(t, mux)
 }
 
-// vllmServer fakes a vLLM: /version plus a /v1/models listing serving id.
 func vllmServer(t *testing.T, id string) (*httptest.Server, *requestLog) {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -130,8 +121,6 @@ func veniceEntry(id string, reasons bool) map[string]any {
 	return map[string]any{"id": id, "model_spec": map[string]any{"capabilities": map[string]any{"supportsReasoning": reasons}}}
 }
 
-// mapHostToVendor makes stackFromHost recognise srvURL's host as vendor for
-// the duration of the test (httptest hosts are never real vendor hostnames).
 func mapHostToVendor(t *testing.T, srvURL, vendor string) {
 	t.Helper()
 	prev := stackFromHost
@@ -166,13 +155,6 @@ func detectVia(t *testing.T, litellmURL, modelName string, opts Options) (*syste
 	return api, strings.Join(trace, "\n")
 }
 
-// requireLiteLLMVocabulary asserts the evidence-only outcome (an upstream
-// that stays behind `stack: litellm`): the bindings are exactly what a
-// declared litellm preset advertises for referenceModel (a name of the
-// family detection found), minus the knobs rooted at a standard OpenAI
-// param the group's supported list does not carry (CR4/U3) — nothing from
-// the upstream's own vocabulary (venice_parameters.*, OpenRouter's
-// reasoning.*, chat_template_kwargs.*, Ollama's native knobs or hints).
 func requireLiteLLMVocabulary(t *testing.T, api *system.ModelApiSpec, referenceModel string, supported []string) {
 	t.Helper()
 	require.Equal(t, "litellm", api.Stack)
@@ -185,7 +167,7 @@ func requireLiteLLMVocabulary(t *testing.T, api *system.ModelApiSpec, referenceM
 		listed[p] = true
 	}
 	standard := map[string]bool{}
-	for _, p := range declared.Parameters { // the litellm table is the standard OpenAI surface
+	for _, p := range declared.Parameters {
 		standard[p] = true
 	}
 	expected := map[string]*system.ParamBinding{}
@@ -206,14 +188,6 @@ func requireLiteLLMVocabulary(t *testing.T, api *system.ModelApiSpec, referenceM
 	}
 }
 
-// R5 happy path, as reversed by CR4/U1: LiteLLM -> openai/<model> at a
-// Venice api_base -> Venice says the model reasons. Family from the upstream
-// id, reasoning from the hop, key never sent upstream — and the identified
-// upstream is the reported stack (via litellm), so the knobs are Venice's
-// own, narrowed to what LiteLLM forwards for the group (noReasoningGroup
-// lists reasoning_effort, so Venice's effort knob survives; response_format,
-// stream_options and parallel_tool_calls are not listed and go). LiteLLM's
-// own map says supports_reasoning=false: the upstream wins (OQ4, OR).
 func TestDetectLiteLLMTwoHopVeniceReasoning(t *testing.T) {
 	venice, veniceLog := registryServer(t, veniceEntry("qwen3-235b", true), 0)
 	mapHostToVendor(t, venice.URL, "venice")
@@ -248,10 +222,8 @@ func TestDetectLiteLLMTwoHopVeniceReasoning(t *testing.T) {
 	require.NotContains(t, trace, "sk-litellm")
 }
 
-// registryServerMulti fakes a Venice- or OpenRouter-shaped /api/v1/models
-// listing with more than one entry, unlike registryServer's single entry: it
-// mirrors Venice's real listing shape (100+ models), where matchModelEntry's
-// single-entry-list fallback cannot mask a matching bug.
+// Multi-entry listing, so matchModelEntry's single-entry fallback cannot
+// mask a matching bug.
 func registryServerMulti(t *testing.T, entries ...map[string]any) (*httptest.Server, *requestLog) {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -259,13 +231,6 @@ func registryServerMulti(t *testing.T, entries ...map[string]any) (*httptest.Ser
 	return loggingServer(t, mux)
 }
 
-// Venice appends inline "key=value" parameters to the model id behind a
-// LiteLLM deployment (observed live:
-// "openai/deepseek-v4-pro:include_venice_system_prompt=false"). With a
-// multi-entry listing (so the single-entry fallback cannot apply) the bare
-// id must still match Venice's listing entry: family "deepseek" from the
-// bare id, reasoning from the hop, Venice as the stack (via litellm, CR4)
-// with its own knobs, and the raw suffixed id traced exactly once.
 func TestDetectLiteLLMTwoHopVeniceInlineParamsMatchByBareID(t *testing.T) {
 	venice, veniceLog := registryServerMulti(t,
 		veniceEntry("deepseek-v4-pro", true),
@@ -291,12 +256,6 @@ func TestDetectLiteLLMTwoHopVeniceInlineParamsMatchByBareID(t *testing.T) {
 	require.Contains(t, trace, `upstream model "deepseek-v4-pro:include_venice_system_prompt=false"`, "the raw suffixed id is still traced once")
 }
 
-// CR4/U1: an OpenRouter upstream (recognised by hostname, confirmed by its
-// listing shape) becomes the stack, via litellm: OpenRouter's reasoning
-// object (root `reasoning`, not a standard OpenAI name) is forwarded by
-// LiteLLM as a provider kwarg, and so is top_a. The listing's own parameter
-// list still never crosses the hop; parameters are the openrouter table
-// narrowed to LiteLLM's supported list.
 func TestDetectLiteLLMTwoHopOpenRouterBecomesStack(t *testing.T) {
 	openrouter, orLog := registryServer(t, map[string]any{"id": "deepseek/deepseek-chat-v3.1", "supported_parameters": []string{"temperature", "reasoning", "tools"}}, 0)
 	mapHostToVendor(t, openrouter.URL, "openrouter")
@@ -319,8 +278,6 @@ func TestDetectLiteLLMTwoHopOpenRouterBecomesStack(t *testing.T) {
 	require.Contains(t, trace, "upstream openrouter identified: it becomes the stack (via litellm)")
 }
 
-// Upstream rejects the anonymous request: the hop is skipped silently and
-// the bare upstream id still decides the family.
 func TestDetectLiteLLMTwoHopUpstream401FamilyFromIdOnly(t *testing.T) {
 	venice, veniceLog := registryServer(t, nil, http.StatusUnauthorized)
 	mapHostToVendor(t, venice.URL, "venice")
@@ -337,10 +294,6 @@ func TestDetectLiteLLMTwoHopUpstream401FamilyFromIdOnly(t *testing.T) {
 }
 
 func TestDetectLiteLLMTwoHopUpstreamIdRefinesFamily(t *testing.T) {
-	// anthropic/ needs no api_base (U7): recognised by its documented litellm
-	// prefix alone, it becomes the stack (via litellm) with claude's own
-	// native knobs — unlike bedrock/ below, a documented cloud prefix that
-	// never becomes a stack of its own.
 	litellm, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "anthropic/claude-opus-4-6", "", nil)})
 	api, _ := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
 	require.Equal(t, "anthropic", api.Stack)
@@ -357,9 +310,6 @@ func TestDetectLiteLLMTwoHopUpstreamIdRefinesFamily(t *testing.T) {
 	require.Equal(t, system.ThinkingModeAlwaysOn, r1.Thinking.Mode)
 }
 
-// A documented cloud / hosted-vendor prefix (bedrock/, azure/, groq/, ...)
-// is recognised only so the bare model id can be taken: its upstream is
-// never probed, even when the deployment carries an api_base.
 func TestDetectLiteLLMTwoHopDocumentedCloudPrefixIsNotProbed(t *testing.T) {
 	upstream, upLog := registryServer(t, veniceEntry("deepseek-r1-distill", true), 0)
 	litellm, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "bedrock/converse/deepseek-r1-distill", upstream.URL+"/api/v1", nil)})
@@ -372,11 +322,6 @@ func TestDetectLiteLLMTwoHopDocumentedCloudPrefixIsNotProbed(t *testing.T) {
 	require.Contains(t, trace, `provider "bedrock"`)
 	require.Contains(t, trace, "upstream not probed")
 
-	// anthropic/ is never read either (no request at all — U7), but unlike
-	// bedrock/azure/groq/... it does become the stack (via litellm): LiteLLM
-	// still translates the OpenAI-shaped request it receives into an
-	// Anthropic Messages call upstream, so the anthropic table is the right
-	// vocabulary even though nothing was read to confirm it.
 	litellm2, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "anthropic/claude-opus-4-6", upstream.URL, nil)})
 	api, trace = detectVia(t, litellm2.URL, "my-chat", DefaultOptions())
 	require.Equal(t, "anthropic", api.Stack)
@@ -386,10 +331,6 @@ func TestDetectLiteLLMTwoHopDocumentedCloudPrefixIsNotProbed(t *testing.T) {
 	require.Contains(t, trace, "upstream anthropic recognised")
 }
 
-// R5(c): at most one hop — an upstream that is itself LiteLLM is never
-// followed. At an unrecognised openai/ host the engine fingerprint (OQ3)
-// identifies it by its liveliness endpoint and stops there: its model group
-// and deployments are never read, no credential is ever sent.
 func TestDetectLiteLLMTwoHopUpstreamLiteLLMIsNotFollowed(t *testing.T) {
 	t.Run("openai prefix at an unrecognised host", func(t *testing.T) {
 		upstream, upLog := litellmServer(t, noReasoningGroup, []map[string]any{deployment("qwen3-32b", "openai/qwen3-32b", "", nil)})
@@ -422,10 +363,6 @@ func TestDetectLiteLLMTwoHopUpstreamLiteLLMIsNotFollowed(t *testing.T) {
 	})
 }
 
-// A hosted_vllm/ upstream confirmed by /version becomes the stack (CR4):
-// the served id names the family, vllm's own table applies (an always-on
-// family keeps only reasoning.format), parameters are vllm's documented
-// list narrowed to LiteLLM's supported list.
 func TestDetectLiteLLMTwoHopVLLMServedID(t *testing.T) {
 	vllm, vllmLog := vllmServer(t, "deepseek-ai/DeepSeek-R1")
 	litellm, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "hosted_vllm/local-model", vllm.URL, nil)})
@@ -487,8 +424,6 @@ func TestDetectLiteLLMTwoHopFirstCaseInsensitiveMatchWins(t *testing.T) {
 	require.Equal(t, "llama", api.ModelFamily)
 }
 
-// openai/ without api_base is OpenAI itself: nothing to probe, the bare id
-// still names the family.
 func TestDetectLiteLLMTwoHopNoApiBaseIsNotProbed(t *testing.T) {
 	litellm, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "openai/gpt-4o", "", nil)})
 	api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
@@ -497,7 +432,6 @@ func TestDetectLiteLLMTwoHopNoApiBaseIsNotProbed(t *testing.T) {
 	require.Contains(t, trace, "has no api_base; upstream not probed")
 }
 
-// R5(e): api_base is redacted and an upstream key is never printed.
 func TestDetectLiteLLMTwoHopTraceRedaction(t *testing.T) {
 	venice, _ := registryServer(t, veniceEntry("qwen3-235b", true), 0)
 	mapHostToVendor(t, venice.URL, "venice")
@@ -512,11 +446,6 @@ func TestDetectLiteLLMTwoHopTraceRedaction(t *testing.T) {
 	require.Contains(t, trace, RedactURL(withCreds))
 }
 
-// Same credentialed api_base form as above, but the host is not mapped to
-// any vendor: the second hop takes the "unrecognised host" fingerprint
-// branch, whose "fingerprinting engines at …" line prints parsed base
-// candidates rather than going through RedactURL directly — this pins that
-// it still carries no userinfo either.
 func TestDetectLiteLLMTwoHopTraceRedactionUnrecognisedHost(t *testing.T) {
 	dead, _ := loggingServer(t, http.NewServeMux())
 	withCreds := strings.Replace(dead.URL, "http://", "http://user:URLSECRET@", 1) + "/v1?key=QUERYSECRET"
@@ -544,12 +473,6 @@ func TestDetectLiteLLMTwoHopDisabled(t *testing.T) {
 	require.True(t, DefaultOptions().TwoHop, "production wiring follows the hop")
 }
 
-// OQ2, kept by the CR4 exception: an ollama/ or ollama_chat/ upstream is
-// read once, anonymously — /api/show gives the architecture (family) and
-// the thinking capability says the model reasons — as gateway evidence,
-// never as Ollama's own capability path, and the stack stays litellm
-// (LiteLLM's ollama providers speak the native API, not the /v1 surface the
-// ollama table describes), so the bindings stay litellm's.
 func TestDetectLiteLLMTwoHopOllamaCapability(t *testing.T) {
 	for _, prefix := range []string{"ollama", "ollama_chat"} {
 		t.Run(prefix, func(t *testing.T) {
@@ -587,10 +510,6 @@ func TestDetectLiteLLMTwoHopOllamaCapability(t *testing.T) {
 	})
 }
 
-// OQ3: openai/ at a host that is no recognised vendor is fingerprinted like
-// a self-hosted engine, anonymously. A confirmed engine becomes the stack
-// (CR4); ollama stays evidence-only and an unanswered host leaves the stack
-// litellm.
 func TestDetectLiteLLMTwoHopUnknownHostIsFingerprinted(t *testing.T) {
 	t.Run("ollama behind openai/", func(t *testing.T) {
 		ollama, ollamaLog := ollamaServer(t, "qwen3", []string{"thinking"})
@@ -638,9 +557,6 @@ func TestDetectLiteLLMTwoHopUnknownHostIsFingerprinted(t *testing.T) {
 	})
 }
 
-// Hop budget: a slow upstream cannot cost hop-1 its evidence — the hop is
-// cut off after its own budget, the trace says so and the litellm result
-// (stack, parameters, family from the bare id) stands.
 func TestDetectLiteLLMTwoHopTimeoutKeepsFirstHopEvidence(t *testing.T) {
 	prev := hopTimeout
 	hopTimeout = 150 * time.Millisecond
@@ -670,7 +586,6 @@ func TestDetectLiteLLMTwoHopTimeoutKeepsFirstHopEvidence(t *testing.T) {
 	require.Contains(t, trace, "second hop timed out after 150ms; hop-1 evidence stands")
 	slowLog.requireAnonymous(t)
 
-	// The detection itself was not cut short: the result is cacheable.
 	cached := d.Detect(context.Background(), cfg)
 	require.Equal(t, "litellm", cached.Stack)
 	d.mu.Lock()
@@ -678,12 +593,6 @@ func TestDetectLiteLLMTwoHopTimeoutKeepsFirstHopEvidence(t *testing.T) {
 	d.mu.Unlock()
 }
 
-// R5 addendum end-to-end with the hop in place: supported_reasoning_efforts
-// still narrows the litellm effort enum (OQ1 value rule included) after
-// probeLiteLLM falls through to the second hop — when the stack stays
-// litellm (here: an upstream nothing answers at). An identified upstream
-// (CR4) is composed with its own table instead: Venice's documented enum
-// stands and the efforts list is not applied to it.
 func TestDetectLiteLLMTwoHopKeepsSupportedReasoningEfforts(t *testing.T) {
 	group := map[string]any{
 		"model_group": "my-chat", "supported_openai_params": []string{"temperature", "reasoning_effort"},
@@ -721,14 +630,6 @@ func TestDetectLiteLLMTwoHopKeepsSupportedReasoningEfforts(t *testing.T) {
 	})
 }
 
-// Controller ruling: hopAllowed gates the second hop's target by scheme and
-// address before any request is sent. Non-http(s) schemes and the classic
-// SSRF literal-IP ranges (unspecified, link-local unicast/multicast,
-// multicast — cloud metadata, mDNS, ...) are refused, zoned IPv6 literals
-// and v4-mapped IPv6 forms included. Loopback and private (RFC1918 and
-// equivalent) addresses stay allowed: self-hosted vLLM/Ollama upstreams
-// legitimately live there. A hostname passes the URL gate — what it resolves
-// to is checked at dial time (TestHopDialControl).
 func TestHopAllowed(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -755,11 +656,6 @@ func TestHopAllowed(t *testing.T) {
 	}
 }
 
-// The dial-time gate: the second hop's dialer runs hopDialControl on the
-// resolved address, so a hostname that resolves to a refused range (DNS
-// rebinding, 169.254.169.254.nip.io and the like) is stopped before the
-// connection is made. Exercised on address strings only — no DNS, no
-// network.
 func TestHopDialControl(t *testing.T) {
 	refused := []string{"169.254.169.254:80", "[fe80::1%eth0]:80", "0.0.0.0:80", "[ff02::1]:80", "[::ffff:169.254.169.254]:80"}
 	for _, addr := range refused {
@@ -774,15 +670,10 @@ func TestHopDialControl(t *testing.T) {
 			require.NoError(t, hopDialControl("tcp", addr, nil), addr)
 		})
 	}
-	// fail closed on anything that is not an ip:port
 	require.Error(t, hopDialControl("tcp", "not-an-address", nil))
 	require.Error(t, hopDialControl("unix", "/var/run/x.sock", nil))
 }
 
-// The hop client is wired with the gate and the detector client's policies:
-// its transport dials through hopDialControl (a literal refused address is
-// rejected before any connection is attempted), and it keeps the per-probe
-// timeout and the same-host redirect policy.
 func TestHopClientIsGatedAndKeepsClientPolicies(t *testing.T) {
 	d := NewDetector(lib.NewTestLogger(), Options{TwoHop: true, ProbeTimeout: 123 * time.Millisecond})
 	require.NotSame(t, d.client, d.hopClient)
@@ -796,14 +687,10 @@ func TestHopClientIsGatedAndKeepsClientPolicies(t *testing.T) {
 	require.ErrorIs(t, err, errHopAddrRefused)
 }
 
-// roundTripperFunc adapts a function to http.RoundTripper.
 type roundTripperFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
-// Every request of the second hop goes through the hop client (and so
-// through its gated dialer); the first hop's requests to the LiteLLM host
-// never do.
 func TestDetectLiteLLMTwoHopUsesHopClient(t *testing.T) {
 	venice, veniceLog := registryServer(t, veniceEntry("qwen3-235b", true), 0)
 	mapHostToVendor(t, venice.URL, "venice")
@@ -839,11 +726,6 @@ func TestDetectLiteLLMTwoHopUsesHopClient(t *testing.T) {
 	}
 }
 
-// End-to-end: the gate is actually wired into the second hop. A refused
-// api_base never reaches baseCandidates/fingerprintEngines — the refusal is
-// traced and the bare upstream id still names the family (hop-1 evidence is
-// unaffected) — while a loopback or private-address api_base still runs the
-// hop as before.
 func TestDetectLiteLLMTwoHopHopTargetGate(t *testing.T) {
 	refused := []struct{ name, apiBase string }{
 		{"non-http scheme (file)", "file:///x"},
@@ -879,13 +761,9 @@ func TestDetectLiteLLMTwoHopHopTargetGate(t *testing.T) {
 	})
 }
 
-// The other side of the hop budget: when the whole detection deadline
-// expires while the hop is in flight, the trace attributes the cut to the
-// detection deadline (not to the hop's own timeout) and hop-1 evidence
-// still stands.
 func TestDetectLiteLLMTwoHopCutShortByDetectionDeadline(t *testing.T) {
 	prev := hopTimeout
-	hopTimeout = 10 * time.Second // never the binding limit here
+	hopTimeout = 10 * time.Second // so the detection deadline, not the hop timeout, cuts the hop
 	t.Cleanup(func() { hopTimeout = prev })
 
 	mux := http.NewServeMux()
@@ -915,10 +793,6 @@ func TestDetectLiteLLMTwoHopCutShortByDetectionDeadline(t *testing.T) {
 	slowLog.requireAnonymous(t)
 }
 
-// /model/info is read under the probe body cap like every service
-// endpoint: a listing larger than maxProbeBody is ignored (traced), so no
-// deployment is found and the hop is skipped — the upstream is never
-// dialled and the family comes from the configured name alone.
 func TestDetectLiteLLMTwoHopModelInfoOverBodyCapSkipsHop(t *testing.T) {
 	upstream, upLog := registryServer(t, veniceEntry("deepseek-r1", true), 0)
 	mapHostToVendor(t, upstream.URL, "venice")
@@ -945,10 +819,6 @@ func TestDetectLiteLLMTwoHopModelInfoOverBodyCapSkipsHop(t *testing.T) {
 	require.Empty(t, upLog.seen(), "the hop never ran")
 }
 
-// liveGroup mirrors the live LiteLLM deployment CR4 was decided on: the
-// `openai/` provider lists the standard params it forwards for the model
-// group — and reasoning_effort is not among them (LiteLLM answered
-// litellm.UnsupportedParamsError for it).
 var liveGroup = map[string]any{
 	"model_group":             "venice-deepseek-v4-pro",
 	"supported_openai_params": []string{"temperature", "tools", "response_format", "stream_options", "max_tokens", "user"},
@@ -964,8 +834,6 @@ func withReasoningEffort(group map[string]any) map[string]any {
 	return out
 }
 
-// requireNoReasoningEffortBinding asserts that no binding is rooted at the
-// standard reasoning_effort param.
 func requireNoReasoningEffortBinding(t *testing.T, api *system.ModelApiSpec) {
 	t.Helper()
 	for intent, b := range api.Bindings {
@@ -974,7 +842,6 @@ func requireNoReasoningEffortBinding(t *testing.T, api *system.ModelApiSpec) {
 	}
 }
 
-// requireSubset asserts every element of list is in allowed.
 func requireSubset(t *testing.T, list, allowed []string) {
 	t.Helper()
 	set := map[string]bool{}
@@ -986,14 +853,6 @@ func requireSubset(t *testing.T, list, allowed []string) {
 	}
 }
 
-// CR4/U1+U3 end to end, live-shaped: LiteLLM fronts Venice
-// (openai/deepseek-v4-pro:include_venice_system_prompt=false at a Venice
-// api_base) and its model group does not list reasoning_effort. The composed
-// spec reports Venice as the stack, via litellm, with Venice's own knobs
-// (venice_parameters.* is forwarded verbatim as a provider kwarg) and
-// without anything rooted at reasoning_effort; parameters are Venice's
-// documented list narrowed to what LiteLLM forwards. The hop itself is
-// unchanged: anonymous, one hop, api_base and keys never in the trace.
 func TestDetectLiteLLMTwoHopIdentifiedUpstreamBecomesStack(t *testing.T) {
 	t.Run("venice, reasoning_effort not forwarded", func(t *testing.T) {
 		venice, veniceLog := registryServerMulti(t, veniceEntry("deepseek-v4-pro", true), veniceEntry("llama-3.3-70b", false))
@@ -1075,7 +934,6 @@ func TestDetectLiteLLMTwoHopIdentifiedUpstreamBecomesStack(t *testing.T) {
 		vllmLog.requireAnonymous(t)
 		require.Contains(t, trace, `upstream vllm serves "Qwen/Qwen3-32B"`)
 
-		// without stream_options in the list the include_usage knob goes too
 		narrow := map[string]any{"model_group": "venice-deepseek-v4-pro", "supported_openai_params": []string{"temperature"}, "supports_reasoning": false}
 		litellm2, _ := litellmServer(t, narrow, []map[string]any{deployment("venice-deepseek-v4-pro", "hosted_vllm/local-model", vllm.URL, nil)})
 		api, _ = detectVia(t, litellm2.URL, "venice-deepseek-v4-pro", DefaultOptions())
@@ -1133,8 +991,6 @@ func TestDetectLiteLLMTwoHopIdentifiedUpstreamBecomesStack(t *testing.T) {
 		deadLog.requireAnonymous(t)
 		require.Contains(t, trace, "no engine fingerprint matched at the upstream")
 
-		// reasoning known (LiteLLM says so) but reasoning_effort unsupported:
-		// the litellm toggle goes, the budget knob (root thinking) stays
 		reasons := map[string]any{"model_group": "venice-deepseek-v4-pro", "supported_openai_params": []string{"temperature"}, "supports_reasoning": true}
 		litellm2, _ := litellmServer(t, reasons, []map[string]any{deployment("venice-deepseek-v4-pro", "openai/qwen3-32b", dead.URL+"/v1", nil)})
 		api, _ = detectVia(t, litellm2.URL, "venice-deepseek-v4-pro", DefaultOptions())
@@ -1170,15 +1026,6 @@ func TestDetectLiteLLMTwoHopIdentifiedUpstreamBecomesStack(t *testing.T) {
 		require.Contains(t, trace, "litellm supported_openai_params unavailable")
 	})
 
-	// U7: anthropic behind litellm becomes the stack (via litellm), just
-	// like openai — recognised by its documented prefix or by hostname, read
-	// from directly. The proxy-router still only ever speaks OpenAI
-	// chat-completions to LiteLLM; LiteLLM is what translates that into an
-	// Anthropic Messages call and forwards thinking / output_config to it as
-	// opaque provider params, so the anthropic table is the right bindings.
-	// parameters, though, is litellm's supported list verbatim (U3 exception
-	// for anthropic: intersecting Messages vocabulary with LiteLLM's
-	// OpenAI-shaped list would misreport it — see filterForLiteLLM).
 	t.Run("anthropic upstream becomes the stack (prefix or an anthropic-mapped host)", func(t *testing.T) {
 		upstream, upLog := loggingServer(t, http.NewServeMux())
 		for _, dep := range []map[string]any{
@@ -1207,9 +1054,6 @@ func TestDetectLiteLLMTwoHopIdentifiedUpstreamBecomesStack(t *testing.T) {
 		}
 	})
 
-	// TDD (U7 controller ruling): the anthropic prefix needs no api_base at
-	// all (unlike every other identified kind) since nothing is ever read
-	// from it; the resulting spec still narrows to litellm's supported list.
 	t.Run("anthropic upstream needs no api_base", func(t *testing.T) {
 		litellm, _ := litellmServer(t, liveGroup, []map[string]any{deployment("venice-deepseek-v4-pro", "anthropic/claude-sonnet-4-5", "", nil)})
 		api, trace := detectVia(t, litellm.URL, "venice-deepseek-v4-pro", DefaultOptions())
@@ -1221,10 +1065,6 @@ func TestDetectLiteLLMTwoHopIdentifiedUpstreamBecomesStack(t *testing.T) {
 		require.NotContains(t, trace, "has no api_base")
 	})
 
-	// The identified stack no longer needs the model's own transport to
-	// match: the wire the proxy-router actually speaks is litellm's own
-	// openai-compatible surface, whatever apiType is configured, so the
-	// transport-consistency drop does not apply once Via is set (U7).
 	t.Run("an identified stack survives a transport mismatch (via is litellm's transport, not the upstream's)", func(t *testing.T) {
 		venice, _ := registryServerMulti(t, veniceEntry("deepseek-v4-pro", true), veniceEntry("llama-3.3-70b", false))
 		mapHostToVendor(t, venice.URL, "venice")

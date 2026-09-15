@@ -17,9 +17,6 @@ import (
 const minimalClaudeAIResponse = `{"id":"msg_1","type":"message","role":"assistant","model":"claude-x",` +
 	`"content":[{"type":"text","text":"ok"}],"usage":{"input_tokens":1,"output_tokens":1}}`
 
-// promptClaudeAIViaMockBackend drives ClaudeAI.Prompt against a fake
-// Anthropic Messages backend and returns the request body it received, so
-// tests can assert on the max_tokens the adapter actually forwarded.
 func promptClaudeAIViaMockBackend(t *testing.T, reqMaxTokens int) map[string]any {
 	t.Helper()
 
