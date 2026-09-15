@@ -1146,7 +1146,8 @@ definitions:
           accepted, in the stack's own request vocabulary — OpenAI
           chat-completions names for every stack except anthropic, which uses
           Anthropic Messages names (an upper bound: server-side flags are
-          invisible).
+          invisible). Behind a LiteLLM gateway (Via, or Stack litellm) the list
+          is narrowed to what LiteLLM lists as supported for the model.
         items:
           type: string
         type: array
@@ -1165,12 +1166,26 @@ definitions:
           koboldcpp) or a hosted vendor recognised by hostname (together,
           fireworks, groq, deepinfra, hyperbolic, mistral, gemini, xai, deepseek,
           moonshot, nvidia-nim, cerebras, sambanova); those carry no bindings table.
+          When a detected block carries Via, Stack is the upstream the provider's
+          gateway fronts and the bindings are in that upstream's vocabulary.
         type: string
       thinking:
         allOf:
         - $ref: '#/definitions/system.ThinkingSpec'
         description: Thinking summarizes reasoning controllability; knobs live in
           Bindings.
+      via:
+        description: |-
+          Via names the gateway the request path goes through before Stack, when
+          detection identified the upstream behind it: today only "litellm" (a
+          LiteLLM proxy whose deployment points at a Venice / OpenRouter / OpenAI
+          endpoint or a self-hosted engine). LiteLLM forwards upstream-native
+          params verbatim and validates standard OpenAI params per model, so the
+          bindings are the upstream's own, narrowed to what LiteLLM forwards for
+          this model. Absent when the backend is reached directly or the upstream
+          could not be identified (then Stack is the gateway itself). Only the
+          gateway's name is reported — never the upstream's endpoint or model id.
+        type: string
     type: object
   system.ModelHealthReport:
     properties:

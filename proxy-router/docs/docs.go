@@ -4935,7 +4935,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "parameters": {
-                    "description": "Parameters lists the request parameters the stack documents as\naccepted, in the stack's own request vocabulary — OpenAI\nchat-completions names for every stack except anthropic, which uses\nAnthropic Messages names (an upper bound: server-side flags are\ninvisible).",
+                    "description": "Parameters lists the request parameters the stack documents as\naccepted, in the stack's own request vocabulary — OpenAI\nchat-completions names for every stack except anthropic, which uses\nAnthropic Messages names (an upper bound: server-side flags are\ninvisible). Behind a LiteLLM gateway (Via, or Stack litellm) the list\nis narrowed to what LiteLLM lists as supported for the model.",
                     "type": "array",
                     "items": {
                         "type": "string"
@@ -4946,7 +4946,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "stack": {
-                    "description": "Stack is the serving stack / vendor preset: vllm | sglang | llamacpp |\nollama | venice | openrouter | litellm | anthropic | openai. A detected\nblock may also report engines that are not presets (tgi, lmstudio,\nkoboldcpp) or a hosted vendor recognised by hostname (together,\nfireworks, groq, deepinfra, hyperbolic, mistral, gemini, xai, deepseek,\nmoonshot, nvidia-nim, cerebras, sambanova); those carry no bindings table.",
+                    "description": "Stack is the serving stack / vendor preset: vllm | sglang | llamacpp |\nollama | venice | openrouter | litellm | anthropic | openai. A detected\nblock may also report engines that are not presets (tgi, lmstudio,\nkoboldcpp) or a hosted vendor recognised by hostname (together,\nfireworks, groq, deepinfra, hyperbolic, mistral, gemini, xai, deepseek,\nmoonshot, nvidia-nim, cerebras, sambanova); those carry no bindings table.\nWhen a detected block carries Via, Stack is the upstream the provider's\ngateway fronts and the bindings are in that upstream's vocabulary.",
                     "type": "string"
                 },
                 "thinking": {
@@ -4956,6 +4956,10 @@ const docTemplate = `{
                             "$ref": "#/definitions/system.ThinkingSpec"
                         }
                     ]
+                },
+                "via": {
+                    "description": "Via names the gateway the request path goes through before Stack, when\ndetection identified the upstream behind it: today only \"litellm\" (a\nLiteLLM proxy whose deployment points at a Venice / OpenRouter / OpenAI\nendpoint or a self-hosted engine). LiteLLM forwards upstream-native\nparams verbatim and validates standard OpenAI params per model, so the\nbindings are the upstream's own, narrowed to what LiteLLM forwards for\nthis model. Absent when the backend is reached directly or the upstream\ncould not be identified (then Stack is the gateway itself). Only the\ngateway's name is reported — never the upstream's endpoint or model id.",
+                    "type": "string"
                 }
             }
         },
