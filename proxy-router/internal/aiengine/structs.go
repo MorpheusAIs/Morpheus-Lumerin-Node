@@ -5,6 +5,7 @@ type LocalModel struct {
 	Name           string
 	Model          string
 	ApiType        string
+	ApiStack       string
 	ApiUrl         string
 	Slots          int
 	CapacityPolicy string

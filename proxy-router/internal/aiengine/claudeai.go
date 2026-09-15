@@ -100,7 +100,9 @@ func (a *ClaudeAI) Prompt(ctx context.Context, compl *gcs.OpenAICompletionReques
 	}
 
 	compl.Model = a.modelName
-	compl.MaxTokens = 1024
+	if compl.MaxTokens <= 0 {
+		compl.MaxTokens = 1024
+	}
 	requestBody, err := json.Marshal(compl)
 	if err != nil {
 		return fmt.Errorf("failed to encode request: %v", err)

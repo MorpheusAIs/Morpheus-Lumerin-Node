@@ -28,6 +28,8 @@ definitions:
     type: object
   aiengine.LocalModel:
     properties:
+      apiStack:
+        type: string
       apiType:
         type: string
       apiUrl:
@@ -71,6 +73,8 @@ definitions:
         $ref: '#/definitions/attestation.BackendAttestationStatus'
       teeType:
         $ref: '#/definitions/attestation.TEEType'
+      tlsBindingKind:
+        $ref: '#/definitions/attestation.TLSBindingKind'
       verifiedAt:
         type: string
       vmTemplateName:
@@ -96,6 +100,14 @@ definitions:
     x-enum-varnames:
     - TEETypeTDX
     - TEETypeSEV
+  attestation.TLSBindingKind:
+    enum:
+    - spki
+    - certificate
+    type: string
+    x-enum-varnames:
+    - TLSBindingSPKI
+    - TLSBindingCertificate
   authapi.AddUserReq:
     properties:
       password:
@@ -126,7 +138,7 @@ definitions:
     properties:
       allowances:
         additionalProperties:
-          $ref: '#/definitions/lib.BigInt'
+          type: string
         type: object
       isConfirmed:
         type: boolean
@@ -278,11 +290,6 @@ definitions:
         type: string
       responseAt:
         type: integer
-    type: object
-  lib.BigInt:
-    properties:
-      big.Int:
-        type: string
     type: object
   morrpcmesssage.SessionRes:
     properties:
@@ -1042,15 +1049,6 @@ definitions:
         example: 100000000
         type: integer
     type: object
-  structs.UserStakesOnHoldRes:
-    properties:
-      available:
-        example: "100000000"
-        type: string
-      hold:
-        example: "200000000"
-        type: string
-    type: object
   structs.TokenTransfer:
     properties:
       from:
@@ -1082,6 +1080,15 @@ definitions:
     properties:
       tx:
         example: "0x1234"
+        type: string
+    type: object
+  structs.UserStakesOnHoldRes:
+    properties:
+      available:
+        example: "100000000"
+        type: string
+      hold:
+        example: "200000000"
         type: string
     type: object
   system.ConfigResponse:
@@ -1117,8 +1124,64 @@ definitions:
       version:
         type: string
     type: object
+  system.ModelApiSpec:
+    properties:
+      bindings:
+        additionalProperties:
+          $ref: '#/definitions/system.ParamBinding'
+        description: |-
+          Bindings maps canonical request intents to how this backend expresses
+          them; an absent intent cannot be expressed.
+        type: object
+      declaredAt:
+        type: integer
+      modelFamily:
+        description: ModelFamily is the canonical model family (qwen3, deepseek-r1,
+          claude, ...).
+        type: string
+      parameters:
+        description: |-
+          Parameters lists the request parameters the stack documents as accepted,
+          in its own vocabulary: OpenAI chat-completions names, or Anthropic
+          Messages names for anthropic. Behind LiteLLM, narrowed to what LiteLLM
+          supports for the model.
+        items:
+          type: string
+        type: array
+      source:
+        description: |-
+          Source is declared (models-config apiStack preset) or detected (runtime
+          probing of the backend's service endpoints).
+        type: string
+      stack:
+        description: |-
+          Stack is the serving stack or vendor: vllm | sglang | llamacpp | ollama |
+          venice | openrouter | litellm | anthropic | openai, or a detected engine or
+          hosted vendor without a bindings table (tgi, lmstudio, koboldcpp, groq,
+          together, ...). With Via set, Stack is the upstream behind the gateway and
+          Bindings use that upstream's vocabulary.
+        type: string
+      thinking:
+        allOf:
+        - $ref: '#/definitions/system.ThinkingSpec'
+        description: Thinking summarizes reasoning controllability; the knobs are
+          in Bindings.
+      via:
+        description: |-
+          Via is the gateway in front of Stack when detection identified the
+          upstream behind it; today only "litellm". Absent when the backend is
+          reached directly or the upstream is unknown (then Stack is the gateway).
+        type: string
+    type: object
   system.ModelHealthReport:
     properties:
+      api:
+        allOf:
+        - $ref: '#/definitions/system.ModelApiSpec'
+        description: |-
+          Api describes the API serving this model: stack, model family, thinking
+          control and request-param bindings. Never carries the backend URL, key or
+          hostname. Absent when nothing is known.
       bidId:
         type: string
       errorKind:
@@ -1148,6 +1211,27 @@ definitions:
       status:
         type: string
     type: object
+  system.ParamBinding:
+    properties:
+      enumValues:
+        items:
+          type: string
+        type: array
+      hint:
+        type: string
+      kind:
+        type: string
+      param:
+        description: dotted path within the mechanism
+        type: string
+      paramType:
+        description: boolean | number | enum | string | object | array
+        type: string
+      value:
+        description: |-
+          Value is the fixed value realizing the intent; nil when the caller
+          supplies it.
+    type: object
   system.SetEthNodeURLReq:
     properties:
       urls:
@@ -1160,6 +1244,13 @@ definitions:
   system.StatusRes:
     properties:
       status:
+        type: string
+    type: object
+  system.ThinkingSpec:
+    properties:
+      mode:
+        description: always_on (cannot be disabled) | controllable (reasoning.disable/enable
+          bindings) | tunable (effort/budget bindings only)
         type: string
     type: object
   walletapi.SetupWalletMnemonicReqBody:
@@ -1462,57 +1553,6 @@ paths:
       security:
       - BasicAuth: []
       summary: Get ETH and MOR balance
-      tags:
-      - transactions
-  /blockchain/stakes/onhold:
-    get:
-      description: Get the releasable and still time-locked MOR stake for the proxy-router
-        wallet
-      parameters:
-      - default: 255
-        description: Maximum on-hold entries to inspect
-        in: query
-        maximum: 255
-        minimum: 1
-        name: iterations
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/structs.UserStakesOnHoldRes'
-      security:
-      - BasicAuth: []
-      summary: Get consumer stakes on hold
-      tags:
-      - transactions
-  /blockchain/stakes/withdraw:
-    post:
-      consumes:
-      - application/json
-      description: Claim releasable MOR stake for the proxy-router wallet
-      parameters:
-      - description: Withdrawal options; iterations defaults to 255 and accepts 1 through
-          255
-        in: body
-        name: request
-        schema:
-          properties:
-            iterations:
-              type: integer
-          type: object
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/structs.TxRes'
-      security:
-      - BasicAuth: []
-      summary: Withdraw consumer stakes on hold
       tags:
       - transactions
   /blockchain/bids:
@@ -2178,6 +2218,57 @@ paths:
       summary: Get Sessions for User
       tags:
       - sessions
+  /blockchain/stakes/onhold:
+    get:
+      description: Get the releasable and still time-locked MOR stake for the proxy-router
+        wallet
+      parameters:
+      - default: 255
+        description: Maximum on-hold entries to inspect
+        in: query
+        maximum: 255
+        minimum: 1
+        name: iterations
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.UserStakesOnHoldRes'
+      security:
+      - BasicAuth: []
+      summary: Get consumer stakes on hold
+      tags:
+      - transactions
+  /blockchain/stakes/withdraw:
+    post:
+      consumes:
+      - application/json
+      description: Claim releasable MOR stake for the proxy-router wallet
+      parameters:
+      - description: Withdrawal options; iterations defaults to 255 and accepts 1
+          through 255
+        in: body
+        name: request
+        schema:
+          properties:
+            iterations:
+              type: integer
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.TxRes'
+      security:
+      - BasicAuth: []
+      summary: Withdraw consumer stakes on hold
+      tags:
+      - transactions
   /blockchain/token/supply:
     get:
       description: Get MOR token supply from blockchain

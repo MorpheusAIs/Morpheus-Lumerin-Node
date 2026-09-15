@@ -15,6 +15,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -22,6 +23,7 @@ import (
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apispec"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/attestation"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi/structs"
@@ -68,11 +70,18 @@ type TeeStatusProvider interface {
 	ReattestBackend(ctx context.Context, modelID string, endpoint string) error
 }
 
+type ApiDetector interface {
+	Detect(ctx context.Context, cfg config.ModelConfig) *system.ModelApiSpec
+}
+
 // DefaultMaxConsecutiveErrors is the number of consecutive real-session
 // prompt failures after which a model is flipped to unhealthy (or degraded,
 // when the whole streak is upstream rate limiting) without waiting for the
 // next scheduled probe sweep.
 const DefaultMaxConsecutiveErrors = 3
+
+// A cold detector cache must not consume the whole model-health timeout.
+const detectBudget = 10 * time.Second
 
 // modelMeta caches the public on-chain facts about a model so each sweep
 // only pays one registry call per previously unseen model.
@@ -157,6 +166,7 @@ type Deps struct {
 	// first sweep relies on the startup attestation), and models whose
 	// attestation does not pass are reported as tee_unverified.
 	TeeStatus TeeStatusProvider
+	ApiDetect ApiDetector
 }
 
 func NewChecker(deps Deps, interval, timeout, probeDelay time.Duration, maxConsecutiveErrors int, log lib.ILogger) *Checker {
@@ -265,7 +275,11 @@ func (c *Checker) checkAll(ctx context.Context, walletAddr common.Address) {
 		if hasBid && probed && !c.sleep(ctx, c.probeDelay) {
 			return
 		}
-		c.checkModel(ctx, modelID, bidID, hasBid, modelCfgs[i].ApiURL, reattestTee)
+		var cfg config.ModelConfig
+		if i < len(modelCfgs) {
+			cfg = modelCfgs[i]
+		}
+		c.checkModel(ctx, modelID, bidID, hasBid, cfg, reattestTee)
 		if hasBid {
 			probed = true
 		}
@@ -370,7 +384,7 @@ func (c *Checker) activeBidModels(ctx context.Context, walletAddr common.Address
 	return byModel, nil
 }
 
-func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID common.Hash, hasBid bool, apiURL string, reattestTee bool) {
+func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID common.Hash, hasBid bool, cfg config.ModelConfig, reattestTee bool) {
 	report := system.ModelHealthReport{
 		ModelID:      modelID.Hex(),
 		HasActiveBid: hasBid,
@@ -381,8 +395,35 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 		report.BidID = bidID.Hex()
 	}
 
-	if prev, ok := c.getReport(modelID.Hex()); ok {
+	prev, hasPrev := c.getReport(modelID.Hex())
+	if hasPrev {
 		report.LastHealthy = prev.LastHealthy
+	}
+
+	if cfg.ModelFamily != "" && !apispec.IsKnownFamily(cfg.ModelFamily) {
+		c.log.Warnf("model %s: unknown modelFamily %q — no family bindings will be advertised", lib.Short(modelID), cfg.ModelFamily)
+	}
+
+	// Image adapters (prodia-*, hyperbolic-sd) have no chat API to probe;
+	// detecting them would cost ~16 requests per sweep for nothing.
+	var api *system.ModelApiSpec
+	if apispec.StackFor(cfg.ApiStack) != "" {
+		api = apispec.Build(cfg)
+	} else if c.deps.ApiDetect != nil && config.IsChatTransport(cfg.ApiType) && (cfg.ApiURL != "" || cfg.ModelName != "") {
+		budget := c.timeout
+		if budget <= 0 || budget > detectBudget {
+			budget = detectBudget
+		}
+		detectCtx, cancel := context.WithTimeout(ctx, budget)
+		api = c.deps.ApiDetect.Detect(detectCtx, cfg)
+		cancel()
+	}
+	if api != nil {
+		api.DeclaredAt = time.Now().Unix()
+		if hasPrev && prev.Api != nil && sameApiSpecIgnoringDeclaredAt(prev.Api, api) {
+			api.DeclaredAt = prev.Api.DeclaredAt
+		}
+		report.Api = api
 	}
 
 	if !hasBid {
@@ -413,7 +454,7 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 	if meta.isTee && c.deps.TeeStatus != nil {
 		if reattestTee {
 			attestCtx, cancel := context.WithTimeout(ctx, c.timeout)
-			if err := c.deps.TeeStatus.ReattestBackend(attestCtx, modelID.Hex(), apiURL); err != nil {
+			if err := c.deps.TeeStatus.ReattestBackend(attestCtx, modelID.Hex(), cfg.ApiURL); err != nil {
 				c.log.Warnf("model %s: backend TEE re-attestation failed: %s", lib.Short(modelID), err)
 			}
 			cancel()
@@ -519,6 +560,12 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 	}
 
 	c.setReport(report)
+}
+
+func sameApiSpecIgnoringDeclaredAt(a, b *system.ModelApiSpec) bool {
+	ac, bc := *a, *b
+	ac.DeclaredAt, bc.DeclaredAt = 0, 0
+	return reflect.DeepEqual(ac, bc)
 }
 
 func (c *Checker) probeLLM(ctx context.Context, adapter aiengine.AIEngineStream, report *system.ModelHealthReport) error {

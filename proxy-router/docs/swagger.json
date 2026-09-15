@@ -436,85 +436,6 @@
                 }
             }
         },
-        "/blockchain/stakes/onhold": {
-            "get": {
-                "security": [
-                    {
-                        "BasicAuth": []
-                    }
-                ],
-                "description": "Get the releasable and still time-locked MOR stake for the proxy-router wallet",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "transactions"
-                ],
-                "summary": "Get consumer stakes on hold",
-                "parameters": [
-                    {
-                        "maximum": 255,
-                        "minimum": 1,
-                        "type": "integer",
-                        "default": 255,
-                        "description": "Maximum on-hold entries to inspect",
-                        "name": "iterations",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/structs.UserStakesOnHoldRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/blockchain/stakes/withdraw": {
-            "post": {
-                "security": [
-                    {
-                        "BasicAuth": []
-                    }
-                ],
-                "description": "Claim releasable MOR stake for the proxy-router wallet",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "transactions"
-                ],
-                "summary": "Withdraw consumer stakes on hold",
-                "parameters": [
-                    {
-                        "description": "Withdrawal options; iterations defaults to 255 and accepts 1 through 255",
-                        "name": "request",
-                        "in": "body",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "iterations": {
-                                    "type": "integer"
-                                }
-                            }
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/structs.TxRes"
-                        }
-                    }
-                }
-            }
-        },
         "/blockchain/bids": {
             "post": {
                 "security": [
@@ -1550,6 +1471,85 @@
                         "name": "id",
                         "in": "path",
                         "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.TxRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/stakes/onhold": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Get the releasable and still time-locked MOR stake for the proxy-router wallet",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transactions"
+                ],
+                "summary": "Get consumer stakes on hold",
+                "parameters": [
+                    {
+                        "maximum": 255,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 255,
+                        "description": "Maximum on-hold entries to inspect",
+                        "name": "iterations",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.UserStakesOnHoldRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/stakes/withdraw": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Claim releasable MOR stake for the proxy-router wallet",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transactions"
+                ],
+                "summary": "Withdraw consumer stakes on hold",
+                "parameters": [
+                    {
+                        "description": "Withdrawal options; iterations defaults to 255 and accepts 1 through 255",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "iterations": {
+                                    "type": "integer"
+                                }
+                            }
+                        }
                     }
                 ],
                 "responses": {
@@ -3274,6 +3274,9 @@
         "aiengine.LocalModel": {
             "type": "object",
             "properties": {
+                "apiStack": {
+                    "type": "string"
+                },
                 "apiType": {
                     "type": "string"
                 },
@@ -3339,6 +3342,9 @@
                 "teeType": {
                     "$ref": "#/definitions/attestation.TEEType"
                 },
+                "tlsBindingKind": {
+                    "$ref": "#/definitions/attestation.TLSBindingKind"
+                },
                 "verifiedAt": {
                     "type": "string"
                 },
@@ -3372,6 +3378,17 @@
             "x-enum-varnames": [
                 "TEETypeTDX",
                 "TEETypeSEV"
+            ]
+        },
+        "attestation.TLSBindingKind": {
+            "type": "string",
+            "enum": [
+                "spki",
+                "certificate"
+            ],
+            "x-enum-varnames": [
+                "TLSBindingSPKI",
+                "TLSBindingCertificate"
             ]
         },
         "authapi.AddUserReq": {
@@ -3419,7 +3436,7 @@
                 "allowances": {
                     "type": "object",
                     "additionalProperties": {
-                        "$ref": "#/definitions/lib.BigInt"
+                        "type": "string"
                     }
                 },
                 "isConfirmed": {
@@ -3648,14 +3665,6 @@
                 },
                 "responseAt": {
                     "type": "integer"
-                }
-            }
-        },
-        "lib.BigInt": {
-            "type": "object",
-            "properties": {
-                "big.Int": {
-                    "type": "string"
                 }
             }
         },
@@ -4786,19 +4795,6 @@
                 }
             }
         },
-        "structs.UserStakesOnHoldRes": {
-            "type": "object",
-            "properties": {
-                "available": {
-                    "type": "string",
-                    "example": "100000000"
-                },
-                "hold": {
-                    "type": "string",
-                    "example": "200000000"
-                }
-            }
-        },
         "structs.TokenTransfer": {
             "type": "object",
             "properties": {
@@ -4846,6 +4842,19 @@
                 "tx": {
                     "type": "string",
                     "example": "0x1234"
+                }
+            }
+        },
+        "structs.UserStakesOnHoldRes": {
+            "type": "object",
+            "properties": {
+                "available": {
+                    "type": "string",
+                    "example": "100000000"
+                },
+                "hold": {
+                    "type": "string",
+                    "example": "200000000"
                 }
             }
         },
@@ -4899,9 +4908,63 @@
                 }
             }
         },
+        "system.ModelApiSpec": {
+            "type": "object",
+            "properties": {
+                "bindings": {
+                    "description": "Bindings maps canonical request intents to how this backend expresses\nthem; an absent intent cannot be expressed.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/system.ParamBinding"
+                    }
+                },
+                "declaredAt": {
+                    "type": "integer"
+                },
+                "modelFamily": {
+                    "description": "ModelFamily is the canonical model family (qwen3, deepseek-r1, claude, ...).",
+                    "type": "string"
+                },
+                "parameters": {
+                    "description": "Parameters lists the request parameters the stack documents as accepted,\nin its own vocabulary: OpenAI chat-completions names, or Anthropic\nMessages names for anthropic. Behind LiteLLM, narrowed to what LiteLLM\nsupports for the model.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "source": {
+                    "description": "Source is declared (models-config apiStack preset) or detected (runtime\nprobing of the backend's service endpoints).",
+                    "type": "string"
+                },
+                "stack": {
+                    "description": "Stack is the serving stack or vendor: vllm | sglang | llamacpp | ollama |\nvenice | openrouter | litellm | anthropic | openai, or a detected engine or\nhosted vendor without a bindings table (tgi, lmstudio, koboldcpp, groq,\ntogether, ...). With Via set, Stack is the upstream behind the gateway and\nBindings use that upstream's vocabulary.",
+                    "type": "string"
+                },
+                "thinking": {
+                    "description": "Thinking summarizes reasoning controllability; the knobs are in Bindings.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/system.ThinkingSpec"
+                        }
+                    ]
+                },
+                "via": {
+                    "description": "Via is the gateway in front of Stack when detection identified the\nupstream behind it; today only \"litellm\". Absent when the backend is\nreached directly or the upstream is unknown (then Stack is the gateway).",
+                    "type": "string"
+                }
+            }
+        },
         "system.ModelHealthReport": {
             "type": "object",
             "properties": {
+                "api": {
+                    "description": "Api describes the API serving this model: stack, model family, thinking\ncontrol and request-param bindings. Never carries the backend URL, key or\nhostname. Absent when nothing is known.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/system.ModelApiSpec"
+                        }
+                    ]
+                },
                 "bidId": {
                     "type": "string"
                 },
@@ -4941,6 +5004,34 @@
                 }
             }
         },
+        "system.ParamBinding": {
+            "type": "object",
+            "properties": {
+                "enumValues": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "hint": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "param": {
+                    "description": "dotted path within the mechanism",
+                    "type": "string"
+                },
+                "paramType": {
+                    "description": "boolean | number | enum | string | object | array",
+                    "type": "string"
+                },
+                "value": {
+                    "description": "Value is the fixed value realizing the intent; nil when the caller\nsupplies it."
+                }
+            }
+        },
         "system.SetEthNodeURLReq": {
             "type": "object",
             "required": [
@@ -4959,6 +5050,15 @@
             "type": "object",
             "properties": {
                 "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "system.ThinkingSpec": {
+            "type": "object",
+            "properties": {
+                "mode": {
+                    "description": "always_on (cannot be disabled) | controllable (reasoning.disable/enable bindings) | tunable (effort/budget bindings only)",
                     "type": "string"
                 }
             }

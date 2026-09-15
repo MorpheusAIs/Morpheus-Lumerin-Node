@@ -29,6 +29,7 @@
       "modelId": "0x0000000000000000000000000000000000000000000000000000000000000003",
       "modelName": "claude-3-5-sonnet-20241022",
       "apiType": "claudeai",
+      "apiStack": "anthropic",
       "apiUrl": "https://api.anthropic.com/v1",
       "apiKey": "FILL_ME_IN"
     },
@@ -45,6 +46,14 @@
       "apiType": "openai",
       "apiUrl": "https://api.openai.com/v1",
       "apiKey": "FILL_ME_IN"
+    },
+    {
+      "modelId": "0x0000000000000000000000000000000000000000000000000000000000000006",
+      "modelName": "qwen3-235b-a22b",
+      "apiType": "openai",
+      "apiStack": "vllm",
+      "modelFamily": "qwen3",
+      "apiUrl": "http://localhost:8000/v1/chat/completions"
     }
   ]
 }
