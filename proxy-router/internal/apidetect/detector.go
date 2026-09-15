@@ -66,8 +66,10 @@ type Options struct {
 	// the default).
 	ProbeTimeout time.Duration
 	// TwoHop follows a LiteLLM proxy to the deployment behind the model
-	// (GET /model/info) and reads its upstream once, without credentials,
-	// for family / reasoning evidence only. Production default: on.
+	// (GET /model/info) and reads its upstream once, without credentials:
+	// an identified upstream becomes the reported stack (via litellm),
+	// otherwise the hop yields family / reasoning evidence only. Production
+	// default: on.
 	TwoHop bool
 }
 
@@ -269,13 +271,15 @@ func (d *Detector) detect(ctx context.Context, cfg config.ModelConfig) *system.M
 	// A detected stack must be one the model's transport adapter can speak
 	// to: a preset whose transport (config.StackTransport) is not cfg.ApiType
 	// cannot be what serves this model, so the stack and everything in its
-	// vocabulary (bindings, parameters) go, exactly as for an undetermined
-	// stack (R4). The family and an always_on thinking mode are facts about
-	// the model, not the wire, and stay; when neither is known there is no
-	// api block, as the composer would have decided.
+	// vocabulary (bindings, parameters, the gateway it was reached through)
+	// go, exactly as for an undetermined stack (R4). The family and an
+	// always_on thinking mode are facts about the model, not the wire, and
+	// stay; when neither is known there is no api block, as the composer
+	// would have decided.
 	if transport, ok := config.StackTransport[api.Stack]; ok && transport != cfg.ApiType {
 		tracef(ctx, "detected stack %q speaks %q but apiType is %q — stack dropped", api.Stack, transport, cfg.ApiType)
 		api.Stack = ""
+		api.Via = ""
 		api.Bindings = nil
 		api.Parameters = nil
 		if api.Thinking != nil && api.Thinking.Mode != system.ThinkingModeAlwaysOn {

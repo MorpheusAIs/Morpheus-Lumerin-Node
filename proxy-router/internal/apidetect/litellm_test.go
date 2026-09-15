@@ -166,18 +166,36 @@ func detectVia(t *testing.T, litellmURL, modelName string, opts Options) (*syste
 	return api, strings.Join(trace, "\n")
 }
 
-// requireLiteLLMVocabulary asserts R5(d): the bindings are exactly what a
+// requireLiteLLMVocabulary asserts the evidence-only outcome (an upstream
+// that stays behind `stack: litellm`): the bindings are exactly what a
 // declared litellm preset advertises for referenceModel (a name of the
-// family detection found) — nothing from the upstream's own vocabulary
-// (venice_parameters.*, OpenRouter's reasoning.*, chat_template_kwargs.*,
-// Ollama's native knobs or hints).
-func requireLiteLLMVocabulary(t *testing.T, api *system.ModelApiSpec, referenceModel string) {
+// family detection found), minus the knobs rooted at a standard OpenAI
+// param the group's supported list does not carry (CR4/U3) — nothing from
+// the upstream's own vocabulary (venice_parameters.*, OpenRouter's
+// reasoning.*, chat_template_kwargs.*, Ollama's native knobs or hints).
+func requireLiteLLMVocabulary(t *testing.T, api *system.ModelApiSpec, referenceModel string, supported []string) {
 	t.Helper()
 	require.Equal(t, "litellm", api.Stack)
+	require.Equal(t, "", api.Via)
 	require.Equal(t, system.ApiSpecSourceDetected, api.Source)
 	declared := apispec.Build(config.ModelConfig{ModelName: referenceModel, ApiType: "openai", ApiStack: "litellm"})
 	require.NotNil(t, declared)
-	require.Equal(t, declared.Bindings, api.Bindings, "bindings must be the litellm stack table's, nothing imported from the upstream")
+	listed := map[string]bool{}
+	for _, p := range supported {
+		listed[p] = true
+	}
+	standard := map[string]bool{}
+	for _, p := range declared.Parameters { // the litellm table is the standard OpenAI surface
+		standard[p] = true
+	}
+	expected := map[string]*system.ParamBinding{}
+	for intent, b := range declared.Bindings {
+		if root, _, _ := strings.Cut(b.Param, "."); standard[root] && !listed[root] {
+			continue
+		}
+		expected[intent] = b
+	}
+	require.Equal(t, expected, api.Bindings, "bindings must be the litellm stack table's (narrowed to what litellm forwards), nothing imported from the upstream")
 	for intent, b := range api.Bindings {
 		require.False(t, strings.HasPrefix(b.Param, "venice_parameters."), intent)
 		require.False(t, strings.HasPrefix(b.Param, "reasoning."), intent)
@@ -188,9 +206,13 @@ func requireLiteLLMVocabulary(t *testing.T, api *system.ModelApiSpec, referenceM
 	}
 }
 
-// R5 happy path: LiteLLM -> openai/<model> at a Venice api_base -> Venice
-// says the model reasons. Family from the upstream id, reasoning from the
-// hop, bindings in LiteLLM's vocabulary, key never sent upstream. LiteLLM's
+// R5 happy path, as reversed by CR4/U1: LiteLLM -> openai/<model> at a
+// Venice api_base -> Venice says the model reasons. Family from the upstream
+// id, reasoning from the hop, key never sent upstream — and the identified
+// upstream is the reported stack (via litellm), so the knobs are Venice's
+// own, narrowed to what LiteLLM forwards for the group (noReasoningGroup
+// lists reasoning_effort, so Venice's effort knob survives; response_format,
+// stream_options and parallel_tool_calls are not listed and go). LiteLLM's
 // own map says supports_reasoning=false: the upstream wins (OQ4, OR).
 func TestDetectLiteLLMTwoHopVeniceReasoning(t *testing.T) {
 	venice, veniceLog := registryServer(t, veniceEntry("qwen3-235b", true), 0)
@@ -202,15 +224,26 @@ func TestDetectLiteLLMTwoHopVeniceReasoning(t *testing.T) {
 
 	api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
 	require.NotNil(t, api)
-	require.Equal(t, "litellm", api.Stack)
+	require.Equal(t, "venice", api.Stack)
+	require.Equal(t, "litellm", api.Via)
 	require.Equal(t, system.ApiSpecSourceDetected, api.Source)
 	require.Equal(t, "qwen3", api.ModelFamily)
 	require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
-	require.Equal(t, "reasoning_effort", api.Bindings[system.IntentReasoningDisable].Param)
-	requireLiteLLMVocabulary(t, api, "qwen3-235b")
-	require.Equal(t, []string{"reasoning_effort", "temperature", "tools"}, api.Parameters, "LiteLLM's own list, not Venice capabilities")
+	require.Equal(t, "venice_parameters.disable_thinking", api.Bindings[system.IntentReasoningDisable].Param, "venice's knob: forwarded by litellm as a provider kwarg")
+	require.Equal(t, "reasoning_effort", api.Bindings[system.IntentReasoningEffort].Param, "listed in supported_openai_params")
+	require.Nil(t, api.Bindings[system.IntentReasoningEnable], "venice has no enable knob; litellm's is not borrowed")
+	require.Nil(t, api.Bindings[system.IntentReasoningBudget], "litellm's thinking.budget_tokens is not venice's")
+	require.Equal(t, "top_k", api.Bindings[system.IntentSamplingTopK].Param)
+	require.Nil(t, api.Bindings[system.IntentResponseFormatJSON], "response_format is standard and not listed for the group")
+	require.Nil(t, api.Bindings[system.IntentStreamIncludeUsage])
+	require.Nil(t, api.Bindings[system.IntentToolsParallel])
+	for intent, b := range api.Bindings {
+		require.NotEqual(t, system.BindingKindTemplateKwarg, b.Kind, intent)
+	}
+	require.Equal(t, []string{"reasoning_effort", "temperature", "tools"}, api.Parameters, "venice's documented list ∩ litellm's supported list; never Venice's capability names")
 	veniceLog.requireAnonymous(t)
 	require.Contains(t, trace, "upstream venice listing reports reasoning support")
+	require.Contains(t, trace, "upstream venice identified: it becomes the stack (via litellm)")
 	require.NotContains(t, trace, "sk-UPSTREAMSECRET")
 	require.NotContains(t, trace, "sk-litellm")
 }
@@ -231,8 +264,8 @@ func registryServerMulti(t *testing.T, entries ...map[string]any) (*httptest.Ser
 // "openai/deepseek-v4-pro:include_venice_system_prompt=false"). With a
 // multi-entry listing (so the single-entry fallback cannot apply) the bare
 // id must still match Venice's listing entry: family "deepseek" from the
-// bare id, reasoning from the hop, bindings in LiteLLM's vocabulary, and the
-// raw suffixed id traced exactly once.
+// bare id, reasoning from the hop, Venice as the stack (via litellm, CR4)
+// with its own knobs, and the raw suffixed id traced exactly once.
 func TestDetectLiteLLMTwoHopVeniceInlineParamsMatchByBareID(t *testing.T) {
 	venice, veniceLog := registryServerMulti(t,
 		veniceEntry("deepseek-v4-pro", true),
@@ -245,32 +278,45 @@ func TestDetectLiteLLMTwoHopVeniceInlineParamsMatchByBareID(t *testing.T) {
 
 	api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
 	require.NotNil(t, api)
-	require.Equal(t, "litellm", api.Stack)
+	require.Equal(t, "venice", api.Stack)
+	require.Equal(t, "litellm", api.Via)
 	require.Equal(t, system.ApiSpecSourceDetected, api.Source)
 	require.Equal(t, "deepseek", api.ModelFamily, "family from the bare upstream id")
 	require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
-	require.Equal(t, "reasoning_effort", api.Bindings[system.IntentReasoningDisable].Param, "litellm's knob, not venice's venice_parameters.*")
-	require.Equal(t, "reasoning_effort", api.Bindings[system.IntentReasoningEnable].Param)
-	require.Equal(t, []string{"reasoning_effort", "temperature", "tools"}, api.Parameters, "LiteLLM's own list, not Venice capabilities")
+	require.Equal(t, "venice_parameters.disable_thinking", api.Bindings[system.IntentReasoningDisable].Param, "venice's knob, not litellm's reasoning_effort: none")
+	require.Nil(t, api.Bindings[system.IntentReasoningEnable])
+	require.Equal(t, []string{"reasoning_effort", "temperature", "tools"}, api.Parameters, "venice's documented list ∩ litellm's supported list, not Venice capabilities")
 	veniceLog.requireAnonymous(t)
 	require.Contains(t, trace, "upstream venice listing reports reasoning support")
 	require.Contains(t, trace, `upstream model "deepseek-v4-pro:include_venice_system_prompt=false"`, "the raw suffixed id is still traced once")
 }
 
-func TestDetectLiteLLMTwoHopOpenRouterKeepsLiteLLMVocabulary(t *testing.T) {
+// CR4/U1: an OpenRouter upstream (recognised by hostname, confirmed by its
+// listing shape) becomes the stack, via litellm: OpenRouter's reasoning
+// object (root `reasoning`, not a standard OpenAI name) is forwarded by
+// LiteLLM as a provider kwarg, and so is top_a. The listing's own parameter
+// list still never crosses the hop; parameters are the openrouter table
+// narrowed to LiteLLM's supported list.
+func TestDetectLiteLLMTwoHopOpenRouterBecomesStack(t *testing.T) {
 	openrouter, orLog := registryServer(t, map[string]any{"id": "deepseek/deepseek-chat-v3.1", "supported_parameters": []string{"temperature", "reasoning", "tools"}}, 0)
 	mapHostToVendor(t, openrouter.URL, "openrouter")
 	litellm, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "openrouter/deepseek/deepseek-chat-v3.1", openrouter.URL+"/api/v1", nil)})
 
-	api, _ := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
-	require.Equal(t, "litellm", api.Stack)
+	api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
+	require.Equal(t, "openrouter", api.Stack)
+	require.Equal(t, "litellm", api.Via)
 	require.Equal(t, "deepseek-v3.1", api.ModelFamily)
 	require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
-	require.Equal(t, "reasoning_effort", api.Bindings[system.IntentReasoningDisable].Param, "litellm's knob, not OpenRouter's reasoning.effort")
-	require.Nil(t, api.Bindings[system.IntentSamplingTopA], "no OpenRouter stack-table import")
-	require.NotContains(t, api.Parameters, "reasoning", "no OpenRouter parameter import")
-	requireLiteLLMVocabulary(t, api, "deepseek/deepseek-chat-v3.1")
+	require.Equal(t, "reasoning.effort", api.Bindings[system.IntentReasoningDisable].Param, "OpenRouter's knob, forwarded verbatim")
+	require.Equal(t, "reasoning.enabled", api.Bindings[system.IntentReasoningEnable].Param)
+	require.Equal(t, "top_a", api.Bindings[system.IntentSamplingTopA].Param, "openrouter stack table, non-standard root")
+	require.Nil(t, api.Bindings[system.IntentResponseFormatJSON], "response_format is standard and not listed for the group")
+	for intent, b := range api.Bindings {
+		require.NotEqual(t, system.BindingKindTemplateKwarg, b.Kind, intent)
+	}
+	require.Equal(t, []string{"reasoning_effort", "temperature", "tools"}, api.Parameters, "openrouter's documented list ∩ litellm's supported list; the listing's supported_parameters never cross")
 	orLog.requireAnonymous(t)
+	require.Contains(t, trace, "upstream openrouter identified: it becomes the stack (via litellm)")
 }
 
 // Upstream rejects the anonymous request: the hop is skipped silently and
@@ -281,7 +327,8 @@ func TestDetectLiteLLMTwoHopUpstream401FamilyFromIdOnly(t *testing.T) {
 	litellm, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "openai/qwen3-235b", venice.URL+"/api/v1", nil)})
 
 	api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
-	require.Equal(t, "litellm", api.Stack)
+	require.Equal(t, "litellm", api.Stack, "the listing could not be read: the upstream is not identified")
+	require.Equal(t, "", api.Via)
 	require.Equal(t, "qwen3", api.ModelFamily)
 	require.Nil(t, api.Thinking)
 	require.Nil(t, api.Bindings[system.IntentReasoningDisable])
@@ -316,12 +363,15 @@ func TestDetectLiteLLMTwoHopDocumentedCloudPrefixIsNotProbed(t *testing.T) {
 	require.Contains(t, trace, `provider "bedrock"`)
 	require.Contains(t, trace, "upstream not probed")
 
-	// anthropic/ likewise: a hosted vendor, no second hop.
+	// anthropic/ likewise: never read, and evidence-only even with an
+	// api_base (CR4 exception: its preset speaks the claudeai transport).
 	litellm2, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "anthropic/claude-opus-4-6", upstream.URL, nil)})
 	api, trace = detectVia(t, litellm2.URL, "my-chat", DefaultOptions())
+	require.Equal(t, "litellm", api.Stack)
+	require.Equal(t, "", api.Via)
 	require.Equal(t, "claude", api.ModelFamily)
 	require.Empty(t, upLog.seen())
-	require.Contains(t, trace, `upstream "anthropic" is a hosted vendor; no second hop`)
+	require.Contains(t, trace, "upstream anthropic stays evidence-only")
 }
 
 // R5(c): at most one hop — an upstream that is itself LiteLLM is never
@@ -334,6 +384,7 @@ func TestDetectLiteLLMTwoHopUpstreamLiteLLMIsNotFollowed(t *testing.T) {
 		front, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "openai/qwen3-32b", upstream.URL+"/v1", nil)})
 		api, trace := detectVia(t, front.URL, "my-chat", DefaultOptions())
 		require.Equal(t, "litellm", api.Stack)
+		require.Equal(t, "", api.Via, "a LiteLLM upstream is not an identified upstream stack")
 		require.Equal(t, "qwen3", api.ModelFamily)
 		require.Nil(t, api.Thinking, "nothing but the bare id is learned from a LiteLLM upstream")
 		require.True(t, upLog.sawPath("/health/liveliness"), "the fingerprint identifies the upstream LiteLLM")
@@ -350,6 +401,7 @@ func TestDetectLiteLLMTwoHopUpstreamLiteLLMIsNotFollowed(t *testing.T) {
 		front, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "hosted_vllm/qwen3-32b", upstream.URL, nil)})
 		api, _ := detectVia(t, front.URL, "my-chat", DefaultOptions())
 		require.Equal(t, "litellm", api.Stack)
+		require.Equal(t, "", api.Via)
 		require.Equal(t, "qwen3", api.ModelFamily)
 		for _, p := range []string{"/model_group/info", "/model/info"} {
 			require.False(t, upLog.sawPath(p), "the upstream's LiteLLM endpoints must never be read: %s", p)
@@ -358,18 +410,26 @@ func TestDetectLiteLLMTwoHopUpstreamLiteLLMIsNotFollowed(t *testing.T) {
 	})
 }
 
+// A hosted_vllm/ upstream confirmed by /version becomes the stack (CR4):
+// the served id names the family, vllm's own table applies (an always-on
+// family keeps only reasoning.format), parameters are vllm's documented
+// list narrowed to LiteLLM's supported list.
 func TestDetectLiteLLMTwoHopVLLMServedID(t *testing.T) {
 	vllm, vllmLog := vllmServer(t, "deepseek-ai/DeepSeek-R1")
 	litellm, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "hosted_vllm/local-model", vllm.URL, nil)})
 
 	api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
-	require.Equal(t, "litellm", api.Stack)
+	require.Equal(t, "vllm", api.Stack)
+	require.Equal(t, "litellm", api.Via)
 	require.Equal(t, "deepseek-r1", api.ModelFamily)
 	require.Equal(t, system.ThinkingModeAlwaysOn, api.Thinking.Mode)
-	require.Nil(t, api.Bindings[system.IntentReasoningBudget], "vllm's thinking_token_budget never leaks through litellm")
-	require.Nil(t, api.Bindings[system.IntentSamplingTopK], "no vllm stack-table import")
-	require.Equal(t, []string{"reasoning_effort", "temperature", "tools"}, api.Parameters, "LiteLLM's own list, not vllm's")
+	require.Nil(t, api.Bindings[system.IntentReasoningBudget], "an always-on family takes no budget knob")
+	require.Equal(t, "include_reasoning", api.Bindings[system.IntentReasoningFormat].Param)
+	require.Equal(t, "top_k", api.Bindings[system.IntentSamplingTopK].Param, "vllm's stack table, non-standard root")
+	require.Nil(t, api.Bindings[system.IntentResponseFormatJSON], "standard root not listed for the group")
+	require.Equal(t, []string{"reasoning_effort", "temperature", "tools"}, api.Parameters, "vllm's documented list ∩ litellm's supported list")
 	require.Contains(t, trace, `upstream vllm serves "deepseek-ai/DeepSeek-R1"`)
+	require.Contains(t, trace, "upstream vllm identified: it becomes the stack (via litellm)")
 	vllmLog.requireAnonymous(t)
 }
 
@@ -379,6 +439,8 @@ func TestDetectLiteLLMTwoHopCustomProviderWinsOverPrefix(t *testing.T) {
 
 	api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
 	require.Equal(t, "qwen3", api.ModelFamily)
+	require.Equal(t, "vllm", api.Stack)
+	require.Equal(t, "litellm", api.Via)
 	require.Contains(t, trace, `provider "hosted_vllm", upstream model "foo/bar"`, "the prefix is not the provider, so the whole model string is the upstream id")
 	vllmLog.requireAnonymous(t)
 }
@@ -470,10 +532,12 @@ func TestDetectLiteLLMTwoHopDisabled(t *testing.T) {
 	require.True(t, DefaultOptions().TwoHop, "production wiring follows the hop")
 }
 
-// OQ2: an ollama/ or ollama_chat/ upstream is read once, anonymously:
-// /api/show gives the architecture (family) and the thinking capability
-// says the model reasons — as gateway evidence, never as Ollama's own
-// capability path, so the bindings stay litellm's.
+// OQ2, kept by the CR4 exception: an ollama/ or ollama_chat/ upstream is
+// read once, anonymously — /api/show gives the architecture (family) and
+// the thinking capability says the model reasons — as gateway evidence,
+// never as Ollama's own capability path, and the stack stays litellm
+// (LiteLLM's ollama providers speak the native API, not the /v1 surface the
+// ollama table describes), so the bindings stay litellm's.
 func TestDetectLiteLLMTwoHopOllamaCapability(t *testing.T) {
 	for _, prefix := range []string{"ollama", "ollama_chat"} {
 		t.Run(prefix, func(t *testing.T) {
@@ -484,7 +548,7 @@ func TestDetectLiteLLMTwoHopOllamaCapability(t *testing.T) {
 			require.NotNil(t, api)
 			require.Equal(t, "qwen3", api.ModelFamily)
 			require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
-			requireLiteLLMVocabulary(t, api, "qwen3:32b")
+			requireLiteLLMVocabulary(t, api, "qwen3:32b", noReasoningGroup["supported_openai_params"].([]string))
 			require.Nil(t, api.Bindings[system.IntentContextNumCtx], "no ollama stack-table import")
 			require.Equal(t, "", api.Bindings[system.IntentReasoningDisable].Hint, "litellm's knob, not ollama's think toggle")
 			require.Equal(t, []string{"reasoning_effort", "temperature", "tools"}, api.Parameters, "LiteLLM's own list, not ollama's")
@@ -492,6 +556,7 @@ func TestDetectLiteLLMTwoHopOllamaCapability(t *testing.T) {
 			ollamaLog.requireAnonymous(t)
 			require.Contains(t, trace, `upstream ollama reports architecture "qwen3"`)
 			require.Contains(t, trace, "upstream ollama reports the thinking capability")
+			require.Contains(t, trace, "upstream ollama stays evidence-only")
 			require.NotContains(t, trace, "chat template", "the upstream's template is never evidence")
 		})
 	}
@@ -502,6 +567,7 @@ func TestDetectLiteLLMTwoHopOllamaCapability(t *testing.T) {
 
 		api, _ := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
 		require.Equal(t, "litellm", api.Stack)
+		require.Equal(t, "", api.Via)
 		require.Equal(t, "llama", api.ModelFamily, "family from the upstream architecture")
 		require.Nil(t, api.Thinking)
 		require.Nil(t, api.Bindings[system.IntentReasoningEffort])
@@ -510,8 +576,9 @@ func TestDetectLiteLLMTwoHopOllamaCapability(t *testing.T) {
 }
 
 // OQ3: openai/ at a host that is no recognised vendor is fingerprinted like
-// a self-hosted engine, anonymously; only family / reasoning facts cross the
-// hop and the spec's stack stays litellm.
+// a self-hosted engine, anonymously. A confirmed engine becomes the stack
+// (CR4); ollama stays evidence-only and an unanswered host leaves the stack
+// litellm.
 func TestDetectLiteLLMTwoHopUnknownHostIsFingerprinted(t *testing.T) {
 	t.Run("ollama behind openai/", func(t *testing.T) {
 		ollama, ollamaLog := ollamaServer(t, "qwen3", []string{"thinking"})
@@ -520,7 +587,7 @@ func TestDetectLiteLLMTwoHopUnknownHostIsFingerprinted(t *testing.T) {
 		api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
 		require.Equal(t, "qwen3", api.ModelFamily, "family from the upstream architecture")
 		require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
-		requireLiteLLMVocabulary(t, api, "qwen3")
+		requireLiteLLMVocabulary(t, api, "qwen3", noReasoningGroup["supported_openai_params"].([]string))
 		require.Nil(t, api.Bindings[system.IntentContextNumCtx])
 		require.Equal(t, []string{"reasoning_effort", "temperature", "tools"}, api.Parameters)
 		ollamaLog.requireAnonymous(t)
@@ -535,10 +602,11 @@ func TestDetectLiteLLMTwoHopUnknownHostIsFingerprinted(t *testing.T) {
 		litellm, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "openai/local-model", vllm.URL+"/v1", nil)})
 
 		api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
-		require.Equal(t, "litellm", api.Stack)
+		require.Equal(t, "vllm", api.Stack, "fingerprinted engine becomes the stack")
+		require.Equal(t, "litellm", api.Via)
 		require.Equal(t, "deepseek-r1", api.ModelFamily, "family from the upstream's served id")
 		require.Equal(t, system.ThinkingModeAlwaysOn, api.Thinking.Mode)
-		require.Nil(t, api.Bindings[system.IntentSamplingTopK], "no vllm stack-table import")
+		require.Equal(t, "top_k", api.Bindings[system.IntentSamplingTopK].Param, "vllm stack table")
 		require.Equal(t, []string{"reasoning_effort", "temperature", "tools"}, api.Parameters)
 		vllmLog.requireAnonymous(t)
 		require.Contains(t, trace, `upstream vllm serves "deepseek-ai/DeepSeek-R1"`)
@@ -550,6 +618,7 @@ func TestDetectLiteLLMTwoHopUnknownHostIsFingerprinted(t *testing.T) {
 
 		api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
 		require.Equal(t, "litellm", api.Stack)
+		require.Equal(t, "", api.Via)
 		require.Equal(t, "qwen3", api.ModelFamily, "family from the bare upstream id")
 		require.Nil(t, api.Thinking)
 		deadLog.requireAnonymous(t)
@@ -582,6 +651,7 @@ func TestDetectLiteLLMTwoHopTimeoutKeepsFirstHopEvidence(t *testing.T) {
 	trace := strings.Join(lines, "\n")
 	require.NotNil(t, api)
 	require.Equal(t, "litellm", api.Stack)
+	require.Equal(t, "", api.Via, "a timed-out hop identifies nothing")
 	require.Equal(t, "qwen3", api.ModelFamily)
 	require.Nil(t, api.Thinking, "no upstream evidence arrived in time")
 	require.Equal(t, []string{"reasoning_effort", "temperature", "tools"}, api.Parameters, "hop-1 evidence stands")
@@ -598,26 +668,45 @@ func TestDetectLiteLLMTwoHopTimeoutKeepsFirstHopEvidence(t *testing.T) {
 
 // R5 addendum end-to-end with the hop in place: supported_reasoning_efforts
 // still narrows the litellm effort enum (OQ1 value rule included) after
-// probeLiteLLM falls through to the second hop.
+// probeLiteLLM falls through to the second hop — when the stack stays
+// litellm (here: an upstream nothing answers at). An identified upstream
+// (CR4) is composed with its own table instead: Venice's documented enum
+// stands and the efforts list is not applied to it.
 func TestDetectLiteLLMTwoHopKeepsSupportedReasoningEfforts(t *testing.T) {
-	venice, _ := registryServer(t, veniceEntry("qwen3-235b", true), 0)
-	mapHostToVendor(t, venice.URL, "venice")
 	group := map[string]any{
 		"model_group": "my-chat", "supported_openai_params": []string{"temperature", "reasoning_effort"},
 		"supports_reasoning": true, "supported_reasoning_efforts": []string{"low", "medium", "high"},
 	}
-	litellm, llLog := litellmServer(t, group, []map[string]any{deployment("my-chat", "openai/qwen3-235b", venice.URL+"/api/v1", nil)})
 
-	d := NewDetector(lib.NewTestLogger(), DefaultOptions())
-	api := d.Detect(context.Background(), config.ModelConfig{ModelName: "my-chat", ApiType: "openai", ApiURL: litellm.URL + "/v1/chat/completions", ApiKey: "sk-litellm"})
-	require.NotNil(t, api)
-	require.Equal(t, "litellm", api.Stack)
-	require.Equal(t, "qwen3", api.ModelFamily, "the hop ran: family from the upstream id")
-	require.Equal(t, []string{"low", "medium", "high"}, api.Bindings[system.IntentReasoningEffort].EnumValues)
-	require.Nil(t, api.Bindings[system.IntentReasoningDisable], "none is not offered")
-	require.Equal(t, "low", api.Bindings[system.IntentReasoningEnable].Value, "first supported effort other than none")
-	require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
-	require.True(t, llLog.sawPath("/model/info"))
+	t.Run("stack litellm", func(t *testing.T) {
+		dead, _ := loggingServer(t, http.NewServeMux())
+		litellm, llLog := litellmServer(t, group, []map[string]any{deployment("my-chat", "openai/qwen3-235b", dead.URL+"/v1", nil)})
+
+		d := NewDetector(lib.NewTestLogger(), DefaultOptions())
+		api := d.Detect(context.Background(), config.ModelConfig{ModelName: "my-chat", ApiType: "openai", ApiURL: litellm.URL + "/v1/chat/completions", ApiKey: "sk-litellm"})
+		require.NotNil(t, api)
+		require.Equal(t, "litellm", api.Stack)
+		require.Equal(t, "", api.Via)
+		require.Equal(t, "qwen3", api.ModelFamily, "the hop ran: family from the upstream id")
+		require.Equal(t, []string{"low", "medium", "high"}, api.Bindings[system.IntentReasoningEffort].EnumValues)
+		require.Nil(t, api.Bindings[system.IntentReasoningDisable], "none is not offered")
+		require.Equal(t, "low", api.Bindings[system.IntentReasoningEnable].Value, "first supported effort other than none")
+		require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
+		require.True(t, llLog.sawPath("/model/info"))
+	})
+
+	t.Run("identified upstream keeps its own enum", func(t *testing.T) {
+		venice, _ := registryServer(t, veniceEntry("qwen3-235b", true), 0)
+		mapHostToVendor(t, venice.URL, "venice")
+		litellm, _ := litellmServer(t, group, []map[string]any{deployment("my-chat", "openai/qwen3-235b", venice.URL+"/api/v1", nil)})
+
+		api, _ := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
+		require.Equal(t, "venice", api.Stack)
+		require.Equal(t, "litellm", api.Via)
+		require.Equal(t, []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}, api.Bindings[system.IntentReasoningEffort].EnumValues, "venice's documented enum")
+		require.Equal(t, "venice_parameters.disable_thinking", api.Bindings[system.IntentReasoningDisable].Param)
+		require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
+	})
 }
 
 // Controller ruling: hopAllowed gates the second hop's target by scheme and
@@ -722,6 +811,8 @@ func TestDetectLiteLLMTwoHopUsesHopClient(t *testing.T) {
 	api, _ := d.DetectWithTrace(context.Background(), config.ModelConfig{ModelName: "my-chat", ApiType: "openai", ApiURL: litellm.URL + "/v1/chat/completions", ApiKey: "sk-litellm"})
 	require.NotNil(t, api)
 	require.Equal(t, "qwen3", api.ModelFamily)
+	require.Equal(t, "venice", api.Stack)
+	require.Equal(t, "litellm", api.Via)
 	require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode, "the hop ran and its evidence arrived")
 	veniceLog.requireAnonymous(t)
 
@@ -755,6 +846,7 @@ func TestDetectLiteLLMTwoHopHopTargetGate(t *testing.T) {
 			litellm, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "openai/qwen3-32b", c.apiBase, nil)})
 			api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
 			require.Equal(t, "litellm", api.Stack)
+			require.Equal(t, "", api.Via)
 			require.Equal(t, "qwen3", api.ModelFamily, "bare-id family evidence still applies")
 			require.Nil(t, api.Thinking, "the hop never ran")
 			require.Contains(t, trace, "refused for the second hop (scheme/address)")
@@ -768,6 +860,8 @@ func TestDetectLiteLLMTwoHopHopTargetGate(t *testing.T) {
 		litellm, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "hosted_vllm/local-model", vllm.URL, nil)})
 		api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
 		require.Equal(t, "deepseek-r1", api.ModelFamily, "the hop reached the loopback upstream")
+		require.Equal(t, "vllm", api.Stack)
+		require.Equal(t, "litellm", api.Via)
 		require.NotContains(t, trace, "refused for the second hop")
 		vllmLog.requireAnonymous(t)
 	})
@@ -800,6 +894,7 @@ func TestDetectLiteLLMTwoHopCutShortByDetectionDeadline(t *testing.T) {
 	trace := strings.Join(lines, "\n")
 	require.NotNil(t, api)
 	require.Equal(t, "litellm", api.Stack)
+	require.Equal(t, "", api.Via)
 	require.Equal(t, "qwen3", api.ModelFamily, "family from the bare upstream id")
 	require.Nil(t, api.Thinking, "no upstream evidence arrived in time")
 	require.Equal(t, []string{"reasoning_effort", "temperature", "tools"}, api.Parameters, "hop-1 evidence stands")
@@ -836,4 +931,279 @@ func TestDetectLiteLLMTwoHopModelInfoOverBodyCapSkipsHop(t *testing.T) {
 	require.Contains(t, trace, fmt.Sprintf("/model/info -> HTTP 200, but the body exceeds the %d-byte limit; ignored", maxProbeBody))
 	require.NotContains(t, trace, "litellm /model/info: deployment")
 	require.Empty(t, upLog.seen(), "the hop never ran")
+}
+
+// liveGroup mirrors the live LiteLLM deployment CR4 was decided on: the
+// `openai/` provider lists the standard params it forwards for the model
+// group — and reasoning_effort is not among them (LiteLLM answered
+// litellm.UnsupportedParamsError for it).
+var liveGroup = map[string]any{
+	"model_group":             "venice-deepseek-v4-pro",
+	"supported_openai_params": []string{"temperature", "tools", "response_format", "stream_options", "max_tokens", "user"},
+	"supports_reasoning":      false,
+}
+
+func withReasoningEffort(group map[string]any) map[string]any {
+	out := make(map[string]any, len(group))
+	for k, v := range group {
+		out[k] = v
+	}
+	out["supported_openai_params"] = append([]string{"reasoning_effort"}, group["supported_openai_params"].([]string)...)
+	return out
+}
+
+// requireNoReasoningEffortBinding asserts that no binding is rooted at the
+// standard reasoning_effort param.
+func requireNoReasoningEffortBinding(t *testing.T, api *system.ModelApiSpec) {
+	t.Helper()
+	for intent, b := range api.Bindings {
+		root, _, _ := strings.Cut(b.Param, ".")
+		require.NotEqual(t, "reasoning_effort", root, "%s must not be rooted at reasoning_effort", intent)
+	}
+}
+
+// requireSubset asserts every element of list is in allowed.
+func requireSubset(t *testing.T, list, allowed []string) {
+	t.Helper()
+	set := map[string]bool{}
+	for _, a := range allowed {
+		set[a] = true
+	}
+	for _, p := range list {
+		require.True(t, set[p], "%q is not in %v", p, allowed)
+	}
+}
+
+// CR4/U1+U3 end to end, live-shaped: LiteLLM fronts Venice
+// (openai/deepseek-v4-pro:include_venice_system_prompt=false at a Venice
+// api_base) and its model group does not list reasoning_effort. The composed
+// spec reports Venice as the stack, via litellm, with Venice's own knobs
+// (venice_parameters.* is forwarded verbatim as a provider kwarg) and
+// without anything rooted at reasoning_effort; parameters are Venice's
+// documented list narrowed to what LiteLLM forwards. The hop itself is
+// unchanged: anonymous, one hop, api_base and keys never in the trace.
+func TestDetectLiteLLMTwoHopIdentifiedUpstreamBecomesStack(t *testing.T) {
+	t.Run("venice, reasoning_effort not forwarded", func(t *testing.T) {
+		venice, veniceLog := registryServerMulti(t, veniceEntry("deepseek-v4-pro", true), veniceEntry("llama-3.3-70b", false))
+		mapHostToVendor(t, venice.URL, "venice")
+		litellm, _ := litellmServer(t, liveGroup, []map[string]any{
+			deployment("venice-deepseek-v4-pro", "openai/deepseek-v4-pro:include_venice_system_prompt=false", venice.URL+"/api/v1", map[string]any{"api_key": "sk-UPSTREAMSECRET"}),
+		})
+
+		api, trace := detectVia(t, litellm.URL, "venice-deepseek-v4-pro", DefaultOptions())
+		require.NotNil(t, api)
+		require.Equal(t, "venice", api.Stack)
+		require.Equal(t, "litellm", api.Via)
+		require.Equal(t, system.ApiSpecSourceDetected, api.Source)
+		require.Equal(t, "deepseek", api.ModelFamily)
+		require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
+		disable := api.Bindings[system.IntentReasoningDisable]
+		require.NotNil(t, disable)
+		require.Equal(t, "venice_parameters.disable_thinking", disable.Param)
+		require.Equal(t, true, disable.Value)
+		require.Equal(t, "venice_parameters.strip_thinking_response", api.Bindings[system.IntentReasoningFormat].Param)
+		require.Nil(t, api.Bindings[system.IntentReasoningEffort], "reasoning_effort is standard and not in supported_openai_params")
+		requireNoReasoningEffortBinding(t, api)
+		require.Equal(t, "top_k", api.Bindings[system.IntentSamplingTopK].Param, "non-standard root: forwarded")
+		require.Equal(t, "response_format", api.Bindings[system.IntentResponseFormatJSON].Param, "standard root in the supported list")
+		require.Equal(t, "stream_options.include_usage", api.Bindings[system.IntentStreamIncludeUsage].Param)
+		require.Nil(t, api.Bindings[system.IntentToolsParallel], "parallel_tool_calls is standard and not supported")
+		require.Nil(t, api.Bindings[system.IntentReasoningBudget], "litellm's thinking.budget_tokens is not venice's knob")
+		require.Equal(t, []string{"max_tokens", "response_format", "stream_options", "temperature", "tools", "user"}, api.Parameters)
+		requireSubset(t, api.Parameters, liveGroup["supported_openai_params"].([]string))
+		require.NotContains(t, api.Parameters, "reasoning", "venice's capability list never crosses the hop")
+
+		veniceLog.requireAnonymous(t)
+		require.NotContains(t, trace, "sk-UPSTREAMSECRET")
+		require.NotContains(t, trace, "sk-litellm")
+		require.Contains(t, trace, "upstream venice listing reports reasoning support")
+		require.Contains(t, trace, "upstream venice identified: it becomes the stack (via litellm)")
+		require.Contains(t, trace, "bindings: reasoning.effort dropped — litellm does not forward reasoning_effort for this model")
+		require.Contains(t, trace, "bindings: tools.parallel dropped — litellm does not forward parallel_tool_calls for this model")
+	})
+
+	t.Run("venice, reasoning_effort forwarded", func(t *testing.T) {
+		venice, _ := registryServerMulti(t, veniceEntry("deepseek-v4-pro", true), veniceEntry("llama-3.3-70b", false))
+		mapHostToVendor(t, venice.URL, "venice")
+		litellm, _ := litellmServer(t, withReasoningEffort(liveGroup), []map[string]any{
+			deployment("venice-deepseek-v4-pro", "openai/deepseek-v4-pro:include_venice_system_prompt=false", venice.URL+"/api/v1", nil),
+		})
+
+		api, _ := detectVia(t, litellm.URL, "venice-deepseek-v4-pro", DefaultOptions())
+		require.Equal(t, "venice", api.Stack)
+		require.Equal(t, "litellm", api.Via)
+		effort := api.Bindings[system.IntentReasoningEffort]
+		require.NotNil(t, effort, "venice's reasoning.effort binding survives when LiteLLM forwards reasoning_effort")
+		require.Equal(t, "reasoning_effort", effort.Param)
+		require.Equal(t, []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}, effort.EnumValues, "venice's documented enum")
+		require.Equal(t, "venice_parameters.disable_thinking", api.Bindings[system.IntentReasoningDisable].Param)
+		require.Contains(t, api.Parameters, "reasoning_effort")
+		require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
+	})
+
+	t.Run("hosted_vllm upstream becomes vllm", func(t *testing.T) {
+		vllm, vllmLog := vllmServer(t, "Qwen/Qwen3-32B")
+		litellm, _ := litellmServer(t, liveGroup, []map[string]any{deployment("venice-deepseek-v4-pro", "hosted_vllm/local-model", vllm.URL, nil)})
+
+		api, trace := detectVia(t, litellm.URL, "venice-deepseek-v4-pro", DefaultOptions())
+		require.Equal(t, "vllm", api.Stack)
+		require.Equal(t, "litellm", api.Via)
+		require.Equal(t, "qwen3", api.ModelFamily, "family from the upstream's served id")
+		disable := api.Bindings[system.IntentReasoningDisable]
+		require.NotNil(t, disable)
+		require.Equal(t, system.BindingKindTemplateKwarg, disable.Kind, "vllm honours the family's template kwargs")
+		require.Equal(t, "chat_template_kwargs.enable_thinking", disable.Param)
+		require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
+		require.Equal(t, "thinking_token_budget", api.Bindings[system.IntentReasoningBudget].Param)
+		require.Equal(t, "top_k", api.Bindings[system.IntentSamplingTopK].Param)
+		require.Equal(t, "stream_options.include_usage", api.Bindings[system.IntentStreamIncludeUsage].Param, "stream_options is in the supported list")
+		require.Nil(t, api.Bindings[system.IntentToolsParallel])
+		requireNoReasoningEffortBinding(t, api)
+		requireSubset(t, api.Parameters, liveGroup["supported_openai_params"].([]string))
+		vllmLog.requireAnonymous(t)
+		require.Contains(t, trace, `upstream vllm serves "Qwen/Qwen3-32B"`)
+
+		// without stream_options in the list the include_usage knob goes too
+		narrow := map[string]any{"model_group": "venice-deepseek-v4-pro", "supported_openai_params": []string{"temperature"}, "supports_reasoning": false}
+		litellm2, _ := litellmServer(t, narrow, []map[string]any{deployment("venice-deepseek-v4-pro", "hosted_vllm/local-model", vllm.URL, nil)})
+		api, _ = detectVia(t, litellm2.URL, "venice-deepseek-v4-pro", DefaultOptions())
+		require.Equal(t, "vllm", api.Stack)
+		require.Nil(t, api.Bindings[system.IntentStreamIncludeUsage])
+		require.Equal(t, "chat_template_kwargs.enable_thinking", api.Bindings[system.IntentReasoningDisable].Param)
+		require.Equal(t, []string{"temperature"}, api.Parameters)
+	})
+
+	t.Run("openai upstream by hostname, no request needed", func(t *testing.T) {
+		upstream, upLog := loggingServer(t, http.NewServeMux())
+		mapHostToVendor(t, upstream.URL, "openai")
+		litellm, _ := litellmServer(t, withReasoningEffort(liveGroup), []map[string]any{deployment("venice-deepseek-v4-pro", "openai/o4-mini", upstream.URL+"/v1", nil)})
+
+		api, trace := detectVia(t, litellm.URL, "venice-deepseek-v4-pro", DefaultOptions())
+		require.Equal(t, "openai", api.Stack)
+		require.Equal(t, "litellm", api.Via)
+		require.Equal(t, "o-series", api.ModelFamily)
+		require.Equal(t, system.ThinkingModeTunable, api.Thinking.Mode)
+		require.Equal(t, "reasoning_effort", api.Bindings[system.IntentReasoningEffort].Param, "o-series' native knob on the openai preset, forwarded")
+		requireSubset(t, api.Parameters, withReasoningEffort(liveGroup)["supported_openai_params"].([]string))
+		require.Empty(t, upLog.seen(), "openai is identified by hostname alone: nothing is read from it")
+		require.Contains(t, trace, "upstream openai recognised by hostname")
+	})
+
+	t.Run("ollama upstream stays evidence-only", func(t *testing.T) {
+		for _, prefix := range []string{"ollama", "ollama_chat"} {
+			ollama, ollamaLog := ollamaServer(t, "qwen3", []string{"thinking"})
+			litellm, _ := litellmServer(t, withReasoningEffort(liveGroup), []map[string]any{deployment("venice-deepseek-v4-pro", prefix+"/qwen3:32b", ollama.URL, nil)})
+
+			api, trace := detectVia(t, litellm.URL, "venice-deepseek-v4-pro", DefaultOptions())
+			require.Equal(t, "litellm", api.Stack, prefix)
+			require.Equal(t, "", api.Via, prefix)
+			require.Equal(t, "qwen3", api.ModelFamily)
+			require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
+			require.Equal(t, "reasoning_effort", api.Bindings[system.IntentReasoningDisable].Param, "litellm's knob")
+			require.Nil(t, api.Bindings[system.IntentContextNumCtx], "no ollama stack-table import")
+			ollamaLog.requireAnonymous(t)
+			require.Contains(t, trace, "upstream ollama stays evidence-only")
+		}
+	})
+
+	t.Run("unidentified upstream keeps stack litellm with the filter", func(t *testing.T) {
+		dead, deadLog := loggingServer(t, http.NewServeMux())
+		litellm, _ := litellmServer(t, liveGroup, []map[string]any{deployment("venice-deepseek-v4-pro", "openai/qwen3-32b", dead.URL+"/v1", nil)})
+
+		api, trace := detectVia(t, litellm.URL, "venice-deepseek-v4-pro", DefaultOptions())
+		require.Equal(t, "litellm", api.Stack)
+		require.Equal(t, "", api.Via)
+		require.Equal(t, "qwen3", api.ModelFamily)
+		requireNoReasoningEffortBinding(t, api)
+		require.Equal(t, "response_format", api.Bindings[system.IntentResponseFormatJSON].Param)
+		require.Nil(t, api.Bindings[system.IntentToolsParallel])
+		require.Equal(t, []string{"max_tokens", "response_format", "stream_options", "temperature", "tools", "user"}, api.Parameters)
+		deadLog.requireAnonymous(t)
+		require.Contains(t, trace, "no engine fingerprint matched at the upstream")
+
+		// reasoning known (LiteLLM says so) but reasoning_effort unsupported:
+		// the litellm toggle goes, the budget knob (root thinking) stays
+		reasons := map[string]any{"model_group": "venice-deepseek-v4-pro", "supported_openai_params": []string{"temperature"}, "supports_reasoning": true}
+		litellm2, _ := litellmServer(t, reasons, []map[string]any{deployment("venice-deepseek-v4-pro", "openai/qwen3-32b", dead.URL+"/v1", nil)})
+		api, _ = detectVia(t, litellm2.URL, "venice-deepseek-v4-pro", DefaultOptions())
+		require.Equal(t, "litellm", api.Stack)
+		requireNoReasoningEffortBinding(t, api)
+		require.Nil(t, api.Bindings[system.IntentReasoningDisable])
+		require.Equal(t, "thinking.budget_tokens", api.Bindings[system.IntentReasoningBudget].Param)
+		require.Equal(t, system.ThinkingModeTunable, api.Thinking.Mode, "derived after the filter")
+	})
+
+	t.Run("supported list unavailable: only reasoning_effort is dropped", func(t *testing.T) {
+		venice, _ := registryServerMulti(t, veniceEntry("deepseek-v4-pro", true), veniceEntry("llama-3.3-70b", false))
+		mapHostToVendor(t, venice.URL, "venice")
+		mux := http.NewServeMux()
+		mux.HandleFunc("/health/liveliness", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(`"I'm alive!"`)) })
+		mux.HandleFunc("/model_group/info", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusUnauthorized) })
+		mux.HandleFunc("/model/info", jsonHandler(map[string]any{"data": []map[string]any{
+			deployment("venice-deepseek-v4-pro", "openai/deepseek-v4-pro", venice.URL+"/api/v1", nil),
+		}}))
+		litellm, _ := loggingServer(t, mux)
+
+		api, trace := detectVia(t, litellm.URL, "venice-deepseek-v4-pro", DefaultOptions())
+		require.Equal(t, "venice", api.Stack)
+		require.Equal(t, "litellm", api.Via)
+		require.Equal(t, "venice_parameters.disable_thinking", api.Bindings[system.IntentReasoningDisable].Param)
+		require.Nil(t, api.Bindings[system.IntentReasoningEffort])
+		requireNoReasoningEffortBinding(t, api)
+		require.Equal(t, "response_format", api.Bindings[system.IntentResponseFormatJSON].Param, "kept: nothing says it is not forwarded")
+		require.Equal(t, "parallel_tool_calls", api.Bindings[system.IntentToolsParallel].Param)
+		require.NotContains(t, api.Parameters, "reasoning_effort")
+		require.Contains(t, api.Parameters, "messages", "venice's documented list minus reasoning_effort")
+		require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
+		require.Contains(t, trace, "litellm supported_openai_params unavailable")
+	})
+
+	t.Run("anthropic upstream stays evidence-only (claudeai transport)", func(t *testing.T) {
+		upstream, upLog := loggingServer(t, http.NewServeMux())
+		for _, dep := range []map[string]any{
+			deployment("venice-deepseek-v4-pro", "anthropic/claude-opus-4-6", upstream.URL, nil),
+			deployment("venice-deepseek-v4-pro", "openai/claude-opus-4-6", upstream.URL+"/v1", nil),
+		} {
+			if strings.HasPrefix(dep["litellm_params"].(map[string]any)["model"].(string), "openai/") {
+				mapHostToVendor(t, upstream.URL, "anthropic")
+			}
+			litellm, _ := litellmServer(t, withReasoningEffort(liveGroup), []map[string]any{dep})
+			api, trace := detectVia(t, litellm.URL, "venice-deepseek-v4-pro", DefaultOptions())
+			require.Equal(t, "litellm", api.Stack)
+			require.Equal(t, "", api.Via)
+			require.Equal(t, "claude", api.ModelFamily)
+			require.Nil(t, api.Bindings[system.IntentResponseFormatGrammar])
+			for _, b := range api.Bindings {
+				require.NotEqual(t, "output_config.format", b.Param, "anthropic's Messages vocabulary never leaks through litellm")
+			}
+			require.Empty(t, upLog.seen(), "anthropic is never read")
+			require.Contains(t, trace, "upstream anthropic stays evidence-only")
+		}
+	})
+
+	t.Run("the identified stack still needs the model's transport", func(t *testing.T) {
+		venice, _ := registryServerMulti(t, veniceEntry("deepseek-v4-pro", true), veniceEntry("llama-3.3-70b", false))
+		mapHostToVendor(t, venice.URL, "venice")
+		litellm, _ := litellmServer(t, liveGroup, []map[string]any{deployment("venice-deepseek-v4-pro", "openai/deepseek-v4-pro", venice.URL+"/api/v1", nil)})
+
+		d := NewDetector(lib.NewTestLogger(), DefaultOptions())
+		api, lines := d.DetectWithTrace(context.Background(), config.ModelConfig{ModelName: "venice-deepseek-v4-pro", ApiType: "claudeai", ApiURL: litellm.URL + "/v1/messages", ApiKey: "sk-litellm"})
+		require.NotNil(t, api)
+		require.Equal(t, "", api.Stack)
+		require.Equal(t, "", api.Via, "via goes with the stack")
+		require.Equal(t, "deepseek", api.ModelFamily)
+		require.Empty(t, api.Bindings)
+		require.Contains(t, strings.Join(lines, "\n"), `detected stack "venice" speaks "openai" but apiType is "claudeai" — stack dropped`)
+	})
+
+	t.Run("declared preset is untouched", func(t *testing.T) {
+		d := NewDetector(lib.NewTestLogger(), DefaultOptions())
+		api := d.Detect(context.Background(), config.ModelConfig{ModelName: "qwen3-32b", ApiType: "openai", ApiStack: "litellm", ApiURL: "http://h/v1/chat/completions"})
+		require.Equal(t, "litellm", api.Stack)
+		require.Equal(t, "", api.Via)
+		require.Equal(t, system.ApiSpecSourceDeclared, api.Source)
+		require.Equal(t, "reasoning_effort", api.Bindings[system.IntentReasoningEffort].Param)
+		require.Equal(t, "parallel_tool_calls", api.Bindings[system.IntentToolsParallel].Param)
+		require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
+	})
 }

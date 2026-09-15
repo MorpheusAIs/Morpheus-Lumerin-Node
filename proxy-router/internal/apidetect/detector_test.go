@@ -722,8 +722,10 @@ func TestDetectLiteLLMWithoutReasoningSupportSkipsReasoning(t *testing.T) {
 	mux.HandleFunc("/health/liveliness", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`"I'm alive!"`))
 	})
+	// response_format is listed so the non-reasoning knob is forwarded (CR4:
+	// standard params LiteLLM does not list for the group are dropped).
 	mux.HandleFunc("/model_group/info", jsonHandler(map[string]any{"data": []map[string]any{{
-		"model_group": "llama-3.3-70b", "supported_openai_params": []string{"temperature"}, "supports_reasoning": false,
+		"model_group": "llama-3.3-70b", "supported_openai_params": []string{"temperature", "response_format"}, "supports_reasoning": false,
 	}}}))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -731,9 +733,12 @@ func TestDetectLiteLLMWithoutReasoningSupportSkipsReasoning(t *testing.T) {
 	api := detect(t, srv.URL+"/chat/completions", "openai", "llama-3.3-70b")
 	require.NotNil(t, api)
 	require.Equal(t, "litellm", api.Stack)
+	require.Equal(t, "", api.Via)
 	require.Nil(t, api.Thinking)
 	require.Nil(t, api.Bindings[system.IntentReasoningEffort])
 	require.Equal(t, "response_format", api.Bindings[system.IntentResponseFormatJSON].Param)
+	require.Nil(t, api.Bindings[system.IntentToolsParallel], "parallel_tool_calls is not in the group's supported list")
+	require.Equal(t, []string{"response_format", "temperature"}, api.Parameters, "the litellm list narrowed to what the group supports")
 }
 
 // --- second-review regressions ---
@@ -824,20 +829,23 @@ func TestDetectLiteLLMDegradedIntrospection(t *testing.T) {
 	require.Equal(t, "litellm", api.Stack)
 	require.Nil(t, api.Thinking)
 	require.Contains(t, api.Parameters, "messages") // stack default list
+	require.NotContains(t, api.Parameters, "reasoning_effort", "the supported list is unknown: only reasoning_effort is assumed not forwarded (CR4)")
 	require.Nil(t, api.Bindings[system.IntentReasoningDisable])
+	require.Equal(t, "response_format", api.Bindings[system.IntentResponseFormatJSON].Param, "other standard params stay when the list is unknown")
 
 	// bare-object (no data wrapper) response shape is accepted too
 	mux2 := http.NewServeMux()
 	mux2.HandleFunc("/health/liveliness", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(`"I'm alive!"`)) })
+	// (reasoning_effort listed so the litellm toggle is forwarded, CR4)
 	mux2.HandleFunc("/model_group/info", jsonHandler(map[string]any{
-		"model_group": "qwen3-32b", "supported_openai_params": []string{"tools"}, "supports_reasoning": true,
+		"model_group": "qwen3-32b", "supported_openai_params": []string{"tools", "reasoning_effort"}, "supports_reasoning": true,
 	}))
 	srv2 := httptest.NewServer(mux2)
 	defer srv2.Close()
 
 	api = detect(t, srv2.URL+"/v1/chat/completions", "openai", "qwen3-32b")
 	require.NotNil(t, api)
-	require.Equal(t, []string{"tools"}, api.Parameters)
+	require.Equal(t, []string{"reasoning_effort", "tools"}, api.Parameters)
 	require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
 	require.Equal(t, "reasoning_effort", api.Bindings[system.IntentReasoningEnable].Param)
 }

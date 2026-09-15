@@ -34,6 +34,14 @@ const upstreamByHost = "host"
 // upstream. "" marks a documented prefix whose upstream is a hosted vendor or
 // cloud: recognised so the bare model id can be taken, never probed, never
 // reported (the spec's stack stays litellm).
+//
+// The mapping of a kind to what is reported (litellmUpstream): venice,
+// openrouter, vllm and the engines the fingerprint finds become the spec's
+// stack once the hop confirmed them; openai is taken on the hostname alone;
+// ollama and anthropic stay evidence-only (their LiteLLM providers speak
+// the native API — Ollama's /api, Anthropic Messages on the claudeai
+// transport — not the surface our tables describe through LiteLLM's
+// OpenAI-compatible endpoint).
 var litellmProviderStacks = map[string]string{
 	"openai":       upstreamByHost, // https://docs.litellm.ai/docs/providers/openai_compatible
 	"hosted_vllm":  "vllm",         // https://docs.litellm.ai/docs/providers/vllm
@@ -60,13 +68,28 @@ var litellmProviderStacks = map[string]string{
 // upstream model id as family evidence and — when the upstream is a registry
 // vendor (venice, openrouter), an engine (vllm, ollama) or an unrecognised
 // OpenAI-compatible host (fingerprinted like a self-hosted engine) — reads
-// that upstream once, with no credential at all, only to learn what it serves
-// and whether the model reasons. The upstream's answers land in a scratch
-// Evidence and only family / reasoning facts are copied out of it: nothing
-// from the upstream is reported directly, the stack stays litellm and the
-// bindings stay in LiteLLM's vocabulary (its param translation and
-// drop_params rules are invisible from here).
+// that upstream once, with no credential at all, to learn what it serves and
+// whether the model reasons. The upstream's answers land in a scratch
+// Evidence and only its stack, served id / architecture and reasoning facts
+// are copied out of it (never a chat template, a registry's own bindings or
+// parameter list).
+//
+// When the hop identifies the upstream — venice / openrouter by hostname or
+// listing shape, openai by hostname, an engine confirmed at the api_base —
+// that upstream becomes the reported stack, with Via = litellm: LiteLLM
+// forwards params it does not recognise verbatim as provider kwargs and
+// validates the standard OpenAI ones per model, so the upstream's own
+// vocabulary is what actually works through it (the composer narrows the
+// standard params to LiteLLM's supported_openai_params). Ollama and
+// Anthropic upstreams stay evidence-only with stack litellm: LiteLLM's
+// ollama/ and ollama_chat/ providers speak Ollama's native API rather than
+// the /v1 surface the ollama table describes, and the anthropic preset
+// describes Anthropic Messages on the claudeai transport, which is not what
+// a model talking to LiteLLM's OpenAI-compatible endpoint speaks. An
+// unidentified upstream (unknown prefix, no api_base, hop refused, failed
+// or timed out) leaves the stack litellm as well.
 // https://docs.litellm.ai/docs/proxy/model_management
+// https://docs.litellm.ai/docs/completion/provider_specific_params
 func (d *Detector) litellmUpstream(ctx context.Context, base, modelName, apiKey string, ev *apispec.Evidence) {
 	info := d.requestJSON(ctx, http.MethodGet, base+"/model/info", apiKey, nil, maxProbeBody)
 	if info == nil {
@@ -150,7 +173,10 @@ func (d *Detector) litellmUpstream(ctx context.Context, base, modelName, apiKey 
 	hopCtx, cancel := context.WithTimeout(context.WithValue(ctx, hopCtxKey{}, true), hopTimeout)
 	defer cancel()
 	bases := baseCandidates(apiBase)
+	// up is the scratch evidence; identified is the upstream stack the hop
+	// confirmed ("" when it could not, or when the kind stays evidence-only).
 	var up apispec.Evidence
+	identified := ""
 	switch kind {
 	case "":
 		tracef(ctx, "litellm openai-compatible upstream at an unrecognised host; fingerprinting engines at %v without credentials", bases)
@@ -160,6 +186,10 @@ func (d *Detector) litellmUpstream(ctx context.Context, base, modelName, apiKey 
 			tracef(ctx, "no engine fingerprint matched at the upstream; upstream evidence limited to the bare model id")
 		case "litellm":
 			tracef(ctx, "upstream is itself a LiteLLM proxy; not followed (one hop only)")
+		case "ollama":
+			// evidence-only, traced below like the ollama/ prefix case
+		default:
+			identified = up.Stack
 		}
 		kind = up.Stack
 	case "venice", "openrouter":
@@ -168,18 +198,29 @@ func (d *Detector) litellmUpstream(ctx context.Context, base, modelName, apiKey 
 		if !up.GatewayReasoning {
 			tracef(ctx, "upstream %s listing: no reasoning evidence for %q", kind, upstreamID)
 		}
+		// The listing shape decides (a venice host may serve an
+		// openrouter-shaped listing); an unreadable listing leaves the
+		// upstream unidentified.
+		identified = up.Stack
 	case "vllm":
 		for _, b := range bases {
 			if d.probeVLLM(hopCtx, b, upstreamID, "", &up) {
 				break
 			}
 		}
+		identified = up.Stack
 	case "ollama":
 		for _, b := range bases {
 			if d.probeOllama(hopCtx, b, upstreamID, "", &up) {
 				break
 			}
 		}
+	case "openai":
+		tracef(ctx, "upstream openai recognised by hostname; nothing to read from it")
+		identified = kind
+	case "anthropic":
+		tracef(ctx, "upstream anthropic stays evidence-only (the anthropic preset speaks Anthropic Messages on the claudeai transport, not litellm's OpenAI-compatible endpoint); not read, the spec's stack stays litellm")
+		return
 	default:
 		tracef(ctx, "upstream %q is a hosted vendor; no second hop (only registry vendors and engines are read)", kind)
 		return
@@ -192,11 +233,19 @@ func (d *Detector) litellmUpstream(ctx context.Context, base, modelName, apiKey 
 		}
 	}
 
-	// (d) Only family / reasoning facts cross the hop: the scratch
-	// evidence's stack, chat template, registry bindings, parameters and
-	// reasoning efforts never do. Ollama's thinking capability arrives as
-	// gateway evidence, never as the Ollama capability path (that would
-	// yield Ollama's own knobs).
+	// (d) What crosses the hop: the identified stack (with Via), the served
+	// id / architecture and the reasoning facts. The scratch evidence's chat
+	// template, registry bindings, parameters and reasoning efforts never
+	// do. Ollama's thinking capability arrives as gateway evidence, never as
+	// the Ollama capability path (that would yield Ollama's own knobs).
+	switch {
+	case identified != "":
+		ev.Stack = identified
+		ev.Via = "litellm"
+		tracef(ctx, "upstream %s identified: it becomes the stack (via litellm); its own params are forwarded by litellm, standard ones only when litellm supports them for this model", identified)
+	case kind == "ollama":
+		tracef(ctx, "upstream ollama stays evidence-only (litellm's ollama providers speak the native API, not the /v1 surface the ollama table describes); the spec's stack stays litellm")
+	}
 	if up.Architecture != "" {
 		ev.Architecture = up.Architecture
 		tracef(ctx, "upstream %s reports architecture %q", kind, up.Architecture)
@@ -211,7 +260,7 @@ func (d *Detector) litellmUpstream(ctx context.Context, base, modelName, apiKey 
 		tracef(ctx, "upstream ollama reports the thinking capability for %q (bindings stay in litellm's vocabulary)", upstreamID)
 	case up.GatewayReasoning:
 		ev.GatewayReasoning = true
-		tracef(ctx, "upstream %s listing reports reasoning support for %q (bindings stay in litellm's vocabulary)", kind, upstreamID)
+		tracef(ctx, "upstream %s listing reports reasoning support for %q", kind, upstreamID)
 	}
 }
 

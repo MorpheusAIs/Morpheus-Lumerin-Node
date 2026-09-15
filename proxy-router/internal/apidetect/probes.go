@@ -316,6 +316,9 @@ func (d *Detector) probeLiteLLM(ctx context.Context, base, modelName, apiKey str
 		return false
 	}
 	ev.Stack = "litellm"
+	// The request path goes through LiteLLM from here on, whatever the hop
+	// below identifies behind it: the composer applies the forwarding filter.
+	ev.LiteLLMSeen = true
 	tracef(ctx, "identified litellm by /health/liveliness")
 
 	if !introspect || modelName == "" {
@@ -332,13 +335,18 @@ func (d *Detector) probeLiteLLM(ctx context.Context, base, modelName, apiKey str
 		}
 		if group != nil {
 			if params, ok := group["supported_openai_params"].([]any); ok {
+				// The standard params LiteLLM forwards for this group: a
+				// filter on the composed stack's list, not an import (the
+				// list stays non-nil even when empty — nil means unread).
+				supported := make([]string, 0, len(params))
 				for _, p := range params {
 					if s, ok := p.(string); ok {
-						ev.Parameters = append(ev.Parameters, s)
+						supported = append(supported, s)
 					}
 				}
-				sort.Strings(ev.Parameters)
-				tracef(ctx, "litellm /model_group/info lists %d supported_openai_params", len(ev.Parameters))
+				sort.Strings(supported)
+				ev.LiteLLMSupportedParams = supported
+				tracef(ctx, "litellm /model_group/info lists %d supported_openai_params", len(supported))
 			}
 			if reasons, ok := group["supports_reasoning"].(bool); ok && reasons {
 				ev.GatewayReasoning = true

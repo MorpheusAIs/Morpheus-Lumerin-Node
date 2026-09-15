@@ -22,6 +22,12 @@ type Evidence struct {
 	// name; "" means undetermined — then no bindings are advertised at all
 	// (the wire vocabulary is unknown; it could be a gateway).
 	Stack string
+	// Via is the gateway the request path goes through before Stack, when
+	// the detector identified the upstream behind it ("litellm" after the
+	// LiteLLM second hop found a Venice / OpenRouter / OpenAI endpoint or a
+	// self-hosted engine at the deployment's api_base). Stamped on the spec
+	// as-is; Build never sets it.
+	Via string
 	// ModelName is the configured modelName (the local alias).
 	ModelName string
 	// ModelFamily is the explicit models-config modelFamily. When set it is
@@ -50,15 +56,28 @@ type Evidence struct {
 	// table and are switched on by GatewayReasoning); kept for imports that
 	// carry model-specific shapes.
 	RegistryBindings map[string]*system.ParamBinding
-	// Parameters is a per-model supported-parameter list imported from the
-	// backend (LiteLLM supported_openai_params, OpenRouter
-	// supported_parameters, Venice capabilities). It replaces the stack's
-	// documented list.
+	// Parameters is a per-model supported-parameter list imported from a
+	// registry listing (OpenRouter supported_parameters, Venice
+	// capabilities). It replaces the stack's documented list.
 	Parameters []string
 	// ReasoningEfforts is LiteLLM's supported_reasoning_efforts for the
 	// model group: the litellm reasoning.effort enum for this model. When it
 	// lacks "none", thinking cannot be switched off through LiteLLM.
 	ReasoningEfforts []string
+	// LiteLLMSeen is true when the request path goes through a LiteLLM
+	// proxy — the detected stack is litellm, or Via is litellm and Stack is
+	// the upstream it fronts. It switches on the LiteLLM forwarding filter:
+	// LiteLLM forwards params it does not recognise verbatim (provider
+	// kwargs) but validates the standard OpenAI ones against its per-model
+	// map, so bindings and parameters rooted at a standard name survive only
+	// when LiteLLMSupportedParams lists that name.
+	LiteLLMSeen bool
+	// LiteLLMSupportedParams is LiteLLM's supported_openai_params for the
+	// model group: the standard OpenAI params it forwards for this model. It
+	// is a filter, not an import — the stack's own list is intersected with
+	// it. nil means the list could not be read; then only reasoning_effort
+	// (the documented rejection) is treated as not forwarded.
+	LiteLLMSupportedParams []string
 	// Declared is true when Stack comes from models-config apiStack (Build)
 	// rather than probing. A declared gateway preset merges its reasoning
 	// knobs on family knowledge alone; a detected gateway only on probe
@@ -85,7 +104,8 @@ func Build(cfg config.ModelConfig) *system.ModelApiSpec {
 // capability > chat-template evidence > family default (gated for gateways /
 // hosted vendors and skipped for an undetermined stack) > Ollama rewrite >
 // stack tables (reasoning knobs only when the model is known to reason) >
-// thinking mode. Returns nil when nothing at all is known.
+// LiteLLM forwarding filter (when the path goes through LiteLLM) > thinking
+// mode. Returns nil when nothing at all is known.
 func Compose(ev Evidence) *system.ModelApiSpec {
 	api, _ := ComposeWithTrace(ev)
 	return api
@@ -102,9 +122,18 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 	// wire: sanitized once, here, before anything reads them.
 	ev.Parameters = sanitizeNames(ev.Parameters, maxParameters, "parameters", tracef)
 	ev.ReasoningEfforts = sanitizeNames(ev.ReasoningEfforts, maxReasoningEfforts, "reasoning efforts", tracef)
+	if ev.LiteLLMSupportedParams != nil {
+		// A list LiteLLM did return stays a known list even when nothing in
+		// it survives (nil is reserved for "could not be read").
+		supported := sanitizeNames(ev.LiteLLMSupportedParams, maxParameters, "litellm supported params", tracef)
+		if supported == nil {
+			supported = []string{}
+		}
+		ev.LiteLLMSupportedParams = supported
+	}
 
 	stack := ev.Stack
-	api := &system.ModelApiSpec{Stack: stack, Source: system.ApiSpecSourceDetected}
+	api := &system.ModelApiSpec{Stack: stack, Via: ev.Via, Source: system.ApiSpecSourceDetected}
 	if ev.Declared {
 		api.Source = system.ApiSpecSourceDeclared
 	}
@@ -238,6 +267,9 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 	}
 	if len(ev.Parameters) == 0 && len(api.Parameters) > 0 {
 		tracef("parameters: %d standard params from the %s stack table", len(api.Parameters), stack)
+	}
+	if ev.LiteLLMSeen {
+		filterForLiteLLM(api, ev.LiteLLMSupportedParams, tracef)
 	}
 	if len(api.Bindings) == 0 && !alwaysOn {
 		tracef("bindings: no remappable knobs known for this backend")
@@ -390,6 +422,86 @@ func mergeStackTables(api *system.ModelApiSpec, stack string, family bindingSet,
 			api.Parameters = append([]string(nil), params...)
 		}
 	}
+}
+
+// filterForLiteLLM narrows a spec whose request path goes through a LiteLLM
+// proxy to what LiteLLM actually forwards. LiteLLM treats any param it does
+// not recognise as provider-specific and passes it to the upstream verbatim
+// (venice_parameters.*, chat_template_kwargs.*, top_k, min_p, OpenRouter's
+// reasoning object, thinking, …), but validates the standard OpenAI
+// chat-completions params against its per-provider map and rejects the ones
+// not listed there (litellm.UnsupportedParamsError; the `openai/` provider
+// does not list reasoning_effort for an unknown model). So a binding whose
+// root param — the text before the first "." — is a standard name is kept
+// only when supported (LiteLLM's supported_openai_params for the model
+// group) lists it, and api.Parameters becomes its intersection with
+// supported. When supported is nil (the list could not be read) only the
+// demonstrated rejection, reasoning_effort, is treated as not forwarded.
+// https://docs.litellm.ai/docs/completion/provider_specific_params
+// https://docs.litellm.ai/docs/completion/drop_params
+func filterForLiteLLM(api *system.ModelApiSpec, supported []string, tracef func(string, ...any)) {
+	standard := make(map[string]bool, len(openaiChatParameters))
+	for _, p := range openaiChatParameters {
+		standard[p] = true
+	}
+	known := supported != nil
+	listed := make(map[string]bool, len(supported))
+	for _, p := range supported {
+		listed[p] = true
+	}
+	if !known {
+		tracef("litellm supported_openai_params unavailable: only reasoning_effort is treated as not forwarded (the documented rejection)")
+	}
+	// forwards reports whether LiteLLM passes a param with this root on to
+	// the upstream.
+	forwards := func(root string) bool {
+		if !standard[root] {
+			return true
+		}
+		if known {
+			return listed[root]
+		}
+		return root != "reasoning_effort"
+	}
+
+	intents := make([]string, 0, len(api.Bindings))
+	for intent := range api.Bindings {
+		intents = append(intents, intent)
+	}
+	sort.Strings(intents)
+	for _, intent := range intents {
+		root, _, _ := strings.Cut(api.Bindings[intent].Param, ".")
+		if forwards(root) {
+			continue
+		}
+		delete(api.Bindings, intent)
+		tracef("bindings: %s dropped — litellm does not forward %s for this model", intent, root)
+	}
+	if len(api.Bindings) == 0 {
+		api.Bindings = nil
+	}
+
+	// parameters: a plain intersection with the list (every stack table on
+	// the LiteLLM path lists standard OpenAI names); minus reasoning_effort
+	// when the list is unknown.
+	kept := make([]string, 0, len(api.Parameters))
+	for _, p := range api.Parameters {
+		if (known && listed[p]) || (!known && p != "reasoning_effort") {
+			kept = append(kept, p)
+		}
+	}
+	if dropped := len(api.Parameters) - len(kept); dropped > 0 {
+		if known {
+			tracef("parameters: %d of %d dropped — not in litellm's supported_openai_params for this model; %d kept", dropped, len(api.Parameters), len(kept))
+		} else {
+			tracef("parameters: reasoning_effort dropped — litellm supported_openai_params unavailable")
+		}
+	}
+	sort.Strings(kept)
+	if len(kept) == 0 {
+		kept = nil
+	}
+	api.Parameters = kept
 }
 
 func cloneSet(b bindingSet) bindingSet {

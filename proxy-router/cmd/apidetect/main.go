@@ -12,7 +12,9 @@
 // -ignore-host skips hostname recognition so hosted vendors must be
 // identified by their endpoints and listing shape alone (what an unknown
 // custom domain would get); -two-hop=false disables the LiteLLM second hop
-// (GET /model/info and the anonymous read of its upstream).
+// (GET /model/info and the anonymous read of its upstream, which — when it
+// identifies the upstream — becomes the reported stack, printed with a
+// "via: litellm" line).
 package main
 
 import (
@@ -42,6 +44,9 @@ func formatResult(api *system.ModelApiSpec, trace []string) string {
 	} else {
 		b.WriteString("  result:\n")
 		fmt.Fprintf(&b, "    stack:       %s\n", orDash(api.Stack))
+		if api.Via != "" {
+			fmt.Fprintf(&b, "    via:         %s\n", api.Via)
+		}
 		fmt.Fprintf(&b, "    modelFamily: %s\n", orDash(api.ModelFamily))
 		fmt.Fprintf(&b, "    source:      %s\n", orDash(api.Source))
 		thinking := "unknown"
