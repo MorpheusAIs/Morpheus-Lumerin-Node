@@ -401,8 +401,11 @@ func (d *Detector) probeVLLM(ctx context.Context, base, modelName, apiKey string
 }
 
 // matchModelEntry finds the model list entry whose id equals modelName; when
-// there is no exact match, a single-entry list is unambiguous, and otherwise
-// an entry whose id ends with "/<modelName>" is accepted.
+// there is no exact match, the bare id (inline "key=value" parameters some
+// vendors append, e.g. Venice's ":include_venice_system_prompt=false",
+// stripped) is tried next, then a single-entry list is treated as
+// unambiguous, and otherwise an entry whose id ends with "/<name>" — for
+// modelName or its bare form — is accepted.
 func matchModelEntry(data []any, modelName string) map[string]any {
 	var entries []map[string]any
 	for _, item := range data {
@@ -410,17 +413,28 @@ func matchModelEntry(data []any, modelName string) map[string]any {
 			entries = append(entries, m)
 		}
 	}
-	for _, m := range entries {
-		if id, ok := m["id"].(string); ok && strings.EqualFold(id, modelName) {
-			return m
+
+	bare := bareModelID(modelName)
+	candidates := []string{modelName}
+	if bare != modelName {
+		candidates = append(candidates, bare)
+	}
+
+	for _, name := range candidates {
+		for _, m := range entries {
+			if id, ok := m["id"].(string); ok && strings.EqualFold(id, name) {
+				return m
+			}
 		}
 	}
 	if len(entries) == 1 {
 		return entries[0]
 	}
-	for _, m := range entries {
-		if id, ok := m["id"].(string); ok && strings.HasSuffix(strings.ToLower(id), "/"+strings.ToLower(modelName)) {
-			return m
+	for _, name := range candidates {
+		for _, m := range entries {
+			if id, ok := m["id"].(string); ok && strings.HasSuffix(strings.ToLower(id), "/"+strings.ToLower(name)) {
+				return m
+			}
 		}
 	}
 	return nil

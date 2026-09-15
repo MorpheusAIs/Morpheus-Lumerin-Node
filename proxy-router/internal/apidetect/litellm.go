@@ -114,6 +114,13 @@ func (d *Detector) litellmUpstream(ctx context.Context, base, modelName, apiKey 
 	}
 	tracef(ctx, "litellm /model/info: deployment %q -> provider %q, upstream model %q, api_base %s", modelName, provider, upstreamID, apiBaseText)
 
+	// Venice (and possibly others) append inline "key=value" parameters to
+	// the model id (e.g. "deepseek-v4-pro:include_venice_system_prompt=false");
+	// only the bare id names a real family or a listing entry, so everything
+	// from here on uses it — the raw, possibly-suffixed form traced above is
+	// the only place it is ever seen.
+	upstreamID = bareModelID(upstreamID)
+
 	// (b) the bare upstream id is family / always-on evidence.
 	if upstreamID != "" {
 		ev.ServedModelID = upstreamID
@@ -206,6 +213,24 @@ func (d *Detector) litellmUpstream(ctx context.Context, base, modelName, apiKey 
 		ev.GatewayReasoning = true
 		tracef(ctx, "upstream %s listing reports reasoning support for %q (bindings stay in litellm's vocabulary)", kind, upstreamID)
 	}
+}
+
+// bareModelID strips inline "key=value" parameters some vendors append to a
+// model id as extra ":"-separated segments (Venice: e.g.
+// "deepseek-v4-pro:include_venice_system_prompt=false", possibly several
+// chained). Only segments containing "=" are dropped: an Ollama-style tag
+// (e.g. "gpt-oss:120b", "qwen3:8b") carries no "=" and is left intact, since
+// it names the model itself rather than an inline parameter.
+func bareModelID(id string) string {
+	parts := strings.Split(id, ":")
+	kept := make([]string, 1, len(parts))
+	kept[0] = parts[0]
+	for _, p := range parts[1:] {
+		if !strings.Contains(p, "=") {
+			kept = append(kept, p)
+		}
+	}
+	return strings.Join(kept, ":")
 }
 
 // hopAllowed reports whether apiBase is safe to dial for the second hop.

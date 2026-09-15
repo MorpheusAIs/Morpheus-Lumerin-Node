@@ -215,6 +215,48 @@ func TestDetectLiteLLMTwoHopVeniceReasoning(t *testing.T) {
 	require.NotContains(t, trace, "sk-litellm")
 }
 
+// registryServerMulti fakes a Venice- or OpenRouter-shaped /api/v1/models
+// listing with more than one entry, unlike registryServer's single entry: it
+// mirrors Venice's real listing shape (100+ models), where matchModelEntry's
+// single-entry-list fallback cannot mask a matching bug.
+func registryServerMulti(t *testing.T, entries ...map[string]any) (*httptest.Server, *requestLog) {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/models", jsonHandler(map[string]any{"data": entries}))
+	return loggingServer(t, mux)
+}
+
+// Venice appends inline "key=value" parameters to the model id behind a
+// LiteLLM deployment (observed live:
+// "openai/deepseek-v4-pro:include_venice_system_prompt=false"). With a
+// multi-entry listing (so the single-entry fallback cannot apply) the bare
+// id must still match Venice's listing entry: family "deepseek" from the
+// bare id, reasoning from the hop, bindings in LiteLLM's vocabulary, and the
+// raw suffixed id traced exactly once.
+func TestDetectLiteLLMTwoHopVeniceInlineParamsMatchByBareID(t *testing.T) {
+	venice, veniceLog := registryServerMulti(t,
+		veniceEntry("deepseek-v4-pro", true),
+		veniceEntry("some-other-model", false),
+	)
+	mapHostToVendor(t, venice.URL, "venice")
+	litellm, _ := litellmServer(t, noReasoningGroup, []map[string]any{
+		deployment("my-chat", "openai/deepseek-v4-pro:include_venice_system_prompt=false", venice.URL+"/api/v1", nil),
+	})
+
+	api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
+	require.NotNil(t, api)
+	require.Equal(t, "litellm", api.Stack)
+	require.Equal(t, system.ApiSpecSourceDetected, api.Source)
+	require.Equal(t, "deepseek", api.ModelFamily, "family from the bare upstream id")
+	require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
+	require.Equal(t, "reasoning_effort", api.Bindings[system.IntentReasoningDisable].Param, "litellm's knob, not venice's venice_parameters.*")
+	require.Equal(t, "reasoning_effort", api.Bindings[system.IntentReasoningEnable].Param)
+	require.Equal(t, []string{"reasoning_effort", "temperature", "tools"}, api.Parameters, "LiteLLM's own list, not Venice capabilities")
+	veniceLog.requireAnonymous(t)
+	require.Contains(t, trace, "upstream venice listing reports reasoning support")
+	require.Contains(t, trace, `upstream model "deepseek-v4-pro:include_venice_system_prompt=false"`, "the raw suffixed id is still traced once")
+}
+
 func TestDetectLiteLLMTwoHopOpenRouterKeepsLiteLLMVocabulary(t *testing.T) {
 	openrouter, orLog := registryServer(t, map[string]any{"id": "deepseek/deepseek-chat-v3.1", "supported_parameters": []string{"temperature", "reasoning", "tools"}}, 0)
 	mapHostToVendor(t, openrouter.URL, "openrouter")
