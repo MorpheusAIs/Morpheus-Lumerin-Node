@@ -337,13 +337,22 @@ func TestDetectLiteLLMTwoHopUpstream401FamilyFromIdOnly(t *testing.T) {
 }
 
 func TestDetectLiteLLMTwoHopUpstreamIdRefinesFamily(t *testing.T) {
+	// anthropic/ needs no api_base (U7): recognised by its documented litellm
+	// prefix alone, it becomes the stack (via litellm) with claude's own
+	// native knobs — unlike bedrock/ below, a documented cloud prefix that
+	// never becomes a stack of its own.
 	litellm, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "anthropic/claude-opus-4-6", "", nil)})
 	api, _ := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
+	require.Equal(t, "anthropic", api.Stack)
+	require.Equal(t, "litellm", api.Via)
 	require.Equal(t, "claude", api.ModelFamily)
-	require.Nil(t, api.Bindings[system.IntentReasoningEnable], "claude's native knobs never leak through litellm")
+	require.Equal(t, "thinking", api.Bindings[system.IntentReasoningEnable].Param, "claude's native knob, identified via the litellm prefix alone")
+	require.Equal(t, map[string]any{"type": "adaptive"}, api.Bindings[system.IntentReasoningEnable].Value)
 
 	litellm2, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "bedrock/converse/deepseek-r1-distill", "", nil)})
 	r1, _ := detectVia(t, litellm2.URL, "my-chat", DefaultOptions())
+	require.Equal(t, "litellm", r1.Stack, "bedrock/ is a documented cloud prefix: never becomes the stack")
+	require.Equal(t, "", r1.Via)
 	require.Equal(t, "deepseek-r1", r1.ModelFamily)
 	require.Equal(t, system.ThinkingModeAlwaysOn, r1.Thinking.Mode)
 }
@@ -363,15 +372,18 @@ func TestDetectLiteLLMTwoHopDocumentedCloudPrefixIsNotProbed(t *testing.T) {
 	require.Contains(t, trace, `provider "bedrock"`)
 	require.Contains(t, trace, "upstream not probed")
 
-	// anthropic/ likewise: never read, and evidence-only even with an
-	// api_base (CR4 exception: its preset speaks the claudeai transport).
+	// anthropic/ is never read either (no request at all — U7), but unlike
+	// bedrock/azure/groq/... it does become the stack (via litellm): LiteLLM
+	// still translates the OpenAI-shaped request it receives into an
+	// Anthropic Messages call upstream, so the anthropic table is the right
+	// vocabulary even though nothing was read to confirm it.
 	litellm2, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "anthropic/claude-opus-4-6", upstream.URL, nil)})
 	api, trace = detectVia(t, litellm2.URL, "my-chat", DefaultOptions())
-	require.Equal(t, "litellm", api.Stack)
-	require.Equal(t, "", api.Via)
+	require.Equal(t, "anthropic", api.Stack)
+	require.Equal(t, "litellm", api.Via)
 	require.Equal(t, "claude", api.ModelFamily)
-	require.Empty(t, upLog.seen())
-	require.Contains(t, trace, "upstream anthropic stays evidence-only")
+	require.Empty(t, upLog.seen(), "anthropic is recognised by its litellm prefix alone; never read")
+	require.Contains(t, trace, "upstream anthropic recognised")
 }
 
 // R5(c): at most one hop — an upstream that is itself LiteLLM is never
@@ -1158,7 +1170,16 @@ func TestDetectLiteLLMTwoHopIdentifiedUpstreamBecomesStack(t *testing.T) {
 		require.Contains(t, trace, "litellm supported_openai_params unavailable")
 	})
 
-	t.Run("anthropic upstream stays evidence-only (claudeai transport)", func(t *testing.T) {
+	// U7: anthropic behind litellm becomes the stack (via litellm), just
+	// like openai — recognised by its documented prefix or by hostname, read
+	// from directly. The proxy-router still only ever speaks OpenAI
+	// chat-completions to LiteLLM; LiteLLM is what translates that into an
+	// Anthropic Messages call and forwards thinking / output_config to it as
+	// opaque provider params, so the anthropic table is the right bindings.
+	// parameters, though, is litellm's supported list verbatim (U3 exception
+	// for anthropic: intersecting Messages vocabulary with LiteLLM's
+	// OpenAI-shaped list would misreport it — see filterForLiteLLM).
+	t.Run("anthropic upstream becomes the stack (prefix or an anthropic-mapped host)", func(t *testing.T) {
 		upstream, upLog := loggingServer(t, http.NewServeMux())
 		for _, dep := range []map[string]any{
 			deployment("venice-deepseek-v4-pro", "anthropic/claude-opus-4-6", upstream.URL, nil),
@@ -1169,19 +1190,42 @@ func TestDetectLiteLLMTwoHopIdentifiedUpstreamBecomesStack(t *testing.T) {
 			}
 			litellm, _ := litellmServer(t, withReasoningEffort(liveGroup), []map[string]any{dep})
 			api, trace := detectVia(t, litellm.URL, "venice-deepseek-v4-pro", DefaultOptions())
-			require.Equal(t, "litellm", api.Stack)
-			require.Equal(t, "", api.Via)
+			require.Equal(t, "anthropic", api.Stack)
+			require.Equal(t, "litellm", api.Via)
 			require.Equal(t, "claude", api.ModelFamily)
+			require.Equal(t, "thinking", api.Bindings[system.IntentReasoningDisable].Param, "claude family default, non-standard root: forwarded")
+			require.Equal(t, map[string]any{"type": "disabled"}, api.Bindings[system.IntentReasoningDisable].Value)
 			require.Nil(t, api.Bindings[system.IntentResponseFormatGrammar])
 			for _, b := range api.Bindings {
-				require.NotEqual(t, "output_config.format", b.Param, "anthropic's Messages vocabulary never leaks through litellm")
+				require.NotEqual(t, system.BindingKindTemplateKwarg, b.Kind, "anthropic's own vocabulary, never a chat-template kwarg")
 			}
+			require.Equal(t, []string{"max_tokens", "reasoning_effort", "response_format", "stream_options", "temperature", "tools", "user"}, api.Parameters, "litellm's list verbatim (sorted), not intersected with the anthropic table")
+			require.NotContains(t, api.Parameters, "stop_sequences", "anthropic's own params are not re-added to litellm's list")
 			require.Empty(t, upLog.seen(), "anthropic is never read")
-			require.Contains(t, trace, "upstream anthropic stays evidence-only")
+			require.Contains(t, trace, "upstream anthropic recognised")
+			require.Contains(t, trace, "upstream anthropic identified: it becomes the stack (via litellm)")
 		}
 	})
 
-	t.Run("the identified stack still needs the model's transport", func(t *testing.T) {
+	// TDD (U7 controller ruling): the anthropic prefix needs no api_base at
+	// all (unlike every other identified kind) since nothing is ever read
+	// from it; the resulting spec still narrows to litellm's supported list.
+	t.Run("anthropic upstream needs no api_base", func(t *testing.T) {
+		litellm, _ := litellmServer(t, liveGroup, []map[string]any{deployment("venice-deepseek-v4-pro", "anthropic/claude-sonnet-4-5", "", nil)})
+		api, trace := detectVia(t, litellm.URL, "venice-deepseek-v4-pro", DefaultOptions())
+		require.Equal(t, "anthropic", api.Stack)
+		require.Equal(t, "litellm", api.Via)
+		require.Equal(t, "claude", api.ModelFamily)
+		require.Equal(t, map[string]any{"type": "disabled"}, api.Bindings[system.IntentReasoningDisable].Value)
+		require.Equal(t, []string{"max_tokens", "response_format", "stream_options", "temperature", "tools", "user"}, api.Parameters)
+		require.NotContains(t, trace, "has no api_base")
+	})
+
+	// The identified stack no longer needs the model's own transport to
+	// match: the wire the proxy-router actually speaks is litellm's own
+	// openai-compatible surface, whatever apiType is configured, so the
+	// transport-consistency drop does not apply once Via is set (U7).
+	t.Run("an identified stack survives a transport mismatch (via is litellm's transport, not the upstream's)", func(t *testing.T) {
 		venice, _ := registryServerMulti(t, veniceEntry("deepseek-v4-pro", true), veniceEntry("llama-3.3-70b", false))
 		mapHostToVendor(t, venice.URL, "venice")
 		litellm, _ := litellmServer(t, liveGroup, []map[string]any{deployment("venice-deepseek-v4-pro", "openai/deepseek-v4-pro", venice.URL+"/api/v1", nil)})
@@ -1189,11 +1233,11 @@ func TestDetectLiteLLMTwoHopIdentifiedUpstreamBecomesStack(t *testing.T) {
 		d := NewDetector(lib.NewTestLogger(), DefaultOptions())
 		api, lines := d.DetectWithTrace(context.Background(), config.ModelConfig{ModelName: "venice-deepseek-v4-pro", ApiType: "claudeai", ApiURL: litellm.URL + "/v1/messages", ApiKey: "sk-litellm"})
 		require.NotNil(t, api)
-		require.Equal(t, "", api.Stack)
-		require.Equal(t, "", api.Via, "via goes with the stack")
+		require.Equal(t, "venice", api.Stack)
+		require.Equal(t, "litellm", api.Via)
 		require.Equal(t, "deepseek", api.ModelFamily)
-		require.Empty(t, api.Bindings)
-		require.Contains(t, strings.Join(lines, "\n"), `detected stack "venice" speaks "openai" but apiType is "claudeai" — stack dropped`)
+		require.NotEmpty(t, api.Bindings)
+		require.NotContains(t, strings.Join(lines, "\n"), "stack dropped")
 	})
 
 	t.Run("declared preset is untouched", func(t *testing.T) {

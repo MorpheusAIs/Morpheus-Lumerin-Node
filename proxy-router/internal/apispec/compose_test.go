@@ -2,6 +2,7 @@ package apispec
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"testing"
 
@@ -484,6 +485,29 @@ func TestComposeLiteLLMForwardingFilter(t *testing.T) {
 		require.NotNil(t, stackBindings["venice"][system.IntentToolsParallel])
 		require.Contains(t, stackParameters["venice"], "reasoning_effort")
 		require.NotNil(t, stackBindings["litellm"][system.IntentReasoningDisable])
+	})
+
+	// U7 controller ruling: an anthropic upstream identified behind litellm
+	// is Messages vocabulary, not OpenAI's — stackParameters["anthropic"]
+	// (stop_sequences, metadata, model, messages, …) must not be intersected
+	// with LiteLLM's OpenAI-shaped supported_openai_params (that would keep
+	// only the handful of names that happen to collide across the two
+	// vocabularies and silently drop stop_sequences, the actual equivalent of
+	// OpenAI's stop). parameters is supported verbatim instead; bindings are
+	// unaffected since every anthropic table entry has a non-standard root.
+	t.Run("anthropic behind litellm: parameters is litellm's list verbatim, never intersected with the anthropic table", func(t *testing.T) {
+		api := Compose(Evidence{Stack: "anthropic", Via: "litellm", ModelName: "claude-opus-4-6", LiteLLMSeen: true, LiteLLMSupportedParams: supported})
+		require.Equal(t, "anthropic", api.Stack)
+		require.Equal(t, "thinking", api.Bindings[system.IntentReasoningDisable].Param, "the claude family default, a non-standard root: never filtered")
+		require.Equal(t, "thinking.display", api.Bindings[system.IntentReasoningFormat].Param, "anthropic's own stack table, also non-standard")
+		sortedSupported := append([]string(nil), supported...)
+		sort.Strings(sortedSupported)
+		require.Equal(t, sortedSupported, api.Parameters, "litellm's list verbatim (sorted), not stackParameters[\"anthropic\"] ∩ supported")
+		require.NotContains(t, api.Parameters, "stop_sequences", "would be in an intersection with stackParameters[\"anthropic\"], but not with litellm's OpenAI-shaped list")
+
+		unknown, lines := ComposeWithTrace(Evidence{Stack: "anthropic", Via: "litellm", ModelName: "claude-opus-4-6", LiteLLMSeen: true})
+		require.Nil(t, unknown.Parameters, "supported list unavailable: no parameters, not stackParameters[\"anthropic\"] minus reasoning_effort")
+		require.Contains(t, strings.Join(lines, "\n"), "anthropic's documented list is Messages vocabulary")
 	})
 }
 

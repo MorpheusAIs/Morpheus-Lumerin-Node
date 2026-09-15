@@ -437,6 +437,20 @@ func mergeStackTables(api *system.ModelApiSpec, stack string, family bindingSet,
 // group) lists it, and api.Parameters becomes its intersection with
 // supported. When supported is nil (the list could not be read) only the
 // demonstrated rejection, reasoning_effort, is treated as not forwarded.
+//
+// Exception: when api.Stack is anthropic, api.Parameters is not this
+// intersection. stackParameters["anthropic"] is Anthropic Messages
+// vocabulary (stop_sequences, metadata, …), not LiteLLM's OpenAI-shaped
+// supported_openai_params — intersecting the two would keep only the names
+// that happen to collide across both vocabularies (model, messages, stream,
+// temperature, top_p, tools, tool_choice) and silently drop the rest,
+// including params that are in fact forwarded but merely spelled
+// differently (stop_sequences vs. OpenAI's stop). So for anthropic,
+// api.Parameters becomes supported verbatim, or nil when supported is nil —
+// still an upper bound, just not one built by intersecting two different
+// vocabularies. Bindings need no such exception: every anthropic table entry
+// (thinking.*, output_config.*, cache_control, top_k) has a non-standard
+// root, so the loop below never drops one of them anyway.
 // https://docs.litellm.ai/docs/completion/provider_specific_params
 // https://docs.litellm.ai/docs/completion/drop_params
 func filterForLiteLLM(api *system.ModelApiSpec, supported []string, tracef func(string, ...any)) {
@@ -479,6 +493,25 @@ func filterForLiteLLM(api *system.ModelApiSpec, supported []string, tracef func(
 	}
 	if len(api.Bindings) == 0 {
 		api.Bindings = nil
+	}
+
+	if api.Stack == "anthropic" {
+		// See the doc comment above: anthropic's documented list is Messages
+		// vocabulary, not OpenAI's, so it is replaced by supported rather
+		// than intersected with it.
+		if !known {
+			api.Parameters = nil
+			tracef("parameters: litellm supported_openai_params unavailable — anthropic's documented list is Messages vocabulary and cannot be intersected with it; no parameters reported")
+			return
+		}
+		kept := append([]string(nil), supported...)
+		sort.Strings(kept)
+		if len(kept) == 0 {
+			kept = nil
+		}
+		api.Parameters = kept
+		tracef("parameters: litellm's supported_openai_params reported verbatim (%d) — anthropic's documented list is Messages vocabulary and is not intersected with it", len(kept))
+		return
 	}
 
 	// parameters: a plain intersection with the list (every stack table on

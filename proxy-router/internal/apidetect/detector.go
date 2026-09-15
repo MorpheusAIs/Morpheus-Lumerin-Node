@@ -272,11 +272,19 @@ func (d *Detector) detect(ctx context.Context, cfg config.ModelConfig) *system.M
 	// to: a preset whose transport (config.StackTransport) is not cfg.ApiType
 	// cannot be what serves this model, so the stack and everything in its
 	// vocabulary (bindings, parameters, the gateway it was reached through)
-	// go, exactly as for an undetermined stack (R4). The family and an
+	// go, exactly as for an undetermined stack (R4). This check only applies
+	// to a stack reached directly (api.Via == ""): when the stack is an
+	// upstream the LiteLLM second hop identified (api.Via == "litellm"), the
+	// wire transport the proxy-router actually speaks is LiteLLM's own
+	// OpenAI-compatible surface, not the preset's documented one — an
+	// identified anthropic upstream, for example, is still reached over
+	// cfg.ApiType "openai" (LiteLLM is what speaks Anthropic Messages to it),
+	// so config.StackTransport["anthropic"] == "claudeai" says nothing about
+	// whether this model's transport can reach it. The family and an
 	// always_on thinking mode are facts about the model, not the wire, and
 	// stay; when neither is known there is no api block, as the composer
 	// would have decided.
-	if transport, ok := config.StackTransport[api.Stack]; ok && transport != cfg.ApiType {
+	if transport, ok := config.StackTransport[api.Stack]; ok && transport != cfg.ApiType && api.Via == "" {
 		tracef(ctx, "detected stack %q speaks %q but apiType is %q — stack dropped", api.Stack, transport, cfg.ApiType)
 		api.Stack = ""
 		api.Via = ""

@@ -37,11 +37,10 @@ const upstreamByHost = "host"
 //
 // The mapping of a kind to what is reported (litellmUpstream): venice,
 // openrouter, vllm and the engines the fingerprint finds become the spec's
-// stack once the hop confirmed them; openai is taken on the hostname alone;
-// ollama and anthropic stay evidence-only (their LiteLLM providers speak
-// the native API — Ollama's /api, Anthropic Messages on the claudeai
-// transport — not the surface our tables describe through LiteLLM's
-// OpenAI-compatible endpoint).
+// stack once the hop confirmed them; openai and anthropic are taken on the
+// hostname (or, for anthropic, the documented "anthropic/" prefix) alone;
+// ollama stays evidence-only (its LiteLLM providers speak Ollama's native
+// /api rather than the /v1 surface the ollama table describes).
 var litellmProviderStacks = map[string]string{
 	"openai":       upstreamByHost, // https://docs.litellm.ai/docs/providers/openai_compatible
 	"hosted_vllm":  "vllm",         // https://docs.litellm.ai/docs/providers/vllm
@@ -75,17 +74,23 @@ var litellmProviderStacks = map[string]string{
 // parameter list).
 //
 // When the hop identifies the upstream — venice / openrouter by hostname or
-// listing shape, openai by hostname, an engine confirmed at the api_base —
-// that upstream becomes the reported stack, with Via = litellm: LiteLLM
-// forwards params it does not recognise verbatim as provider kwargs and
-// validates the standard OpenAI ones per model, so the upstream's own
-// vocabulary is what actually works through it (the composer narrows the
-// standard params to LiteLLM's supported_openai_params). Ollama and
-// Anthropic upstreams stay evidence-only with stack litellm: LiteLLM's
-// ollama/ and ollama_chat/ providers speak Ollama's native API rather than
-// the /v1 surface the ollama table describes, and the anthropic preset
-// describes Anthropic Messages on the claudeai transport, which is not what
-// a model talking to LiteLLM's OpenAI-compatible endpoint speaks. An
+// listing shape, openai or anthropic by hostname (or, for anthropic, the
+// documented "anthropic/" prefix alone — no api_base needed), an engine
+// confirmed at the api_base — that upstream becomes the reported stack, with
+// Via = litellm: LiteLLM forwards params it does not recognise verbatim as
+// provider kwargs and validates the standard OpenAI ones per model, so the
+// upstream's own vocabulary is what actually works through it (the composer
+// narrows the standard params to LiteLLM's supported_openai_params). This
+// holds for anthropic too even though the proxy-router only ever speaks
+// OpenAI chat-completions to LiteLLM: LiteLLM is what translates that
+// request into an Anthropic Messages call upstream and forwards objects like
+// thinking and output_config to it verbatim as provider kwargs, so the
+// anthropic table (Messages vocabulary, not OpenAI's) is the right bindings —
+// api.Parameters, though, is LiteLLM's supported_openai_params reported
+// as-is rather than intersected with the anthropic table's own list (see
+// apispec.filterForLiteLLM). Ollama upstreams stay evidence-only with stack
+// litellm: LiteLLM's ollama/ and ollama_chat/ providers speak Ollama's
+// native API rather than the /v1 surface the ollama table describes. An
 // unidentified upstream (unknown prefix, no api_base, hop refused, failed
 // or timed out) leaves the stack litellm as well.
 // https://docs.litellm.ai/docs/proxy/model_management
@@ -155,7 +160,10 @@ func (d *Detector) litellmUpstream(ctx context.Context, base, modelName, apiKey 
 	case kind == "":
 		tracef(ctx, "litellm provider %q is a hosted vendor or cloud; upstream not probed (the spec's stack stays litellm)", provider)
 		return
-	case apiBase == "":
+	case apiBase == "" && kind != "anthropic":
+		// anthropic is recognised by its documented prefix alone (below):
+		// unlike every other identified kind it is never read, so it needs
+		// no api_base to become the stack.
 		tracef(ctx, "litellm deployment %q (provider %q) has no api_base; upstream not probed", modelName, provider)
 		return
 	}
@@ -165,8 +173,9 @@ func (d *Detector) litellmUpstream(ctx context.Context, base, modelName, apiKey 
 	}
 
 	// (c) one anonymous hop, under its own budget and through the hop
-	// client (gated dialer), into a scratch Evidence.
-	if !hopAllowed(apiBase) {
+	// client (gated dialer), into a scratch Evidence. Skipped entirely when
+	// there is no api_base to dial (only reachable for kind == "anthropic").
+	if apiBase != "" && !hopAllowed(apiBase) {
 		tracef(ctx, "litellm api_base %s refused for the second hop (scheme/address)", RedactURL(apiBase))
 		return
 	}
@@ -219,8 +228,8 @@ func (d *Detector) litellmUpstream(ctx context.Context, base, modelName, apiKey 
 		tracef(ctx, "upstream openai recognised by hostname; nothing to read from it")
 		identified = kind
 	case "anthropic":
-		tracef(ctx, "upstream anthropic stays evidence-only (the anthropic preset speaks Anthropic Messages on the claudeai transport, not litellm's OpenAI-compatible endpoint); not read, the spec's stack stays litellm")
-		return
+		tracef(ctx, "upstream anthropic recognised; nothing to read from it")
+		identified = kind
 	default:
 		tracef(ctx, "upstream %q is a hosted vendor; no second hop (only registry vendors and engines are read)", kind)
 		return
