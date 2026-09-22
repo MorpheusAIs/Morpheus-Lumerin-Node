@@ -10,10 +10,11 @@ type SetEthNodeURLReq struct {
 }
 
 type ConfigResponse struct {
-	Version       string
-	Commit        string
-	DerivedConfig interface{}
-	Config        interface{}
+	Version             string
+	Commit              string
+	DerivedConfig       interface{}
+	Config              interface{}
+	GatewayCapabilities []string
 }
 
 type HealthCheckResponse struct {
@@ -86,4 +87,11 @@ type StatusRes struct {
 
 func OkRes() StatusRes {
 	return StatusRes{Status: "ok"}
+}
+
+// ModelsReloadRes is the response of POST /config/models/reload.
+type ModelsReloadRes struct {
+	Added             []string `json:"added"`
+	Removed           []string `json:"removed"`
+	HealthSweepQueued bool     `json:"healthSweepQueued"`
 }

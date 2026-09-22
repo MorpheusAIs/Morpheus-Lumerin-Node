@@ -3,7 +3,7 @@ title: "Reselling Venice (Diem) capacity"
 description: "Turn Venice Diem API access into Morpheus provider income: look up models on active.mor.org, craft secrets in MyProvider, bid — without minting duplicate models."
 audience: ["provider-resale"]
 product: ["proxy-router"]
-last_verified: "v7.5.0"
+last_verified: "2026-09-22"
 ---
 
 [Venice](https://venice.ai) subscription tiers (including **Diem**) include API access. If you have spare headroom, you can resell that capacity through Morpheus: your proxy-router forwards inference to Venice, and consumers pay you in MOR via marketplace bids.
@@ -80,7 +80,7 @@ If you prefer editing JSON by hand:
 }
 ```
 
-Restart the proxy-router after edits. Full register/bid contract steps: [Register on chain](/providers/full/register-onchain).
+After edits, call `POST /config/models/reload` to pick up the change without cutting open sessions (see [Reload without a restart](/reference/models-config#reload-without-a-restart)); on releases before the endpoint existed, restart the proxy-router. Full register/bid contract steps: [Register on chain](/providers/full/register-onchain).
 
 ## Operational tips
 

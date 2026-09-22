@@ -3,7 +3,7 @@ title: "Env: proxy-router"
 description: "Every environment variable consumed by the proxy-router, with mainnet/testnet defaults and explicit precedence rules where two variables overlap."
 audience: ["provider-full", "provider-resale", "prosumer", "developer"]
 product: ["proxy-router"]
-last_verified: "2026-09-09"
+last_verified: "2026-09-22"
 source: "docs/proxy-router.all.env"
 ---
 
@@ -202,6 +202,15 @@ On consumer nodes, `SESSION_HEALTH_POLICY` controls how strictly the pre-open he
 | `strict` | Only providers that report the model `healthy` are tried. `degraded` and unknown reports are excluded. |
 
 **Single-bid caveat** (`healthPolicySingleBid: permissive`, fixed): when the hard filters (omitted provider, own bids) leave a single candidate provider for the model, `preferred`/`strict` are forced to `permissive` for that open so the sole provider can still be tried — single-provider models must remain usable.
+
+## Gateway managed mode (optional)
+
+Only for consumer nodes that sit **behind a companion gateway** (Uplink or similar) which opens and closes sessions on the node's behalf. Both variables are unset by default and the node behaves exactly as before. Full semantics: [Companion gateway mode](/prosumers/companion-gateway-mode).
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `GATEWAY_JOURNAL_PATH` | *(unset — disabled)* | Directory for per-operation journals. Setting it enables **managed mode**: the `X-Gateway-Operation` idempotency header, `progress` in open/close/withdraw responses, a process-local wallet lock, and the gateway stake formula (supply/budget refresh, +0.01% round-up, 300 s floor). Must be persistent storage; single replica only. |
+| `GATEWAY_OWN_CLEANUP` | *(unset)* | Set to `1` **only** when the companion gateway itself closes expired sessions. Suspends the node's native expiry loop after boot-time rehydration. **With no live companion, expired sessions are never auto-closed.** Has no effect unless `GATEWAY_JOURNAL_PATH` is also set. |
 
 ## TEE (Phase 1 + Phase 2 attestation)
 

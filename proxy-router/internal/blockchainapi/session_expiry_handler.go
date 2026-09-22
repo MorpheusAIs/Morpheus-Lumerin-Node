@@ -138,6 +138,15 @@ func (s *SessionExpiryHandler) rehydrateFromChain(ctx context.Context) {
 func (s *SessionExpiryHandler) Run(ctx context.Context) error {
 	s.rehydrateFromChain(ctx)
 
+	// H2: GATEWAY_JOURNAL_PATH alone must NOT disable native expiry.
+	// Only an explicit companion signal (GATEWAY_OWN_CLEANUP=1) proves the
+	// gateway owns durable cleanup; otherwise keep the native expiry loop.
+	if lib.GatewayOwnsCleanup() {
+		s.log.Info("GATEWAY_OWN_CLEANUP=1: suspending native expiry loop; companion gateway owns cleanup")
+		<-ctx.Done()
+		return ctx.Err()
+	}
+
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 

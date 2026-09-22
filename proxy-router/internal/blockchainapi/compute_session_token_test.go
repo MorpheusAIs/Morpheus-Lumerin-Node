@@ -1,6 +1,7 @@
 package blockchainapi
 
 import (
+	"context"
 	"math/big"
 	"testing"
 
@@ -74,7 +75,7 @@ func TestComputeSessionTokenAmount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := computeSessionTokenAmount(tt.bid, tt.duration, tt.supply, tt.budget, tt.directPayment)
+			got, err := computeSessionTokenAmount(context.Background(), tt.bid, tt.duration, tt.supply, tt.budget, tt.directPayment)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("expected error, got result %s", got)
