@@ -168,6 +168,16 @@ func TestGatewayJournalWriteFailureAfterBroadcastNeedsReconcile(t *testing.T) {
 	}
 }
 
+func TestBeginGatewayOperationEmptyIDReturnsNil(t *testing.T) {
+	p, err := BeginGatewayOperation("")
+	if err != nil {
+		t.Fatalf("empty id should not error: %v", err)
+	}
+	if p != nil {
+		t.Fatal("empty id must return nil progress so omitempty drops the field")
+	}
+}
+
 func TestGatewayOwnsCleanupRequiresExplicitCompanionSignal(t *testing.T) {
 	t.Setenv("GATEWAY_JOURNAL_PATH", "")
 	t.Setenv("GATEWAY_OWN_CLEANUP", "")

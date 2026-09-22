@@ -42,10 +42,12 @@ type GatewayProgress struct {
 }
 
 func BeginGatewayOperation(id string) (*GatewayProgress, error) {
-	p := &GatewayProgress{Stage: "not_submitted", Transactions: []GatewayTransaction{}}
+	// Unmanaged / stock callers omit X-Gateway-Operation. Return nil so
+	// omitempty drops progress from response bodies on unmanaged nodes.
 	if id == "" {
-		return p, nil
+		return nil, nil
 	}
+	p := &GatewayProgress{Stage: "not_submitted", Transactions: []GatewayTransaction{}}
 	if !gatewayOperationIDPattern.MatchString(id) {
 		return nil, fmt.Errorf("invalid gateway operation ID")
 	}
@@ -151,6 +153,11 @@ func GatewaySession(ctx context.Context, id common.Hash) {
 	}
 }
 
+// Finish marks the operation completed and persists the journal.
+// Controllers defer Finish after ctx.JSON, so HTTP response bodies always
+// show pre-completion progress (completed:false, http_status:0). The
+// durable journal under GATEWAY_JOURNAL_PATH is the source of truth for
+// completed / http_status after the handler returns.
 func (p *GatewayProgress) Finish(status int) {
 	if p == nil {
 		return
