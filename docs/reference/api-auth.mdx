@@ -3,7 +3,7 @@ title: "API authentication"
 description: "How the proxy-router authenticates HTTP API callers: the .cookie file, proxy.conf, rpcauth/rpcwhitelist, and the /auth/users endpoints."
 audience: ["consumer", "prosumer", "provider-full", "provider-resale", "developer"]
 product: ["proxy-router"]
-last_verified: "v7.0.0"
+last_verified: "2026-09-22"
 source: "docs/02.5-api-auth.md"
 ---
 
@@ -146,6 +146,21 @@ get_local_models
 get_chat_history
 edit_chat_history
 ```
+
+## Agent spending allowances
+
+Beyond method whitelists, an **agent user** can carry per-token spending allowances — a cap on how much ETH or MOR the proxy-router will move on that user's behalf. Allowances are separate from the on-chain ERC-20 allowance to the Diamond contract; they live in the node's local store.
+
+| Endpoint | Permission | Purpose |
+|----------|------------|---------|
+| `POST /auth/users/request` | *(none — the agent calls it)* | Agent asks for a user with `perms` and `allowances` (`{"<token>": "<wei>"}`, token is `eth` or the MOR contract address) |
+| `GET /auth/users` · `POST /auth/users/confirm` | `agent_requests` | Admin lists and approves / declines pending agent users |
+| `POST /auth/allowance/requests` · `GET /auth/allowance/requests` · `POST /auth/allowance/confirm` · `POST /auth/allowance/revoke` | `request_allowance` (agent) / `agent_requests` (admin) | Top-ups and revocation |
+| `GET /auth/users/:username/txs` | `agent_requests` | Transactions the node sent for that agent |
+
+The allowance is consumed by `POST /blockchain/send/eth`, `POST /blockchain/send/mor`, and session opens (the stake). The `admin` user is never subject to allowances.
+
+**When the cap is debited.** The amount is held from the allowance **before** the transaction is broadcast and released only if the transaction was provably never sent (a pre-broadcast build or signing failure, or a session open whose attempts all failed without a pending transaction). A transaction that was broadcast but **timed out** waiting to be mined **keeps the debit**, because it may still mine. Earlier releases debited only after a successful mine, which let a retry after a timeout spend past the cap; that is closed. `send/eth` and `send/mor` that revert after broadcast also keep the debit — the cap is conservative by design; an admin re-grants via `POST /auth/allowance/confirm` if that leaves an agent short. Concurrent debits against one agent are serialised inside a single store transaction, so two simultaneous opens cannot both pass a cap that only covers one.
 
 ## Recommendations
 

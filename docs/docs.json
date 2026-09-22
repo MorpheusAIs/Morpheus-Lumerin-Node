@@ -77,7 +77,8 @@
               "prosumers/overview",
               "prosumers/c-node-setup",
               "prosumers/gateway-for-everclaw",
-              "prosumers/running-local-agents"
+              "prosumers/running-local-agents",
+              "prosumers/companion-gateway-mode"
             ]
           },
           {
