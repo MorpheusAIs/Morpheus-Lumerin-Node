@@ -563,22 +563,13 @@ func (cfg *HTTPAuthConfig) RevokeAllowance(username string, token string) error 
 }
 
 func (cfg *HTTPAuthConfig) DecreaseAllowance(username string, token string, amount lib.BigInt) error {
-	agentUser, err := cfg.AuthStorage.GetAgentUser(username)
-	if err != nil {
-		return fmt.Errorf("error reading agent user: %w", err)
-	}
-	if agentUser == nil {
-		return fmt.Errorf("allowance not found")
-	}
-
 	token = strings.ToLower(token)
-	allowance, exists := agentUser.Allowances[token]
-	if !exists {
-		return fmt.Errorf("allowance not found")
-	}
+	return cfg.AuthStorage.DecreaseAllowance(username, token, amount)
+}
 
-	allowance.Sub(&allowance.Int, &amount.Int)
-	return cfg.AuthStorage.SetAllowance(username, token, allowance)
+func (cfg *HTTPAuthConfig) IncreaseAllowance(username string, token string, amount lib.BigInt) error {
+	token = strings.ToLower(token)
+	return cfg.AuthStorage.IncreaseAllowance(username, token, amount)
 }
 
 func (cfg *HTTPAuthConfig) GetAgentTxs(username string, cursor []byte, limit uint) ([]string, []byte, error) {

@@ -377,14 +377,17 @@ func (s *BlockchainService) rateBids(bidIds [][32]byte, bids []m.IBidStorageBid,
 func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalSig []byte, stake *big.Int, directPayment bool, agentUsername string, isTee bool) (common.Hash, error) {
 	log := s.requestLog(ctx)
 
-	var isAgent bool
-	if s.authConfig != nil {
-		var err error
-		isAgent, err = s.authConfig.IsAllowanceEnough(agentUsername, s.morTokenAddr.Hex(), stake)
-		if err != nil {
-			return common.Hash{}, lib.WrapError(ErrAgentUserAllowance, err)
-		}
+	held, holdAmount, err := s.holdAgentAllowance(agentUsername, s.morTokenAddr.Hex(), stake)
+	if err != nil {
+		return common.Hash{}, err
 	}
+	keepHold := false
+	defer func() {
+		if held && !keepHold {
+			s.releaseAgentAllowance(agentUsername, s.morTokenAddr.Hex(), holdAmount)
+		}
+	}()
+	isAgent := held
 
 	prKey, err := s.privateKey.GetPrivateKey()
 	if err != nil {
@@ -479,27 +482,26 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 		}
 	}
 	if lastOpenErr != nil {
+		if errors.Is(lastOpenErr, lib.ErrEscalationFailed) {
+			keepHold = true
+		}
 		s.handleTxError(ctx, addr, lastOpenErr)
 		return common.Hash{}, lib.WrapError(ErrSendTx, classifyOpenSessionError("open session failed", lastOpenErr))
+	}
+
+	// Broadcast succeeded. Keep the agent debit even if receipt parsing fails.
+	keepHold = true
+	if isAgent && s.authConfig != nil {
+		err = s.authConfig.AuthStorage.SetAgentTx(sessionReceipt.TxHash.Hex(), agentUsername, sessionReceipt.BlockNumber)
+		if err != nil {
+			log.Errorf("failed to set agent tx: %s", err)
+		}
 	}
 
 	// Parse session info from receipt
 	sessionID, _, _, err := s.sessionRouter.ParseOpenSessionReceipt(ctx, sessionReceipt)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrSendTx, fmt.Errorf("parse session receipt failed: %w", err))
-	}
-
-	if isAgent && s.authConfig != nil {
-		amountBigInt := lib.BigInt{Int: *stake}
-		err = s.authConfig.DecreaseAllowance(agentUsername, s.morTokenAddr.Hex(), amountBigInt)
-		if err != nil {
-			log.Errorf("failed to decrease allowance: %s", err)
-			return common.Hash{}, err
-		}
-		err = s.authConfig.AuthStorage.SetAgentTx(sessionReceipt.TxHash.Hex(), agentUsername, sessionReceipt.BlockNumber)
-		if err != nil {
-			log.Errorf("failed to set agent tx: %s", err)
-		}
 	}
 
 	// Poll until the session is visible on-chain (handles RPC propagation lag).
@@ -890,14 +892,16 @@ func (s *BlockchainService) WithdrawUserStakes(ctx context.Context, iterations u
 }
 
 func (s *BlockchainService) SendETH(ctx context.Context, to common.Address, amount *big.Int, agentUsername string) (common.Hash, error) {
-	var shouldDecrease bool
-	if s.authConfig != nil {
-		var err error
-		shouldDecrease, err = s.authConfig.IsAllowanceEnough(agentUsername, "eth", amount)
-		if err != nil {
-			return common.Hash{}, lib.WrapError(ErrAgentUserAllowance, err)
-		}
+	held, holdAmount, err := s.holdAgentAllowance(agentUsername, "eth", amount)
+	if err != nil {
+		return common.Hash{}, err
 	}
+	keepHold := false
+	defer func() {
+		if held && !keepHold {
+			s.releaseAgentAllowance(agentUsername, "eth", holdAmount)
+		}
+	}()
 
 	signedTx, err := s.createSignedTransaction(ctx, &types.DynamicFeeTx{
 		To:    &to,
@@ -912,19 +916,15 @@ func (s *BlockchainService) SendETH(ctx context.Context, to common.Address, amou
 		return common.Hash{}, lib.WrapError(ErrSendTx, err)
 	}
 
+	keepHold = true
+
 	// Wait for tx to be mined with timeout
 	receipt, err := lib.WaitMinedWithTimeout(ctx, s.ethClient, signedTx, lib.DefaultTxMineTimeout)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrWaitMined, err)
 	}
 
-	if shouldDecrease && s.authConfig != nil {
-		amountBigInt := lib.BigInt{Int: *amount}
-		err = s.authConfig.DecreaseAllowance(agentUsername, "eth", amountBigInt)
-		if err != nil {
-			s.log.Errorf("failed to decrease allowance: %s", err)
-			return common.Hash{}, err
-		}
+	if held && s.authConfig != nil {
 		s.authConfig.AuthStorage.SetAgentTx(signedTx.Hash().Hex(), agentUsername, receipt.BlockNumber)
 	}
 
@@ -997,14 +997,16 @@ func (s *BlockchainService) createSignedTransaction(ctx context.Context, txdata 
 }
 
 func (s *BlockchainService) SendMOR(ctx context.Context, to common.Address, amount *big.Int, agentUsername string) (common.Hash, error) {
-	var shouldDecrease bool
-	if s.authConfig != nil {
-		var err error
-		shouldDecrease, err = s.authConfig.IsAllowanceEnough(agentUsername, s.morTokenAddr.Hex(), amount)
-		if err != nil {
-			return common.Hash{}, lib.WrapError(ErrAgentUserAllowance, err)
-		}
+	held, holdAmount, err := s.holdAgentAllowance(agentUsername, s.morTokenAddr.Hex(), amount)
+	if err != nil {
+		return common.Hash{}, err
 	}
+	keepHold := false
+	defer func() {
+		if held && !keepHold {
+			s.releaseAgentAllowance(agentUsername, s.morTokenAddr.Hex(), holdAmount)
+		}
+	}()
 
 	prKey, err := s.privateKey.GetPrivateKey()
 	if err != nil {
@@ -1017,17 +1019,14 @@ func (s *BlockchainService) SendMOR(ctx context.Context, to common.Address, amou
 	}
 
 	tx, receipt, err := s.morToken.Transfer(transactOpt, to, amount)
+	if tx != nil {
+		keepHold = true
+	}
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrSendTx, err)
 	}
 
-	if shouldDecrease && s.authConfig != nil {
-		amountBigInt := lib.BigInt{Int: *amount}
-		err = s.authConfig.DecreaseAllowance(agentUsername, s.morTokenAddr.Hex(), amountBigInt)
-		if err != nil {
-			s.log.Errorf("failed to decrease allowance: %s", err)
-			return common.Hash{}, err
-		}
+	if held && s.authConfig != nil {
 		err = s.authConfig.AuthStorage.SetAgentTx(tx.Hash().Hex(), agentUsername, receipt.BlockNumber)
 		if err != nil {
 			s.log.Errorf("failed to set agent tx: %s", err)
@@ -1035,6 +1034,34 @@ func (s *BlockchainService) SendMOR(ctx context.Context, to common.Address, amou
 	}
 
 	return tx.Hash(), nil
+}
+
+func (s *BlockchainService) holdAgentAllowance(username string, token string, amount *big.Int) (bool, lib.BigInt, error) {
+	var holdAmount lib.BigInt
+	if s.authConfig == nil {
+		return false, holdAmount, nil
+	}
+	enough, err := s.authConfig.IsAllowanceEnough(username, token, amount)
+	if err != nil {
+		return false, holdAmount, lib.WrapError(ErrAgentUserAllowance, err)
+	}
+	if !enough {
+		return false, holdAmount, nil
+	}
+	holdAmount = lib.BigInt{Int: *new(big.Int).Set(amount)}
+	if err := s.authConfig.DecreaseAllowance(username, token, holdAmount); err != nil {
+		return false, holdAmount, lib.WrapError(ErrAgentUserAllowance, err)
+	}
+	return true, holdAmount, nil
+}
+
+func (s *BlockchainService) releaseAgentAllowance(username string, token string, amount lib.BigInt) {
+	if s.authConfig == nil {
+		return
+	}
+	if err := s.authConfig.IncreaseAllowance(username, token, amount); err != nil {
+		s.log.Errorf("failed to restore agent allowance: %s", err)
+	}
 }
 
 func (s *BlockchainService) GetAllowance(ctx context.Context, spender common.Address) (*big.Int, error) {
