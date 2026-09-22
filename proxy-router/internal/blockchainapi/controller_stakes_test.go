@@ -159,5 +159,22 @@ func TestWithdrawUserStakesReturnsServiceError(t *testing.T) {
 	response := performUserStakesRequest(t, http.MethodPost, "/blockchain/stakes/withdraw", `{}`, controller.withdrawUserStakes)
 
 	require.Equal(t, http.StatusInternalServerError, response.Code)
-	require.JSONEq(t, `{"error":"transaction failed"}`, response.Body.String())
+	var body map[string]interface{}
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+	require.Equal(t, "transaction failed", body["error"])
+	require.Contains(t, body, "progress")
+}
+
+func TestWithdrawUserStakesIncludesProgressOnSuccess(t *testing.T) {
+	txHash := common.HexToHash("0xabcd")
+	stub := &userStakesServiceStub{txHash: txHash}
+	controller := newUserStakesController(stub)
+
+	response := performUserStakesRequest(t, http.MethodPost, "/blockchain/stakes/withdraw", `{}`, controller.withdrawUserStakes)
+
+	require.Equal(t, http.StatusOK, response.Code)
+	var body map[string]interface{}
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+	require.Contains(t, body, "progress")
+	require.Equal(t, txHash.Hex(), body["tx"])
 }

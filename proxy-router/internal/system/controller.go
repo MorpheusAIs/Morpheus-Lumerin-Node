@@ -204,6 +204,11 @@ func (s *SystemController) GetConfig(ctx *gin.Context) {
 		Version: config.BuildVersion,
 		Commit:  config.Commit,
 		Config:  s.config.GetSanitized(),
+		GatewayCapabilities: []string{
+			"stake-limit-v1",
+			"operation-journal-v1",
+			"transaction-progress-v1",
+		},
 		DerivedConfig: config.DerivedConfig{
 			WalletAddress: addr,
 			ChainID:       s.chainID,

@@ -10,10 +10,11 @@ type SetEthNodeURLReq struct {
 }
 
 type ConfigResponse struct {
-	Version       string
-	Commit        string
-	DerivedConfig interface{}
-	Config        interface{}
+	Version             string
+	Commit              string
+	DerivedConfig       interface{}
+	Config              interface{}
+	GatewayCapabilities []string
 }
 
 type HealthCheckResponse struct {

@@ -10,15 +10,19 @@ type AllowanceRes struct {
 }
 
 type TxRes struct {
-	Tx common.Hash `json:"tx" example:"0x1234"`
+	Tx       common.Hash          `json:"tx" example:"0x1234"`
+	Progress *lib.GatewayProgress `json:"progress,omitempty"`
 }
 
 type ErrRes struct {
-	Error string `json:"error" example:"error message"`
+	Error     string               `json:"error" example:"error message"`
+	SessionID *common.Hash         `json:"sessionID,omitempty"`
+	Progress  *lib.GatewayProgress `json:"progress,omitempty"`
 }
 
 type OpenSessionRes struct {
-	SessionID common.Hash `json:"sessionID" example:"0x1234"`
+	SessionID common.Hash          `json:"sessionID" example:"0x1234"`
+	Progress  *lib.GatewayProgress `json:"progress,omitempty"`
 }
 
 type BalanceRes struct {
