@@ -176,6 +176,10 @@ func (a *mathSolvingAdapter) AudioSpeech(ctx context.Context, req *gcs.AudioSpee
 	return errors.New("not implemented")
 }
 
+func (a *mathSolvingAdapter) Decisions(ctx context.Context, req *gcs.DecisionsRequest, cb gcs.CompletionCallback) error {
+	return fmt.Errorf("decisions not supported")
+}
+
 func (a *mathSolvingAdapter) ApiType() string { return "openai" }
 
 func newTestChecker(deps *mockDeps) *Checker {
@@ -411,6 +415,10 @@ func (a *errorRespondingAdapter) AudioTranscription(ctx context.Context, req *gc
 
 func (a *errorRespondingAdapter) AudioSpeech(ctx context.Context, req *gcs.AudioSpeechRequest, cb gcs.CompletionCallback) error {
 	return errors.New("not implemented")
+}
+
+func (a *errorRespondingAdapter) Decisions(ctx context.Context, req *gcs.DecisionsRequest, cb gcs.CompletionCallback) error {
+	return fmt.Errorf("decisions not supported")
 }
 
 func (a *errorRespondingAdapter) ApiType() string { return "openai" }

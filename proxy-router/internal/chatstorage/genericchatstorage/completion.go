@@ -19,6 +19,7 @@ const (
 	ChunkTypeAudioTranscriptionDelta ChunkType = "audio-transcription-delta"
 	ChunkTypeAudioSpeech             ChunkType = "audio-speech"
 	ChunkTypeEmbedding               ChunkType = "embedding"
+	ChunkTypeDecisions               ChunkType = "decisions"
 )
 
 type ChunkText struct {
@@ -468,6 +469,44 @@ func (c *ChunkEmbedding) Data() interface{} {
 }
 
 var _ Chunk = &ChunkEmbedding{}
+
+
+// ChunkDecisions represents a Decisions (System One) response
+type ChunkDecisions struct {
+	data interface{}
+}
+
+// NewChunkDecisions creates a new decisions chunk
+func NewChunkDecisions(data DecisionsResponse) *ChunkDecisions {
+	return &ChunkDecisions{data: data}
+}
+
+func (c *ChunkDecisions) IsStreaming() bool {
+	return false
+}
+
+func (c *ChunkDecisions) Tokens() int {
+	if resp, ok := c.data.(DecisionsResponse); ok {
+		return resp.Usage.InputTokens + resp.Usage.OutputTokens
+	}
+	return 0
+}
+
+func (c *ChunkDecisions) Type() ChunkType {
+	return ChunkTypeDecisions
+}
+
+func (c *ChunkDecisions) String() string {
+	b, _ := json.Marshal(c.data)
+	return string(b)
+}
+
+func (c *ChunkDecisions) Data() interface{} {
+	return c.data
+}
+
+var _ Chunk = &ChunkDecisions{}
+
 
 type AiEngineErrorResponse struct {
 	ProviderModelError interface{} `json:"providerModelError"`
