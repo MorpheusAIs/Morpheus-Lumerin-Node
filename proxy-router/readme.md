@@ -18,6 +18,18 @@ Prepend stored history onto the outgoing prompt. Requires store on and a reused 
 
 Restart the proxy-router after changing either variable.
 
+### `PROXY_REDACT_SECRETS` (default `hybrid`)
+
+Scrub wallet secrets out of prompts before they are signed and sent to a provider. The prompt still goes through — only the secret is replaced, with `[redacted:private-key]` or `[redacted:seed-phrase]`.
+
+An Ethereum private key is 32 random bytes, and so is a tx hash, a block hash, and a session ID. Nothing about the string distinguishes them, so the mode picks which way to err.
+
+- **`hybrid` (default):** redact bare 64-hex blobs and checksum-valid BIP-39 phrases always; redact `0x`-prefixed 64-hex only when a private-key cue (`private key`, `PRIVATE_KEY=`, `mnemonic`, `keystore`, …) sits within 120 characters. Keys get pasted bare and hashes get pasted with the prefix, so a user asking about a tx hash or session ID still gets an answer.
+- **`strict`:** redact every 64-hex blob and every run of 12+ BIP-39 words, checksum or not. Nothing key-shaped escapes, but pasted tx hashes and session IDs are redacted too.
+- **`off`:** no scrubbing.
+
+Only prompts bound for a **remote** model are scrubbed — the bundled local model never leaves the machine. Addresses (20 bytes / 40 hex) are never redacted. A redaction logs a `WARN` with the count only, never the matched value.
+
 ## CapacityPolicy strategies (models-config.json):
 
 #### `simple`

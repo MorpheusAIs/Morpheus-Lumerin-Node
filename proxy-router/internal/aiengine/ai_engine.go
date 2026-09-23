@@ -21,6 +21,7 @@ type AiEngine struct {
 	service            ProxyService
 	storage            gcs.ChatStorageInterface
 	llmTimeout         time.Duration
+	redactSecrets      lib.SecretRedactMode
 	log                lib.ILogger
 }
 
@@ -40,13 +41,14 @@ var (
 	ErrJobFailed                     = errors.New("job failed")
 )
 
-func NewAiEngine(service ProxyService, storage gcs.ChatStorageInterface, modelsConfigLoader *config.ModelConfigLoader, agentsConfigLoader *config.AgentConfigLoader, llmTimeout time.Duration, log lib.ILogger) *AiEngine {
+func NewAiEngine(service ProxyService, storage gcs.ChatStorageInterface, modelsConfigLoader *config.ModelConfigLoader, agentsConfigLoader *config.AgentConfigLoader, llmTimeout time.Duration, redactSecrets string, log lib.ILogger) *AiEngine {
 	return &AiEngine{
 		modelsConfigLoader: modelsConfigLoader,
 		agentsConfigLoader: agentsConfigLoader,
 		service:            service,
 		storage:            storage,
 		llmTimeout:         llmTimeout,
+		redactSecrets:      lib.ParseSecretRedactMode(redactSecrets),
 		log:                log,
 	}
 }
@@ -67,7 +69,7 @@ func (a *AiEngine) GetAdapter(ctx context.Context, chatID, modelID, sessionID co
 		}
 	} else {
 		// remote model
-		engine = &RemoteModel{sessionID: sessionID, service: a.service}
+		engine = &RemoteModel{sessionID: sessionID, service: a.service, redactSecrets: a.redactSecrets, log: a.log}
 	}
 
 	if storeChatContext {
