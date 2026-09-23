@@ -85,6 +85,10 @@ type Config struct {
 		// Single-bid opens always force permissive (healthPolicySingleBid is
 		// fixed to "permissive") so single-provider models remain usable.
 		SessionHealthPolicy string `env:"SESSION_HEALTH_POLICY" flag:"session-health-policy" validate:"omitempty,oneof=permissive preferred strict" desc:"model health strictness when opening a session by model: permissive (default; skip only providers self-reporting unhealthy/tee_unverified/no_model_configured), preferred (when any provider reports healthy or degraded, skip providers with unknown/missing reports; otherwise fall back to permissive), strict (only try providers reporting healthy); opens with a single candidate bid always use permissive"`
+		// RedactSecrets scrubs wallet secrets out of prompts on their way to a
+		// provider. An Ethereum private key and a tx hash are both 32 random
+		// bytes, so the mode picks which way to err.
+		RedactSecrets string `env:"PROXY_REDACT_SECRETS" flag:"proxy-redact-secrets" validate:"omitempty,oneof=off hybrid strict" desc:"redact Ethereum private keys and BIP-39 seed phrases from outgoing prompts: hybrid (default; redacts bare 64-hex blobs and checksum-valid seed phrases, and 0x-prefixed 64-hex only near a private-key cue, so pasted tx hashes and session IDs still reach the model), strict (redacts every 64-hex blob and every 12+ word BIP-39 run, tx hashes included), off (no scrubbing)"`
 	}
 	System struct {
 		Enable           bool   `env:"SYS_ENABLE"              flag:"sys-enable" desc:"enable system level configuration adjustments"`
@@ -241,6 +245,9 @@ func (cfg *Config) SetDefaults() {
 	if cfg.Proxy.SessionHealthPolicy == "" {
 		cfg.Proxy.SessionHealthPolicy = "permissive"
 	}
+	if cfg.Proxy.RedactSecrets == "" {
+		cfg.Proxy.RedactSecrets = string(lib.SecretRedactHybrid)
+	}
 
 	// IPFS: leave Address empty when unset. A host:port default is not a
 	// multiaddr and made NewIpfsManager log ERROR on every headless boot (#872).
@@ -320,6 +327,7 @@ func (cfg *Config) GetSanitized() interface{} {
 	publicCfg.Proxy.ModelHealthCheckProbeDelay = cfg.Proxy.ModelHealthCheckProbeDelay
 	publicCfg.Proxy.ModelHealthMaxConsecErrors = cfg.Proxy.ModelHealthMaxConsecErrors
 	publicCfg.Proxy.SessionHealthPolicy = cfg.Proxy.SessionHealthPolicy
+	publicCfg.Proxy.RedactSecrets = cfg.Proxy.RedactSecrets
 
 	publicCfg.System.Enable = cfg.System.Enable
 	publicCfg.System.LocalPortRange = cfg.System.LocalPortRange

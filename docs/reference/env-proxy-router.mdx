@@ -3,7 +3,7 @@ title: "Env: proxy-router"
 description: "Every environment variable consumed by the proxy-router, with mainnet/testnet defaults and explicit precedence rules where two variables overlap."
 audience: ["provider-full", "provider-resale", "prosumer", "developer"]
 product: ["proxy-router"]
-last_verified: "2026-09-22"
+last_verified: "2026-09-23"
 source: "docs/proxy-router.all.env"
 ---
 
@@ -202,6 +202,29 @@ On consumer nodes, `SESSION_HEALTH_POLICY` controls how strictly the pre-open he
 | `strict` | Only providers that report the model `healthy` are tried. `degraded` and unknown reports are excluded. |
 
 **Single-bid caveat** (`healthPolicySingleBid: permissive`, fixed): when the hard filters (omitted provider, own bids) leave a single candidate provider for the model, `preferred`/`strict` are forced to `permissive` for that open so the sole provider can still be tried — single-provider models must remain usable.
+
+## Prompt secret redaction (consumer)
+
+Prompts sent to a remote model land on an independent provider's hardware. If a user pastes a private key or a seed phrase into a prompt, that secret ends up in a stranger's request log. `PROXY_REDACT_SECRETS` scrubs it at the consumer boundary — the prompt is still delivered, only the secret is replaced with `[redacted:private-key]` or `[redacted:seed-phrase]`.
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `PROXY_REDACT_SECRETS` | `hybrid` | One of `hybrid`, `strict`, `off` — see below |
+
+An Ethereum private key is 32 random bytes, and so is a tx hash, a block hash, and a session ID. Nothing in the shape of the string tells them apart, so the mode chooses which way to err.
+
+| Mode | Behavior |
+|------|----------|
+| `hybrid` | Default. Redacts bare 64-hex blobs (no `0x`) and checksum-valid BIP-39 phrases always. Redacts `0x`-prefixed 64-hex **only** when a private-key cue (`private key`, `PRIVATE_KEY=`, `mnemonic`, `keystore`, `recovery phrase`, …) appears within 120 characters. Rests on the observation that keys get pasted bare and hashes get pasted with the prefix, so a user asking about a tx hash or session ID still gets an answer. |
+| `strict` | Redacts every 64-hex blob regardless of prefix or context, and every run of 12+ BIP-39 wordlist words whether or not the checksum validates. No key escapes, but a tx hash or session ID pasted into a prompt is redacted too. |
+| `off` | No scrubbing. |
+
+Notes:
+
+- Only prompts bound for a **remote** model are scrubbed. The bundled local model never leaves the machine, so its prompts pass through untouched.
+- Redaction happens in place, so with `PROXY_FORWARD_CHAT_CONTEXT` off (the default) local chat history stores the scrubbed text too. With forwarding on, history keeps its own pre-scrub copy — either way nothing unredacted reaches the provider.
+- Ethereum **addresses** (20 bytes / 40 hex) are never redacted in any mode.
+- A redaction emits a `WARN` log line with the count only — never the matched value.
 
 ## Gateway managed mode (optional)
 
