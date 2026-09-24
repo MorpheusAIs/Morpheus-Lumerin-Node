@@ -79,6 +79,10 @@ type OpenSessionWithDurationRequest struct {
 	// reason as on the by-model route, so callers that deliberately run parallel
 	// sessions keep working.
 	RejectExisting bool `json:"rejectExisting" binding:"omitempty"`
+	// MaxStakeWei caps how much MOR a gateway-managed session is allowed to
+	// stake, letting a companion gateway enforce a spending ceiling on behalf
+	// of the wallet it manages.
+	MaxStakeWei *lib.BigInt `json:"maxStakeWei" binding:"omitempty" swaggertype:"integer"`
 }
 
 // QueryOpenSessionEstimate selects what to quote: a session length, a payment

@@ -262,7 +262,11 @@ func (g *SessionRouter) GetUserStakesOnHold(ctx context.Context, user common.Add
 }
 
 func (g *SessionRouter) WithdrawUserStakes(opts *bind.TransactOpts, user common.Address, iterations uint8) (common.Hash, error) {
+	if err := lib.GatewayAttempt(opts.Context, "withdraw"); err != nil {
+		return common.Hash{}, err
+	}
 	tx, err := g.sessionRouter.WithdrawUserStakes(opts, user, iterations)
+	lib.GatewayRecord(opts.Context, "withdraw", tx)
 	if err != nil {
 		return common.Hash{}, lib.TryConvertGethError(err)
 	}

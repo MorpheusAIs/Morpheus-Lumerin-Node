@@ -3,7 +3,7 @@ title: "Model health self-report"
 description: "How the provider's built-in model health checker works: what it probes, what it costs your backend, how to tune the schedule, and how to read the report to diagnose failing models."
 audience: ["provider-full", "provider-resale"]
 product: ["proxy-router"]
-last_verified: "v7.11.0"
+last_verified: "2026-09-22"
 ---
 
 Since v7.4.0 every provider proxy-router continuously verifies that the models it sells actually work, and publishes the result as a `models` array on its `/healthcheck` endpoint. This page is the operational reference for that capability: what runs, what it costs, how to tune it, and how to read the report when something is unhealthy. For the one-time post-setup walkthrough, see [Verify your provider setup](/providers/full/verify-setup).
@@ -124,6 +124,8 @@ curl -s -X POST -u 'admin:yourpassword' http://localhost:8082/healthcheck/models
 ```
 
 The call returns `202` immediately and the sweep runs in the background — with probe pacing, a many-model sweep takes a few minutes, so poll `GET /healthcheck` and watch `lastChecked` move. Triggers don't stack: while one manual sweep is queued or running, another `POST` answers `"refresh already pending"` — you cannot hammer your own backend through this endpoint. It requires basic auth (method permission `model_health_refresh`; the admin user's `*` whitelist covers it). On older releases without the endpoint, **restart the proxy-router** instead — a sweep always runs at startup.
+
+**Changed `models-config.json`?** Use `POST /config/models/reload` rather than restarting: it swaps the model table in place without cutting open sessions and queues this same sweep for you, so newly added models with a bid are probed immediately. See [Reload without a restart](/reference/models-config#reload-without-a-restart).
 
 **Timestamps carry the history.** `lastHealthy` survives failures: an unhealthy model with a recent `lastHealthy` broke recently (billing, throttling); one with `lastHealthy: 0` has never worked since the router started (misconfiguration).
 

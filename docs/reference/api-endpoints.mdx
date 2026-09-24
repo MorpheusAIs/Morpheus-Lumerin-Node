@@ -3,7 +3,7 @@ title: "API endpoints (selected)"
 description: "Hand-picked, prose-explained endpoints of the proxy-router HTTP API. Full schema lives in the repo at proxy-router/docs/swagger.yaml."
 audience: ["developer", "prosumer", "provider-full", "provider-resale"]
 product: ["proxy-router"]
-last_verified: "v7.9.0"
+last_verified: "2026-09-22"
 source: "docs/proxy-router-api-endpoints.md"
 ---
 
@@ -150,6 +150,19 @@ curl --location 'http://localhost:8084/blockchain/models/0xe086adc275c99e32bb10b
 
 Response includes `sessionID`.
 
+### Open session by bid ID
+
+`POST /blockchain/bids/:id/session`
+
+Same as above but targets one specific bid instead of running the failover loop. Accepts one extra field:
+
+| Body field | Required | Notes |
+|------------|----------|-------|
+| `sessionDuration` | yes | Seconds |
+| `maxStakeWei` | optional | Reject the open before anything is broadcast if the computed stake exceeds this cap. Also switches this open onto the gateway stake formula — see [Companion gateway mode](/prosumers/companion-gateway-mode#stake-cap-on-open-by-bid-maxstakewei). |
+
+Open-by-bid, close, and withdraw also accept an optional `X-Gateway-Operation` idempotency header on nodes running with `GATEWAY_JOURNAL_PATH`; when sent, responses gain a `progress` object. Nodes without the env, and calls without the header, return the same bodies as before. Details in [Companion gateway mode](/prosumers/companion-gateway-mode#operation-journal-x-gateway-operation).
+
 ---
 
 ## Close session
@@ -210,6 +223,23 @@ cast send 0x6aBE1d282f72B474E54527D93b979A4f64d3030a \
 ```
 
 Function selector: `0xa98a7c6b`. The caller must be the delegatee allowed for that consumer (usually the same key your consumer node uses). See [Where is my MOR? → Bucket 2](/ai/where-is-my-mor#bucket-2-on-hold-queue-used-stipend-day-lock).
+
+---
+
+## Reload models config (provider)
+
+`POST /config/models/reload` — permission `system_config`
+
+Re-reads `models-config.json` and swaps the in-memory model table without restarting the node, so open sessions are not cut. Queues a model-health sweep. A file that fails to parse returns `400` and leaves the running table in force.
+
+```bash
+curl -s -X POST -u 'admin:yourpassword' http://localhost:8082/config/models/reload
+# {"added":["0x…"],"removed":[],"healthSweepQueued":true}
+```
+
+`404` on releases that predate the endpoint — restart instead. Full notes: [models-config.json → Reload without a restart](/reference/models-config#reload-without-a-restart).
+
+`GET /config` (same permission) returns the sanitised running config plus a `GatewayCapabilities` array (`stake-limit-v1`, `operation-journal-v1`, `transaction-progress-v1`) that companion gateways feature-detect against — see [Companion gateway mode](/prosumers/companion-gateway-mode#capability-discovery).
 
 ---
 

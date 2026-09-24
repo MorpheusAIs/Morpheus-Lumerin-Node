@@ -17,6 +17,17 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func gatewaySessionIDPtr(progress *lib.GatewayProgress) *common.Hash {
+	if progress == nil {
+		return nil
+	}
+	if progress.SessionID == (common.Hash{}) {
+		return nil
+	}
+	id := progress.SessionID
+	return &id
+}
+
 type BlockchainController struct {
 	service    *BlockchainService
 	userStakes userStakesService
@@ -135,21 +146,29 @@ func (c *BlockchainController) getUserStakesOnHold(ctx *gin.Context) {
 //	@Security		BasicAuth
 //	@Router			/blockchain/stakes/withdraw [post]
 func (c *BlockchainController) withdrawUserStakes(ctx *gin.Context) {
+	progress, progressErr := lib.BeginGatewayOperation(ctx.GetHeader("X-Gateway-Operation"))
+	if progressErr != nil {
+		ctx.JSON(http.StatusConflict, structs.ErrRes{Error: "operation exists or journal unavailable"})
+		return
+	}
+	ctx.Set(lib.GatewayProgressKey, progress)
+	defer func() { progress.Finish(ctx.Writer.Status()) }()
+
 	var request structs.UserStakeWithdrawalRequest
 	if err := ctx.ShouldBindJSON(&request); err != nil && !errors.Is(err, io.EOF) {
 		c.log.Error(err)
-		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error(), Progress: progress})
 		return
 	}
 
 	txHash, err := c.userStakes.WithdrawUserStakes(ctx, structs.UserStakeIterationsOrDefault(request.Iterations))
 	if err != nil {
 		c.log.Error(err)
-		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
+		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error(), Progress: progress})
 		return
 	}
 
-	ctx.JSON(http.StatusOK, structs.TxRes{Tx: txHash})
+	ctx.JSON(http.StatusOK, structs.TxRes{Tx: txHash, Progress: progress})
 }
 
 // GetProviderClaimableBalance godoc
@@ -703,26 +722,38 @@ func (c *BlockchainController) openSession(ctx *gin.Context) {
 //	@Router			/blockchain/bids/{id}/session [post]
 //	@Security		BasicAuth
 func (s *BlockchainController) openSessionByBid(ctx *gin.Context) {
+	progress, progressErr := lib.BeginGatewayOperation(ctx.GetHeader("X-Gateway-Operation"))
+	if progressErr != nil {
+		ctx.JSON(http.StatusConflict, structs.ErrRes{Error: "operation exists or journal unavailable"})
+		return
+	}
+	ctx.Set(lib.GatewayProgressKey, progress)
+	defer func() { progress.Finish(ctx.Writer.Status()) }()
+
 	var reqPayload structs.OpenSessionWithDurationRequest
 	if err := ctx.ShouldBindJSON(&reqPayload); err != nil {
-		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error(), SessionID: gatewaySessionIDPtr(progress), Progress: progress})
 		return
 	}
 
 	var params structs.PathHex32ID
 	err := ctx.ShouldBindUri(&params)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error(), SessionID: gatewaySessionIDPtr(progress), Progress: progress})
 		return
 	}
 
 	username, ok := ctx.Get("username")
 	if !ok {
 		s.log.Error("username not found in context")
-		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: "username not found in context"})
+		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: "username not found in context", SessionID: gatewaySessionIDPtr(progress), Progress: progress})
 		return
 	}
 	usernameStr := username.(string)
+
+	if reqPayload.MaxStakeWei != nil {
+		ctx.Set(lib.GatewayMaxStakeKey, reqPayload.MaxStakeWei.Unpack())
+	}
 
 	var sessionId common.Hash
 	if reqPayload.RejectExisting {
@@ -732,11 +763,16 @@ func (s *BlockchainController) openSessionByBid(ctx *gin.Context) {
 	}
 	if err != nil {
 		s.log.Error(err)
-		writeOpenSessionError(ctx, err)
+		var existing *ExistingSessionError
+		if errors.As(err, &existing) {
+			ctx.JSON(http.StatusConflict, structs.ExistingSessionRes{ExistingSessionID: existing.SessionID})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error(), SessionID: gatewaySessionIDPtr(progress), Progress: progress})
 		return
 	}
 
-	ctx.JSON(http.StatusOK, structs.OpenSessionRes{SessionID: sessionId})
+	ctx.JSON(http.StatusOK, structs.OpenSessionRes{SessionID: sessionId, Progress: progress})
 	return
 }
 
@@ -887,22 +923,30 @@ func writeOpenSessionError(ctx *gin.Context, err error) {
 //	@Router			/blockchain/sessions/{id}/close [post]
 //	@Security		BasicAuth
 func (c *BlockchainController) closeSession(ctx *gin.Context) {
+	progress, progressErr := lib.BeginGatewayOperation(ctx.GetHeader("X-Gateway-Operation"))
+	if progressErr != nil {
+		ctx.JSON(http.StatusConflict, structs.ErrRes{Error: "operation exists or journal unavailable"})
+		return
+	}
+	ctx.Set(lib.GatewayProgressKey, progress)
+	defer func() { progress.Finish(ctx.Writer.Status()) }()
+
 	var params structs.PathHex32ID
 	err := ctx.ShouldBindUri(&params)
 	if err != nil {
 		c.log.Error(err)
-		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error(), Progress: progress})
 		return
 	}
 
 	txHash, err := c.service.CloseSession(ctx, params.ID.Hash)
 	if err != nil {
 		c.log.Error(err)
-		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
+		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error(), Progress: progress})
 		return
 	}
 
-	ctx.JSON(http.StatusOK, structs.TxRes{Tx: txHash})
+	ctx.JSON(http.StatusOK, structs.TxRes{Tx: txHash, Progress: progress})
 	return
 }
 

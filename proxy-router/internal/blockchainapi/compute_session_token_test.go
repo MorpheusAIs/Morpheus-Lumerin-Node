@@ -1,6 +1,7 @@
 package blockchainapi
 
 import (
+	"context"
 	"math/big"
 	"testing"
 
@@ -16,13 +17,14 @@ func makeBid(pricePerSecond int64) *structs.Bid {
 
 func TestComputeSessionTokenAmount(t *testing.T) {
 	tests := []struct {
-		name     string
-		bid      *structs.Bid
-		duration *big.Int
-		supply   *big.Int
-		budget   *big.Int
-		want     *big.Int
-		wantErr  bool
+		name          string
+		bid           *structs.Bid
+		duration      *big.Int
+		supply        *big.Int
+		budget        *big.Int
+		directPayment bool
+		want          *big.Int
+		wantErr       bool
 	}{
 		{
 			// 100 x (3600 + 1 second of headroom) x 1e6 / 50e3.
@@ -86,7 +88,7 @@ func TestComputeSessionTokenAmount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := computeSessionTokenAmount(tt.bid, tt.duration, tt.supply, tt.budget)
+			got, err := computeSessionTokenAmount(context.Background(), tt.bid, tt.duration, tt.supply, tt.budget, tt.directPayment)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("expected error, got result %s", got)
@@ -115,7 +117,7 @@ func TestComputeSessionTokenAmountBuysTheRequestedDuration(t *testing.T) {
 	for _, duration := range []*big.Int{
 		big.NewInt(900), big.NewInt(3600), big.NewInt(21600), big.NewInt(86400),
 	} {
-		amount, err := computeSessionTokenAmount(&structs.Bid{PricePerSecond: &lib.BigInt{Int: *price}}, duration, supply, budget)
+		amount, err := computeSessionTokenAmount(context.Background(), &structs.Bid{PricePerSecond: &lib.BigInt{Int: *price}}, duration, supply, budget, false)
 		if err != nil {
 			t.Fatalf("duration %s: unexpected error: %v", duration, err)
 		}

@@ -3,7 +3,7 @@ title: "models-config.json"
 description: "How the proxy-router maps on-chain model IDs to backend HTTP endpoints, including OpenAI / Anthropic / Prodia / Hyperbolic API types."
 audience: ["provider-full", "provider-resale", "developer"]
 product: ["proxy-router"]
-last_verified: "v7.0.0"
+last_verified: "2026-09-22"
 source: "docs/models-config.json.md"
 ---
 
@@ -96,6 +96,24 @@ For the canonical per-`apiType` schema, see the JSON schema file linked above.
   ]
 }
 ```
+
+## Reload without a restart
+
+The file is read once at boot. Historically, adding or editing a model meant restarting the proxy-router, which cuts every open session — and each cut session can be closed out as a dispute against your success ratio. Since the release after v7.11 you can re-read the file in place:
+
+```bash
+curl -s -X POST -u 'admin:yourpassword' http://localhost:8082/config/models/reload
+# {"added":["0x…"],"removed":[],"healthSweepQueued":true}
+```
+
+- Permission `system_config` (the admin user's `*` whitelist covers it).
+- The file is parsed into a fresh table and swapped atomically. Requests already in flight keep the config they started with; the next request sees the new table. A new model is servable as soon as the call returns.
+- **A file that fails to parse or validate returns `400` and leaves the running table untouched.** A half-edited file cannot empty a serving node. The error body names the problem: `{"error":"models config not reloaded, previous table still in force: …"}`.
+- `added` / `removed` list the model IDs that changed relative to the previous table, sorted. An unchanged file returns both empty.
+- `healthSweepQueued` is `true` when a [model health](/providers/full/model-health) sweep was queued so models with an active bid are probed now (same as `POST /healthcheck/models/refresh`). Models without a bid cost nothing until one is posted. A `tee`-tagged model added this way is attested during that sweep; with `MODEL_HEALTH_CHECK_DISABLED=true` it will not be attested until the next restart.
+- Applies to `MODELS_CONFIG_PATH` on disk. With `MODELS_CONFIG_CONTENT` the content was written to the path at first boot; edit the file at that path and reload, or change the env and restart.
+
+On older releases the endpoint returns `404` — restart the proxy-router instead. Removing a model that has open sessions makes those sessions fail at the receiver; drop the bid first and let sessions drain.
 
 ## Inline content (for TEE / Akash)
 

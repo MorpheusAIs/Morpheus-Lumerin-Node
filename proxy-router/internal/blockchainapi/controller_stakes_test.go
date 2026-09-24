@@ -44,7 +44,7 @@ func newUserStakesController(stub *userStakesServiceStub) *BlockchainController 
 	}
 }
 
-func performUserStakesRequest(t *testing.T, method, target, body string, handler gin.HandlerFunc) *httptest.ResponseRecorder {
+func performUserStakesRequest(t *testing.T, method, target, body string, handler gin.HandlerFunc, headers ...map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
 
 	gin.SetMode(gin.TestMode)
@@ -53,6 +53,11 @@ func performUserStakesRequest(t *testing.T, method, target, body string, handler
 	ctx.Request = httptest.NewRequest(method, target, bytes.NewBufferString(body))
 	if body != "" {
 		ctx.Request.Header.Set("Content-Type", "application/json")
+	}
+	for _, h := range headers {
+		for k, v := range h {
+			ctx.Request.Header.Set(k, v)
+		}
 	}
 
 	handler(ctx)
@@ -159,5 +164,58 @@ func TestWithdrawUserStakesReturnsServiceError(t *testing.T) {
 	response := performUserStakesRequest(t, http.MethodPost, "/blockchain/stakes/withdraw", `{}`, controller.withdrawUserStakes)
 
 	require.Equal(t, http.StatusInternalServerError, response.Code)
-	require.JSONEq(t, `{"error":"transaction failed"}`, response.Body.String())
+	var body map[string]interface{}
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+	require.Equal(t, "transaction failed", body["error"])
+	// Unmanaged (no header, journal unset): progress must be omitted.
+	require.NotContains(t, body, "progress")
+}
+
+func TestWithdrawUserStakesOmitsProgressOnSuccessUnmanaged(t *testing.T) {
+	txHash := common.HexToHash("0xabcd")
+	stub := &userStakesServiceStub{txHash: txHash}
+	controller := newUserStakesController(stub)
+
+	response := performUserStakesRequest(t, http.MethodPost, "/blockchain/stakes/withdraw", `{}`, controller.withdrawUserStakes)
+
+	require.Equal(t, http.StatusOK, response.Code)
+	var body map[string]interface{}
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+	require.NotContains(t, body, "progress")
+	require.Equal(t, txHash.Hex(), body["tx"])
+}
+
+func TestWithdrawUserStakesIncludesProgressOnSuccessManaged(t *testing.T) {
+	t.Setenv("GATEWAY_JOURNAL_PATH", t.TempDir())
+	txHash := common.HexToHash("0xabcd")
+	stub := &userStakesServiceStub{txHash: txHash}
+	controller := newUserStakesController(stub)
+
+	response := performUserStakesRequest(
+		t, http.MethodPost, "/blockchain/stakes/withdraw", `{}`, controller.withdrawUserStakes,
+		map[string]string{"X-Gateway-Operation": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+	)
+
+	require.Equal(t, http.StatusOK, response.Code)
+	var body map[string]interface{}
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+	require.Contains(t, body, "progress")
+	require.Equal(t, txHash.Hex(), body["tx"])
+}
+
+func TestWithdrawUserStakesReturnsServiceErrorManagedIncludesProgress(t *testing.T) {
+	t.Setenv("GATEWAY_JOURNAL_PATH", t.TempDir())
+	stub := &userStakesServiceStub{withdrawErr: errors.New("transaction failed")}
+	controller := newUserStakesController(stub)
+
+	response := performUserStakesRequest(
+		t, http.MethodPost, "/blockchain/stakes/withdraw", `{}`, controller.withdrawUserStakes,
+		map[string]string{"X-Gateway-Operation": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+	)
+
+	require.Equal(t, http.StatusInternalServerError, response.Code)
+	var body map[string]interface{}
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+	require.Equal(t, "transaction failed", body["error"])
+	require.Contains(t, body, "progress")
 }
