@@ -130,6 +130,10 @@ func (s *ProdiaV2) Embeddings(ctx context.Context, prompt *gcs.EmbeddingsRequest
 	return fmt.Errorf("embeddings not supported")
 }
 
+func (s *ProdiaV2) Decisions(ctx context.Context, prompt *gcs.DecisionsRequest, cb gcs.CompletionCallback) error {
+	return fmt.Errorf("decisions not supported")
+}
+
 func (s *ProdiaV2) ApiType() string {
 	return API_TYPE_PRODIA_V2
 }

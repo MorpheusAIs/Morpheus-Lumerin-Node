@@ -95,3 +95,8 @@ type ModelsReloadRes struct {
 	Removed           []string `json:"removed"`
 	HealthSweepQueued bool     `json:"healthSweepQueued"`
 }
+
+// ErrorResponse is a swagger-friendly error body for system endpoints.
+type ErrorResponse struct {
+	Error string `json:"error"`
+}

@@ -3,7 +3,7 @@ title: "models-config.json"
 description: "How the proxy-router maps on-chain model IDs to backend HTTP endpoints, including OpenAI / Anthropic / Prodia / Hyperbolic API types."
 audience: ["provider-full", "provider-resale", "developer"]
 product: ["proxy-router"]
-last_verified: "2026-09-22"
+last_verified: "2026-09-23"
 source: "docs/models-config.json.md"
 ---
 
@@ -15,7 +15,7 @@ source: "docs/models-config.json.md"
 |-------|----------|-------|
 | `modelId` | yes | The on-chain model id (32-byte hex) |
 | `modelName` | yes | Human-readable name |
-| `apiType` | yes | One of `openai`, `claudeai`, `prodia-sd`, `prodia-sdxl`, `prodia-v2`, `hyperbolic-sd`, etc. |
+| `apiType` | yes | One of `openai`, `claudeai`, `prodia-sd`, `prodia-sdxl`, `prodia-v2`, `hyperbolic-sd`, `decisions`, etc. |
 | `apiUrl` | yes | Full backend URL including the endpoint path |
 | `apiKey` | optional | Backend API key (resale providers usually need this) |
 | `concurrentSlots` | optional | Distinct concurrent chats your backend can handle for **this** model |
@@ -92,10 +92,28 @@ For the canonical per-`apiType` schema, see the JSON schema file linked above.
       "apiType": "openai",
       "apiUrl": "https://api.openai.com/v1/audio/transcriptions",
       "apiKey": "FILL_ME_IN"
+    },
+    {
+      "modelId": "0x00000000000000000000000000000000000000000000000000000000000000a1",
+      "modelName": "jev-1.13.0",
+      "apiType": "decisions",
+      "apiUrl": "https://api.typesafe.ai/v1/systemone",
+      "apiKey": "FILL_ME_IN"
+    },
+    {
+      "modelId": "0x00000000000000000000000000000000000000000000000000000000000000a2",
+      "modelName": "typesafe/jev-1.13",
+      "apiType": "decisions",
+      "apiUrl": "https://openrouter.ai/api/alpha/decisions",
+      "apiKey": "FILL_ME_IN"
     }
   ]
 }
 ```
+
+<Note>
+**Decisions (`apiType=decisions`).** `apiUrl` must be the **full** upstream Decisions / System One endpoint URL (embeddings parity — no path append). TypeSafe example: `https://api.typesafe.ai/v1/systemone`. OpenRouter example: `https://openrouter.ai/api/alpha/decisions`. `modelName` is the upstream model id (e.g. `jev-1.13.0` or `typesafe/jev-1.13`); the adapter overwrites any client body `model`. Consumers call `POST /v1/decisions` — see [Decisions](/consumers/decisions).
+</Note>
 
 ## Reload without a restart
 

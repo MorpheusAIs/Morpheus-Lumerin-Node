@@ -246,6 +246,10 @@ func (a *ClaudeAI) Embeddings(ctx context.Context, prompt *gcs.EmbeddingsRequest
 	return fmt.Errorf("embeddings not supported")
 }
 
+func (a *ClaudeAI) Decisions(ctx context.Context, prompt *gcs.DecisionsRequest, cb gcs.CompletionCallback) error {
+	return fmt.Errorf("decisions not supported")
+}
+
 func (a *ClaudeAI) ApiType() string {
 	return API_TYPE_CLAUDEAI
 }

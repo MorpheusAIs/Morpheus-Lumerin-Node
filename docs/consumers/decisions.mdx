@@ -1,0 +1,113 @@
+---
+title: "Decisions"
+description: "Call Morpheus Decisions models (TypeSafe System One / OpenRouter Decisions) via POST /v1/decisions — structured answers, not chat."
+audience: ["consumer", "developer"]
+product: ["proxy-router"]
+last_verified: "2026-09-24"
+---
+
+Decisions models evaluate a shared `state` against typed `questions` and return calibrated structured `answers` (`choice` | `score` | `noul`). They are **not** chat completions and **not** embeddings.
+
+Motivating catalog example: `jev-1.13-ts` (TypeSafe Jev / System One). After tag detection, models tagged `Decision` / `decisions` / `typesafe` / `systemone` / `system-one` classify as `ModelType=DECISIONS` (Decision-class wins over a coexisting `LLM` tag).
+
+## Headers
+
+Same as other prompt modalities — see [Chat, audio, and embeddings](/consumers/chat).
+
+| Header | Required | Purpose |
+|--------|----------|---------|
+| `Authorization: Basic <base64(user:pass)>` | Yes | Local proxy-router auth. Permission method: **`decisions`**. |
+| `session_id` | Yes for remote | Open Morpheus session. **Omit** the header for a local `models-config` Decisions row — do not send `0` / `0x0` (hash binding fails with 400). |
+| `model_id` | Local only | Hex model id when calling a local Decisions provider row. |
+| `Content-Type: application/json` | Yes | |
+
+## Request
+
+`POST /v1/decisions`
+
+Normative body (TypeSafe System One / OpenRouter Decisions core):
+
+```json
+{
+  "state": "Ticket: invoice dispute, customer asks chargeback timeline.",
+  "questions": {
+    "dept": {
+      "type": "choice",
+      "instructions": "Route the ticket.",
+      "criteria": {
+        "billing": "Payment, invoice, refund",
+        "technical": "Product bug or outage",
+        "general": "Other"
+      }
+    },
+    "urgent": {
+      "type": "noul",
+      "instructions": "Needs same-day human review?"
+    },
+    "severity": {
+      "type": "score",
+      "instructions": "Business severity",
+      "criteria": ["low", "medium", "high"]
+    }
+  }
+}
+```
+
+- Required: `state`, `questions`.
+- Optional `model` in the body is **overwritten** by the provider `models-config.modelName` (embeddings parity).
+- Unknown request fields (e.g. OpenRouter `provider`, `user`) are forwarded to the upstream.
+- Non-streaming only in v0 — single JSON response.
+
+```bash
+curl -X POST 'http://localhost:8082/v1/decisions' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Basic YWRtaW46YWRtaW4=' \
+  -H 'session_id: 0x...' \
+  -d '{
+    "state": "Ticket: invoice dispute, customer asks chargeback timeline.",
+    "questions": {
+      "dept": {
+        "type": "choice",
+        "instructions": "Route the ticket.",
+        "criteria": {
+          "billing": "Payment, invoice, refund",
+          "technical": "Product bug or outage",
+          "general": "Other"
+        }
+      },
+      "urgent": { "type": "noul", "instructions": "Needs same-day human review?" }
+    }
+  }'
+```
+
+## Response
+
+```json
+{
+  "model": "jev-1.13.0",
+  "answers": {
+    "dept": { "choice": "billing", "confidence": 0.91 },
+    "urgent": { "noul": false, "confidence": 0.8 },
+    "severity": { "score": 0.6, "confidence": 0.7 }
+  },
+  "usage": { "input_tokens": 42, "output_tokens": 12 }
+}
+```
+
+Branch on `answers.<id>.choice` / `.score` / `.noul` — never on chat `choices[].message.content`.
+
+## Provider setup (summary)
+
+Providers register a `models-config.json` row with:
+
+| Field | Example |
+|-------|---------|
+| `apiType` | `decisions` |
+| `apiUrl` | Full URL: `https://api.typesafe.ai/v1/systemone` **or** `https://openrouter.ai/api/alpha/decisions` |
+| `modelName` | Upstream id: `jev-1.13.0` **or** `typesafe/jev-1.13` |
+
+Details: [models-config.json](/reference/models-config).
+
+## Auth
+
+Scoped agent users need `decisions` in their `rpcwhitelist` (alongside or instead of `chat` / `embeddings`). See [API authentication](/reference/api-auth).
