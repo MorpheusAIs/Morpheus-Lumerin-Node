@@ -32,8 +32,8 @@ func TestProcessDecisionsServerType(t *testing.T) {
 	if req == nil {
 		t.Fatal("expected decisions request")
 	}
-	if req.State != "Ticket dispute" {
-		t.Fatalf("state=%q", req.State)
+	if string(req.State) != `"Ticket dispute"` {
+		t.Fatalf("state=%s", req.State)
 	}
 	if _, ok := req.Extra["type"]; ok {
 		t.Fatal("type should be stripped before adapter dispatch")

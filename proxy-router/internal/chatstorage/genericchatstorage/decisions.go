@@ -2,7 +2,10 @@ package genericchatstorage
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 )
@@ -10,9 +13,13 @@ import (
 // DecisionsRequest is the TypeSafe System One / OpenRouter Decisions core body.
 // Unknown request fields are preserved in Extra for upstream compatibility.
 // Normative required fields: state + questions. model is overwritten by the adapter.
+//
+// State is json.RawMessage because TypeSafe accepts string|object|array. A Go
+// string would 400 on object/array Unmarshal and silently coerce missing/null
+// to "" (billed 200 with empty content). See OpenRouter Decisions state docs.
 type DecisionsRequest struct {
 	Model     string                     `json:"model,omitempty"`
-	State     string                     `json:"state"`
+	State     json.RawMessage            `json:"state"`
 	Questions map[string]json.RawMessage `json:"questions"`
 	Extra     map[string]json.RawMessage `json:"-"`
 }
@@ -20,7 +27,7 @@ type DecisionsRequest struct {
 func (c *DecisionsRequest) UnmarshalJSON(data []byte) error {
 	type known struct {
 		Model     string                     `json:"model,omitempty"`
-		State     string                     `json:"state"`
+		State     json.RawMessage            `json:"state"`
 		Questions map[string]json.RawMessage `json:"questions"`
 	}
 	var k known
@@ -43,7 +50,7 @@ func (c *DecisionsRequest) UnmarshalJSON(data []byte) error {
 func (c DecisionsRequest) MarshalJSON() ([]byte, error) {
 	type known struct {
 		Model     string                     `json:"model,omitempty"`
-		State     string                     `json:"state"`
+		State     json.RawMessage            `json:"state"`
 		Questions map[string]json.RawMessage `json:"questions"`
 	}
 	b, err := json.Marshal(known{
@@ -63,6 +70,42 @@ func (c DecisionsRequest) MarshalJSON() ([]byte, error) {
 		m[k] = v
 	}
 	return json.Marshal(m)
+}
+
+// Validate ensures state and questions are present and non-empty so we never
+// forward state:"" / missing state upstream (which TypeSafe accepts and bills).
+func (c *DecisionsRequest) Validate() error {
+	if err := validateDecisionsState(c.State); err != nil {
+		return err
+	}
+	if len(c.Questions) == 0 {
+		return errors.New("questions is required and must be non-empty")
+	}
+	return nil
+}
+
+func validateDecisionsState(state json.RawMessage) error {
+	if len(state) == 0 {
+		return errors.New("state is required")
+	}
+	trimmed := strings.TrimSpace(string(state))
+	if trimmed == "" || trimmed == "null" {
+		return errors.New("state is required")
+	}
+	// JSON string: reject "" and whitespace-only.
+	if trimmed[0] == '"' {
+		var s string
+		if err := json.Unmarshal(state, &s); err != nil {
+			return fmt.Errorf("state: invalid JSON string: %w", err)
+		}
+		if strings.TrimSpace(s) == "" {
+			return errors.New("state must be non-empty")
+		}
+		return nil
+	}
+	// object / array / number / bool: present and non-null is enough.
+	// Empty {} / [] are unusual but still "present" content for TypeSafe.
+	return nil
 }
 
 // DecisionsUsage mirrors TypeSafe / OpenRouter Decisions usage fields.

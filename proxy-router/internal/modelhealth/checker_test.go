@@ -2,6 +2,7 @@ package modelhealth
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -65,6 +66,7 @@ var (
 	modelUntagged     = common.HexToHash("0x06")
 	modelChatTagged   = common.HexToHash("0x07")
 	modelImage        = common.HexToHash("0x08")
+	modelDecisions    = common.HexToHash("0x09")
 )
 
 type mockDeps struct {
@@ -177,7 +179,17 @@ func (a *mathSolvingAdapter) AudioSpeech(ctx context.Context, req *gcs.AudioSpee
 }
 
 func (a *mathSolvingAdapter) Decisions(ctx context.Context, req *gcs.DecisionsRequest, cb gcs.CompletionCallback) error {
-	return fmt.Errorf("decisions not supported")
+	if a.promptErr != nil {
+		return a.promptErr
+	}
+	resp := gcs.DecisionsResponse{
+		Model: "health-probe",
+		Answers: map[string]json.RawMessage{
+			"ok": json.RawMessage(`{"noul":true,"confidence":1}`),
+		},
+		Usage: gcs.DecisionsUsage{InputTokens: 1, OutputTokens: 1},
+	}
+	return cb(ctx, gcs.NewChunkDecisions(resp), nil)
 }
 
 func (a *mathSolvingAdapter) ApiType() string { return "openai" }
@@ -267,6 +279,30 @@ func TestCheckAllStatuses(t *testing.T) {
 	require.Equal(t, string(structs.ModelTypeLLM), unconfigured.ModelType)
 	require.Zero(t, unconfigured.LatencyMs)
 	require.Nil(t, unconfigured.PromptCorrect)
+}
+
+func TestCheckAllDecisionsProbe(t *testing.T) {
+	deps := &mockDeps{
+		bids: []*structs.Bid{bidFor(modelDecisions)},
+		tags: map[common.Hash][]string{
+			// Catalog still stamps modelType LLM; Decision-class tag wins.
+			modelDecisions: {"LLM", "TypeSafe", "Decision"},
+		},
+		names:    map[common.Hash]string{modelDecisions: "jev-1.13-ts"},
+		modelIDs: []common.Hash{modelDecisions},
+		adapter:  &mathSolvingAdapter{},
+	}
+
+	checker := newTestChecker(deps)
+	checker.checkAll(context.Background(), common.Address{})
+
+	dec := reportByID(t, checker.GetReports(), modelDecisions)
+	require.Equal(t, system.ModelHealthStatusHealthy, dec.Status)
+	require.Equal(t, string(structs.ModelTypeDECISIONS), dec.ModelType)
+	require.Equal(t, "jev-1.13-ts", dec.ModelName)
+	require.Nil(t, dec.PromptCorrect)
+	require.NotZero(t, dec.LastHealthy)
+	require.Zero(t, dec.HttpStatus)
 }
 
 // An untagged model must still be probed. DetectModelType returns Unknown when
@@ -418,7 +454,7 @@ func (a *errorRespondingAdapter) AudioSpeech(ctx context.Context, req *gcs.Audio
 }
 
 func (a *errorRespondingAdapter) Decisions(ctx context.Context, req *gcs.DecisionsRequest, cb gcs.CompletionCallback) error {
-	return fmt.Errorf("decisions not supported")
+	return cb(ctx, nil, gcs.NewAiEngineErrorResponse(a.statusCode, map[string]interface{}{"error": "upstream error"}))
 }
 
 func (a *errorRespondingAdapter) ApiType() string { return "openai" }

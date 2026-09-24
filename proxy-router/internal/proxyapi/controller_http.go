@@ -1867,6 +1867,9 @@ func (c *ProxyController) parseDecisionsParams(ctx *gin.Context) (*PromptHead, *
 	if err := ctx.ShouldBindJSON(&requestBody); err != nil {
 		return nil, nil, err
 	}
+	if err := requestBody.Validate(); err != nil {
+		return nil, nil, err
+	}
 
 	return &head, &requestBody, nil
 }

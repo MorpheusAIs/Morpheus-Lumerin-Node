@@ -16,7 +16,7 @@ func TestStorePromptResponseToFile_DecisionsRequest(t *testing.T) {
 
 	prompt := &gcs.DecisionsRequest{
 		Model: "test-model",
-		State: "secret-case-state-must-not-be-title",
+		State: json.RawMessage(`"secret-case-state-must-not-be-title"`),
 		Questions: map[string]json.RawMessage{
 			"q1": json.RawMessage(`{"type":"boolean"}`),
 		},
@@ -45,7 +45,7 @@ func TestStorePromptResponseToFile_DecisionsRequest(t *testing.T) {
 	if hist.Title != "Decisions" {
 		t.Errorf("title = %q, want %q (short title only; J2)", hist.Title, "Decisions")
 	}
-	if hist.Title == prompt.State {
+	if hist.Title == string(prompt.State) || hist.Title == "secret-case-state-must-not-be-title" {
 		t.Error("title must not be full state (J2)")
 	}
 	if len(hist.Messages) != 1 {

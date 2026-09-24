@@ -63,7 +63,7 @@ func TestDecisionsAdapterTypeSafeShape(t *testing.T) {
 
 	req := &gcs.DecisionsRequest{
 		Model: "client-should-be-overwritten",
-		State: "Ticket: invoice dispute",
+		State: json.RawMessage(`"Ticket: invoice dispute"`),
 		Questions: map[string]json.RawMessage{
 			"dept": json.RawMessage(`{"type":"choice","instructions":"Route","criteria":{"billing":"pay"}}`),
 		},
@@ -111,7 +111,7 @@ func TestDecisionsAdapterOpenRouterShape(t *testing.T) {
 
 	engine := NewDecisionsEngine("typesafe/jev-1.13", server.URL+"/api/alpha/decisions", "test-key", time.Minute, &lib.LoggerMock{}, nil)
 	req := &gcs.DecisionsRequest{
-		State: "hello",
+		State: json.RawMessage(`"hello"`),
 		Questions: map[string]json.RawMessage{
 			"dept": json.RawMessage(`{"type":"choice","criteria":{"a":"b"}}`),
 		},
@@ -144,7 +144,7 @@ func TestDecisionsAdapterSanitizes422(t *testing.T) {
 
 	engine := NewDecisionsEngine("jev-1.13.0", server.URL, "", time.Minute, &lib.LoggerMock{}, nil)
 	req := &gcs.DecisionsRequest{
-		State:     "secret case data",
+		State:     json.RawMessage(`"secret case data"`),
 		Questions: map[string]json.RawMessage{"q": json.RawMessage(`{"type":"noul"}`)},
 	}
 
@@ -177,8 +177,8 @@ func TestDecisionsRequestRoundTripExtra(t *testing.T) {
 	if err := json.Unmarshal(raw, &req); err != nil {
 		t.Fatal(err)
 	}
-	if req.State != "s" {
-		t.Fatalf("state=%q", req.State)
+	if string(req.State) != `"s"` {
+		t.Fatalf("state=%s", req.State)
 	}
 	if req.Extra["provider"] == nil {
 		t.Fatal("expected provider Extra forwarded")

@@ -228,6 +228,9 @@ func processDecisions(message []byte, sourceLog lib.ILogger) (*genericchatstorag
 		return nil, lib.WrapError(fmt.Errorf("failed to unmarshal decisions request"), err)
 	}
 	delete(decisionsRequest.Extra, "type")
+	if err := decisionsRequest.Validate(); err != nil {
+		return nil, err
+	}
 
 	return decisionsRequest, nil
 }

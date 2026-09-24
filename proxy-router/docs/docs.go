@@ -444,85 +444,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/blockchain/stakes/onhold": {
-            "get": {
-                "security": [
-                    {
-                        "BasicAuth": []
-                    }
-                ],
-                "description": "Get the releasable and still time-locked MOR stake for the proxy-router wallet",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "transactions"
-                ],
-                "summary": "Get consumer stakes on hold",
-                "parameters": [
-                    {
-                        "maximum": 255,
-                        "minimum": 1,
-                        "type": "integer",
-                        "default": 255,
-                        "description": "Maximum on-hold entries to inspect",
-                        "name": "iterations",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/structs.UserStakesOnHoldRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/blockchain/stakes/withdraw": {
-            "post": {
-                "security": [
-                    {
-                        "BasicAuth": []
-                    }
-                ],
-                "description": "Claim releasable MOR stake for the proxy-router wallet",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "transactions"
-                ],
-                "summary": "Withdraw consumer stakes on hold",
-                "parameters": [
-                    {
-                        "description": "Withdrawal options; iterations defaults to 255 and accepts 1 through 255",
-                        "name": "request",
-                        "in": "body",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "iterations": {
-                                    "type": "integer"
-                                }
-                            }
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/structs.TxRes"
-                        }
-                    }
-                }
-            }
-        },
         "/blockchain/bids": {
             "post": {
                 "security": [
@@ -1570,6 +1491,85 @@ const docTemplate = `{
                 }
             }
         },
+        "/blockchain/stakes/onhold": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Get the releasable and still time-locked MOR stake for the proxy-router wallet",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transactions"
+                ],
+                "summary": "Get consumer stakes on hold",
+                "parameters": [
+                    {
+                        "maximum": 255,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 255,
+                        "description": "Maximum on-hold entries to inspect",
+                        "name": "iterations",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.UserStakesOnHoldRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/stakes/withdraw": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Claim releasable MOR stake for the proxy-router wallet",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transactions"
+                ],
+                "summary": "Withdraw consumer stakes on hold",
+                "parameters": [
+                    {
+                        "description": "Withdrawal options; iterations defaults to 255 and accepts 1 through 255",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "iterations": {
+                                    "type": "integer"
+                                }
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.TxRes"
+                        }
+                    }
+                }
+            }
+        },
         "/blockchain/token/supply": {
             "get": {
                 "security": [
@@ -1719,6 +1719,37 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/system.StatusRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/config/models/reload": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Re-read models-config.json and swap the in-memory model table without restarting the node. New models are servable immediately and a health sweep is queued so those with a bid are probed now. A file that fails to parse leaves the running table untouched and returns 400.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Reload models config",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/system.ModelsReloadRes"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/system.ErrorResponse"
                         }
                     }
                 }
@@ -2675,9 +2706,7 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK",
-                        "schema": {
-                            "type": "object"
-                        }
+                        "schema": {}
                     }
                 }
             }
@@ -3001,6 +3030,63 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/proxyapi.ResultResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/decisions": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Evaluate state against typed questions (TypeSafe System One / OpenRouter Decisions core). Non-streaming single JSON.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "decisions"
+                ],
+                "summary": "Submit a Decisions request",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "hex32",
+                        "description": "Session ID",
+                        "name": "session_id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "hex32",
+                        "description": "Model ID",
+                        "name": "model_id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "hex32",
+                        "description": "Chat ID",
+                        "name": "chat_id",
+                        "in": "header"
+                    },
+                    {
+                        "description": "Decisions request parameters",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.DecisionsRequestExample"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
                         }
                     }
                 }
@@ -3347,6 +3433,9 @@ const docTemplate = `{
                 "teeType": {
                     "$ref": "#/definitions/attestation.TEEType"
                 },
+                "tlsBindingKind": {
+                    "$ref": "#/definitions/attestation.TLSBindingKind"
+                },
                 "verifiedAt": {
                     "type": "string"
                 },
@@ -3380,6 +3469,17 @@ const docTemplate = `{
             "x-enum-varnames": [
                 "TEETypeTDX",
                 "TEETypeSEV"
+            ]
+        },
+        "attestation.TLSBindingKind": {
+            "type": "string",
+            "enum": [
+                "spki",
+                "certificate"
+            ],
+            "x-enum-varnames": [
+                "TLSBindingSPKI",
+                "TLSBindingCertificate"
             ]
         },
         "authapi.AddUserReq": {
@@ -3427,7 +3527,7 @@ const docTemplate = `{
                 "allowances": {
                     "type": "object",
                     "additionalProperties": {
-                        "$ref": "#/definitions/lib.BigInt"
+                        "type": "string"
                     }
                 },
                 "isConfirmed": {
@@ -3659,10 +3759,42 @@ const docTemplate = `{
                 }
             }
         },
-        "lib.BigInt": {
+        "lib.GatewayProgress": {
             "type": "object",
             "properties": {
-                "big.Int": {
+                "completed": {
+                    "type": "boolean"
+                },
+                "http_status": {
+                    "type": "integer"
+                },
+                "journal_write_error": {
+                    "type": "string"
+                },
+                "sessionID": {
+                    "type": "string"
+                },
+                "stage": {
+                    "type": "string"
+                },
+                "transactions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/lib.GatewayTransaction"
+                    }
+                },
+                "updated_at": {
+                    "type": "integer"
+                }
+            }
+        },
+        "lib.GatewayTransaction": {
+            "type": "object",
+            "properties": {
+                "hash": {
+                    "type": "string"
+                },
+                "kind": {
                     "type": "string"
                 }
             }
@@ -3851,6 +3983,23 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "string"
+                }
+            }
+        },
+        "proxyapi.DecisionsRequestExample": {
+            "type": "object",
+            "properties": {
+                "model": {
+                    "type": "string",
+                    "example": "jev-1.13.0"
+                },
+                "questions": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "state": {
+                    "type": "string",
+                    "example": "Ticket: invoice dispute, customer asks chargeback timeline."
                 }
             }
         },
@@ -4504,7 +4653,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "modelType": {
-                    "description": "Type of the model (LLM, STT, TTS, EMBEDDING)",
+                    "description": "Type of the model (LLM, STT, TTS, EMBEDDING, DECISIONS)",
                     "allOf": [
                         {
                             "$ref": "#/definitions/structs.ModelType"
@@ -4543,16 +4692,26 @@ const docTemplate = `{
                 "STT",
                 "TTS",
                 "EMBEDDING",
+                "DECISIONS",
                 "UNKNOWN"
             ],
             "x-enum-comments": {
                 "ModelTypeUnknown": "Default type for unknown models"
             },
+            "x-enum-descriptions": [
+                "",
+                "",
+                "",
+                "",
+                "",
+                "Default type for unknown models"
+            ],
             "x-enum-varnames": [
                 "ModelTypeLLM",
                 "ModelTypeSTT",
                 "ModelTypeTTS",
                 "ModelTypeEMBEDDING",
+                "ModelTypeDECISIONS",
                 "ModelTypeUnknown"
             ]
         },
@@ -4597,6 +4756,9 @@ const docTemplate = `{
         "structs.OpenSessionRes": {
             "type": "object",
             "properties": {
+                "progress": {
+                    "$ref": "#/definitions/lib.GatewayProgress"
+                },
                 "sessionID": {
                     "type": "string",
                     "example": "0x1234"
@@ -4606,6 +4768,9 @@ const docTemplate = `{
         "structs.OpenSessionWithDurationRequest": {
             "type": "object",
             "properties": {
+                "maxStakeWei": {
+                    "type": "integer"
+                },
                 "sessionDuration": {
                     "type": "integer"
                 }
@@ -4679,7 +4844,8 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "score": {
-                    "type": "number"
+                    "type": "number",
+                    "format": "float64"
                 }
             }
         },
@@ -4794,19 +4960,6 @@ const docTemplate = `{
                 }
             }
         },
-        "structs.UserStakesOnHoldRes": {
-            "type": "object",
-            "properties": {
-                "available": {
-                    "type": "string",
-                    "example": "100000000"
-                },
-                "hold": {
-                    "type": "string",
-                    "example": "200000000"
-                }
-            }
-        },
         "structs.TokenTransfer": {
             "type": "object",
             "properties": {
@@ -4851,9 +5004,25 @@ const docTemplate = `{
         "structs.TxRes": {
             "type": "object",
             "properties": {
+                "progress": {
+                    "$ref": "#/definitions/lib.GatewayProgress"
+                },
                 "tx": {
                     "type": "string",
                     "example": "0x1234"
+                }
+            }
+        },
+        "structs.UserStakesOnHoldRes": {
+            "type": "object",
+            "properties": {
+                "available": {
+                    "type": "string",
+                    "example": "100000000"
+                },
+                "hold": {
+                    "type": "string",
+                    "example": "200000000"
                 }
             }
         },
@@ -4865,7 +5034,21 @@ const docTemplate = `{
                 },
                 "config": {},
                 "derivedConfig": {},
+                "gatewayCapabilities": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "system.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
                     "type": "string"
                 }
             }
@@ -4946,6 +5129,26 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "string"
+                }
+            }
+        },
+        "system.ModelsReloadRes": {
+            "type": "object",
+            "properties": {
+                "added": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "healthSweepQueued": {
+                    "type": "boolean"
+                },
+                "removed": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
