@@ -45,6 +45,10 @@ import {
   IconX,
 } from '@tabler/icons-react';
 import ReactMarkdown from 'react-markdown';
+import {
+  analyzeToolCallMarkup,
+  TOOL_MARKUP_REPLY_NOTICE,
+} from '../../../../main/src/client/tool-call-markup';
 import { useLocation, useNavigate } from 'react-router';
 import type {
   CoworkApprovalMode,
@@ -373,6 +377,29 @@ const SafeMarkdown = memo(({ children }: { children: string }) => (
   </ReactMarkdown>
 ));
 
+/**
+ * Tasks saved before the runner learned to discard them can hold a reply that
+ * is only a printed tool call. It is shown as the failed turn it was, never as
+ * the model's answer.
+ */
+const AssistantContent = ({ content }: { content: string }) => {
+  const verdict = useMemo(() => analyzeToolCallMarkup(content), [content]);
+  if (verdict.markupOnly) {
+    return (
+      <div className="cowork-inline-error" role="alert">
+        <IconAlertTriangle size={17} />
+        <div>
+          <strong>No answer from the model</strong>
+          <span>{TOOL_MARKUP_REPLY_NOTICE}</span>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <SafeMarkdown>{verdict.found ? verdict.cleaned : content}</SafeMarkdown>
+  );
+};
+
 const CoworkMessageRow = memo(
   ({ message }: { message: CoworkDisplayMessage }) => {
     const modelAuthor =
@@ -399,7 +426,7 @@ const CoworkMessageRow = memo(
             </time>
           </div>
           {message.role === 'assistant' ? (
-            <SafeMarkdown>{message.content}</SafeMarkdown>
+            <AssistantContent content={message.content} />
           ) : (
             <p>{message.content}</p>
           )}

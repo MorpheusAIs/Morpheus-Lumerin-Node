@@ -444,85 +444,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/blockchain/stakes/onhold": {
-            "get": {
-                "security": [
-                    {
-                        "BasicAuth": []
-                    }
-                ],
-                "description": "Get the releasable and still time-locked MOR stake for the proxy-router wallet",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "transactions"
-                ],
-                "summary": "Get consumer stakes on hold",
-                "parameters": [
-                    {
-                        "maximum": 255,
-                        "minimum": 1,
-                        "type": "integer",
-                        "default": 255,
-                        "description": "Maximum on-hold entries to inspect",
-                        "name": "iterations",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/structs.UserStakesOnHoldRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/blockchain/stakes/withdraw": {
-            "post": {
-                "security": [
-                    {
-                        "BasicAuth": []
-                    }
-                ],
-                "description": "Claim releasable MOR stake for the proxy-router wallet",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "transactions"
-                ],
-                "summary": "Withdraw consumer stakes on hold",
-                "parameters": [
-                    {
-                        "description": "Withdrawal options; iterations defaults to 255 and accepts 1 through 255",
-                        "name": "request",
-                        "in": "body",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "iterations": {
-                                    "type": "integer"
-                                }
-                            }
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/structs.TxRes"
-                        }
-                    }
-                }
-            }
-        },
         "/blockchain/bids": {
             "post": {
                 "security": [
@@ -668,6 +589,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/structs.OpenSessionRes"
                         }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ExistingSessionRes"
+                        }
                     }
                 }
             }
@@ -780,6 +707,37 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/structs.ModelRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/models/prices": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Get the live price range per second of compute for every registered model, so a client can rank models by cost without one request per model",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "models"
+                ],
+                "summary": "Get price index for every model",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ModelPricesRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
                         }
                     }
                 }
@@ -957,6 +915,59 @@ const docTemplate = `{
                         "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/structs.ExistingSessionRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/models/{id}/session/estimate": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Returns the MOR amount an open would move and every input it was derived from, for the top-scored bid or for one named bid",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sessions"
+                ],
+                "summary": "Estimate what opening a session costs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Model ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Session length in seconds",
+                        "name": "sessionDuration",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Pay the provider from the escrowed amount instead of staking",
+                        "name": "directPayment",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Quote this bid instead of the top-scored one",
+                        "name": "bidId",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.OpenSessionStakeEstimate"
                         }
                     }
                 }
@@ -1334,6 +1345,31 @@ const docTemplate = `{
                 }
             }
         },
+        "/blockchain/sessions/duration": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Returns MIN_SESSION_DURATION and getMaxSessionDuration so consumers stop hardcoding them",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sessions"
+                ],
+                "summary": "Get the session length range the contract accepts",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.SessionDurationBounds"
+                        }
+                    }
+                }
+            }
+        },
         "/blockchain/sessions/provider": {
             "get": {
                 "security": [
@@ -1564,6 +1600,85 @@ const docTemplate = `{
                         "name": "id",
                         "in": "path",
                         "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.TxRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/stakes/onhold": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Get the releasable and still time-locked MOR stake for the proxy-router wallet",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transactions"
+                ],
+                "summary": "Get consumer stakes on hold",
+                "parameters": [
+                    {
+                        "maximum": 255,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 255,
+                        "description": "Maximum on-hold entries to inspect",
+                        "name": "iterations",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.UserStakesOnHoldRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/stakes/withdraw": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Claim releasable MOR stake for the proxy-router wallet",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transactions"
+                ],
+                "summary": "Withdraw consumer stakes on hold",
+                "parameters": [
+                    {
+                        "description": "Withdrawal options; iterations defaults to 255 and accepts 1 through 255",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "iterations": {
+                                    "type": "integer"
+                                }
+                            }
+                        }
                     }
                 ],
                 "responses": {
@@ -2681,9 +2796,7 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK",
-                        "schema": {
-                            "type": "object"
-                        }
+                        "schema": {}
                     }
                 }
             }
@@ -3182,6 +3295,42 @@ const docTemplate = `{
                 }
             }
         },
+        "/wallet/derivationPath": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Re-derives the active key from the stored mnemonic using a new derivation path. A bare index (\"0\", \"1\") is relative to m/44'/60'/0'/0. Fails if the wallet was imported as a raw private key.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "wallet"
+                ],
+                "summary": "Switch HD account",
+                "parameters": [
+                    {
+                        "description": "Derivation path or account index",
+                        "name": "derivationPath",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/walletapi.SetDerivationPathReqBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/walletapi.WalletRes"
+                        }
+                    }
+                }
+            }
+        },
         "/wallet/mnemonic": {
             "post": {
                 "security": [
@@ -3364,6 +3513,9 @@ const docTemplate = `{
                 "teeType": {
                     "$ref": "#/definitions/attestation.TEEType"
                 },
+                "tlsBindingKind": {
+                    "$ref": "#/definitions/attestation.TLSBindingKind"
+                },
                 "verifiedAt": {
                     "type": "string"
                 },
@@ -3397,6 +3549,17 @@ const docTemplate = `{
             "x-enum-varnames": [
                 "TEETypeTDX",
                 "TEETypeSEV"
+            ]
+        },
+        "attestation.TLSBindingKind": {
+            "type": "string",
+            "enum": [
+                "spki",
+                "certificate"
+            ],
+            "x-enum-varnames": [
+                "TLSBindingSPKI",
+                "TLSBindingCertificate"
             ]
         },
         "authapi.AddUserReq": {
@@ -3444,7 +3607,7 @@ const docTemplate = `{
                 "allowances": {
                     "type": "object",
                     "additionalProperties": {
-                        "$ref": "#/definitions/lib.BigInt"
+                        "type": "string"
                     }
                 },
                 "isConfirmed": {
@@ -3673,14 +3836,6 @@ const docTemplate = `{
                 },
                 "responseAt": {
                     "type": "integer"
-                }
-            }
-        },
-        "lib.BigInt": {
-            "type": "object",
-            "properties": {
-                "big.Int": {
-                    "type": "string"
                 }
             }
         },
@@ -4464,6 +4619,24 @@ const docTemplate = `{
                 }
             }
         },
+        "structs.ErrRes": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string",
+                    "example": "error message"
+                }
+            }
+        },
+        "structs.ExistingSessionRes": {
+            "type": "object",
+            "properties": {
+                "existingSessionID": {
+                    "type": "string",
+                    "example": "0x1234"
+                }
+            }
+        },
         "structs.InputEntry": {
             "type": "object",
             "properties": {
@@ -4545,6 +4718,43 @@ const docTemplate = `{
                 }
             }
         },
+        "structs.ModelPrice": {
+            "type": "object",
+            "properties": {
+                "bid_count": {
+                    "description": "BidCount counts the live bids the prices were taken from, so a client can\nsay \"cheapest of 4\" rather than implying a single quoted price.",
+                    "type": "integer"
+                },
+                "max_price_per_second_wei": {
+                    "type": "string"
+                },
+                "min_price_per_second_wei": {
+                    "description": "MinPricePerSecondWei and MaxPricePerSecondWei are equal when a model has\nexactly one live bid, and both are empty when it has none. An empty pair\nmeans \"no provider\", which is not the same as \"free\", so clients must not\ncoerce it to zero.",
+                    "type": "string"
+                },
+                "model_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "structs.ModelPricesRes": {
+            "type": "object",
+            "properties": {
+                "failed_model_ids": {
+                    "description": "FailedModelIDs lists models whose bids could not be read this time.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "prices": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/structs.ModelPrice"
+                    }
+                }
+            }
+        },
         "structs.ModelRes": {
             "type": "object",
             "properties": {
@@ -4611,15 +4821,6 @@ const docTemplate = `{
                 }
             }
         },
-        "structs.ExistingSessionRes": {
-            "type": "object",
-            "properties": {
-                "existingSessionID": {
-                    "type": "string",
-                    "example": "0x1234"
-                }
-            }
-        },
         "structs.OpenSessionRes": {
             "type": "object",
             "properties": {
@@ -4629,9 +4830,55 @@ const docTemplate = `{
                 }
             }
         },
+        "structs.OpenSessionStakeEstimate": {
+            "type": "object",
+            "properties": {
+                "bid_id": {
+                    "type": "string"
+                },
+                "direct_payment": {
+                    "type": "boolean"
+                },
+                "duration_seconds": {
+                    "type": "string"
+                },
+                "emissions_budget_wei": {
+                    "type": "string"
+                },
+                "explanation": {
+                    "type": "string"
+                },
+                "mor_supply_wei": {
+                    "type": "string"
+                },
+                "price_per_second_wei": {
+                    "type": "string"
+                },
+                "session_cost_wei": {
+                    "type": "string"
+                },
+                "stake_wei": {
+                    "type": "string"
+                },
+                "top_bid_provider": {
+                    "type": "string"
+                },
+                "top_bid_score": {
+                    "type": "number"
+                }
+            }
+        },
         "structs.OpenSessionWithDurationRequest": {
             "type": "object",
             "properties": {
+                "directPayment": {
+                    "description": "DirectPayment pays the provider out of the amount escrowed for this\nsession instead of out of the emissions pool. Opening against a chosen\nbid used to force staking, so a consumer picking their own provider had\nno way to pay directly.",
+                    "type": "boolean"
+                },
+                "rejectExisting": {
+                    "description": "RejectExisting asks the router to refuse this open when the wallet already\nhas a live session for the bid's model. It mirrors the field of the same\nname on OpenSessionWithFailover: a consumer who picks their own provider\nis choosing a route to a model, not asking for a second session, and\nwithout this the by-bid route was the one way to lock a second lot of MOR\nagainst a model the wallet was already paying for. Opt-in for the same\nreason as on the by-model route, so callers that deliberately run parallel\nsessions keep working.",
+                    "type": "boolean"
+                },
                 "sessionDuration": {
                     "type": "integer"
                 }
@@ -4646,14 +4893,14 @@ const docTemplate = `{
                 "failover": {
                     "type": "boolean"
                 },
-                "rejectExisting": {
-                    "description": "RejectExisting asks the router to refuse this open when the wallet already\nhas a live session for the same model. It is opt-in so existing API and\nmobile callers that intentionally manage multiple sessions keep their\ncurrent behaviour.",
-                    "type": "boolean"
-                },
                 "omitProvider": {
                     "description": "OmitProvider excludes a provider from bid selection, e.g. one whose\nbackend just failed a prompt (impaired provider failover).",
                     "type": "string",
                     "example": "0x1234567890abcdef1234567890abcdef12345678"
+                },
+                "rejectExisting": {
+                    "description": "RejectExisting asks the router to refuse this open when the wallet already\nhas a live session for the same model. It is opt-in so existing API and\nmobile callers that intentionally manage multiple sessions keep their\ncurrent behaviour.",
+                    "type": "boolean"
                 },
                 "sessionDuration": {
                     "type": "integer"
@@ -4783,6 +5030,19 @@ const docTemplate = `{
                 }
             }
         },
+        "structs.SessionDurationBounds": {
+            "type": "object",
+            "properties": {
+                "max_seconds": {
+                    "type": "string",
+                    "example": "86400"
+                },
+                "min_seconds": {
+                    "type": "string",
+                    "example": "300"
+                }
+            }
+        },
         "structs.SessionRes": {
             "type": "object",
             "properties": {
@@ -4821,19 +5081,6 @@ const docTemplate = `{
                 "mor": {
                     "type": "integer",
                     "example": 100000000
-                }
-            }
-        },
-        "structs.UserStakesOnHoldRes": {
-            "type": "object",
-            "properties": {
-                "available": {
-                    "type": "string",
-                    "example": "100000000"
-                },
-                "hold": {
-                    "type": "string",
-                    "example": "200000000"
                 }
             }
         },
@@ -4884,6 +5131,19 @@ const docTemplate = `{
                 "tx": {
                     "type": "string",
                     "example": "0x1234"
+                }
+            }
+        },
+        "structs.UserStakesOnHoldRes": {
+            "type": "object",
+            "properties": {
+                "available": {
+                    "type": "string",
+                    "example": "100000000"
+                },
+                "hold": {
+                    "type": "string",
+                    "example": "200000000"
                 }
             }
         },
@@ -5001,6 +5261,17 @@ const docTemplate = `{
                 }
             }
         },
+        "walletapi.SetDerivationPathReqBody": {
+            "type": "object",
+            "required": [
+                "derivationPath"
+            ],
+            "properties": {
+                "derivationPath": {
+                    "type": "string"
+                }
+            }
+        },
         "walletapi.SetupWalletMnemonicReqBody": {
             "type": "object",
             "required": [
@@ -5042,6 +5313,16 @@ const docTemplate = `{
                 "address": {
                     "type": "string",
                     "example": "0x1234"
+                },
+                "derivationPath": {
+                    "description": "DerivationPath is the active path for a mnemonic wallet. A bare index\n(\"0\", \"1\") is interpreted relative to m/44'/60'/0'/0.",
+                    "type": "string",
+                    "example": "0"
+                },
+                "kind": {
+                    "description": "Kind is how the key is stored: \"mnemonic\", \"privateKey\" or \"env\".\nClients use it to decide whether HD account switching is offered — a\nprivateKey or env wallet has no seed to derive further accounts from.",
+                    "type": "string",
+                    "example": "mnemonic"
                 }
             }
         }

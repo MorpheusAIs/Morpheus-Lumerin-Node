@@ -2,6 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CoworkProject, CoworkTask, CoworkToolCall } from './cowork.types'
 import { mutationArgumentsHash } from './cowork-mutation-journal'
 import { messageTextContent } from './cowork-model-history'
+import {
+  LEAKED_PLACEHOLDER_REPLY,
+  LEAKED_PLAN_UPDATE,
+  LEAKED_TOOL_CALLS_BLOCK
+} from './tool-call-markup.fixtures'
 
 const state = vi.hoisted(() => ({
   project: undefined as CoworkProject | undefined,
@@ -209,6 +214,7 @@ import {
   rebindCoworkTask,
   requestCoworkStart,
   resetCoworkImageRefusals,
+  resetCoworkNativeToolVerdicts,
   resolveCoworkApproval,
   startCoworkRun,
   steerCoworkRun
@@ -294,6 +300,7 @@ describe.sequential('Cowork runner interruption safety', () => {
     toolMocks.execute.mockReset()
     toolMocks.loadImage.mockReset()
     resetCoworkImageRefusals()
+    resetCoworkNativeToolVerdicts()
     toolMocks.loadImage.mockResolvedValue(Buffer.from('pixels'))
     visionMocks.verdict.mockReset()
     visionMocks.verdict.mockReturnValue(null)
@@ -1559,6 +1566,7 @@ describe.sequential('Cowork runner provider thinking-state continuity', () => {
     toolMocks.execute.mockReset()
     toolMocks.loadImage.mockReset()
     resetCoworkImageRefusals()
+    resetCoworkNativeToolVerdicts()
     toolMocks.loadImage.mockResolvedValue(Buffer.from('pixels'))
     visionMocks.verdict.mockReset()
     visionMocks.verdict.mockReturnValue(null)
@@ -1734,6 +1742,7 @@ describe.sequential('Cowork runner transient upstream failures', () => {
     toolMocks.execute.mockReset()
     toolMocks.loadImage.mockReset()
     resetCoworkImageRefusals()
+    resetCoworkNativeToolVerdicts()
     toolMocks.loadImage.mockResolvedValue(Buffer.from('pixels'))
     visionMocks.verdict.mockReset()
     visionMocks.verdict.mockReturnValue(null)
@@ -1937,6 +1946,7 @@ describe.sequential('Cowork runner malformed tool turns', () => {
     toolMocks.execute.mockReset()
     toolMocks.loadImage.mockReset()
     resetCoworkImageRefusals()
+    resetCoworkNativeToolVerdicts()
     toolMocks.loadImage.mockResolvedValue(Buffer.from('pixels'))
     visionMocks.verdict.mockReset()
     visionMocks.verdict.mockReturnValue(null)
@@ -2055,6 +2065,7 @@ describe.sequential('Cowork runner plan bookkeeping', () => {
     toolMocks.execute.mockReset()
     toolMocks.loadImage.mockReset()
     resetCoworkImageRefusals()
+    resetCoworkNativeToolVerdicts()
     toolMocks.loadImage.mockResolvedValue(Buffer.from('pixels'))
     visionMocks.verdict.mockReset()
     visionMocks.verdict.mockReturnValue(null)
@@ -2344,6 +2355,7 @@ describe.sequential('Cowork runner unfinished plan continuation', () => {
     toolMocks.execute.mockReset()
     toolMocks.loadImage.mockReset()
     resetCoworkImageRefusals()
+    resetCoworkNativeToolVerdicts()
     toolMocks.loadImage.mockResolvedValue(Buffer.from('pixels'))
     visionMocks.verdict.mockReset()
     visionMocks.verdict.mockReturnValue(null)
@@ -2443,6 +2455,7 @@ describe.sequential('Cowork runner resilience over a long task', () => {
     toolMocks.execute.mockReset()
     toolMocks.loadImage.mockReset()
     resetCoworkImageRefusals()
+    resetCoworkNativeToolVerdicts()
     toolMocks.loadImage.mockResolvedValue(Buffer.from('pixels'))
     visionMocks.verdict.mockReset()
     visionMocks.verdict.mockReturnValue(null)
@@ -2738,6 +2751,7 @@ describe.sequential('Cowork runner unwritten-file reporting', () => {
     toolMocks.execute.mockReset()
     toolMocks.loadImage.mockReset()
     resetCoworkImageRefusals()
+    resetCoworkNativeToolVerdicts()
     toolMocks.loadImage.mockResolvedValue(Buffer.from('pixels'))
     visionMocks.verdict.mockReset()
     visionMocks.verdict.mockReturnValue(null)
@@ -2857,6 +2871,7 @@ describe.sequential('Cowork runner image handling', () => {
     toolMocks.execute.mockReset()
     toolMocks.loadImage.mockReset()
     resetCoworkImageRefusals()
+    resetCoworkNativeToolVerdicts()
     toolMocks.loadImage.mockResolvedValue(Buffer.from('pixels'))
     visionMocks.verdict.mockReset()
     visionMocks.verdict.mockReturnValue(null)
@@ -3104,6 +3119,7 @@ describe.sequential('Cowork runner vision probing', () => {
     toolMocks.execute.mockReset()
     toolMocks.loadImage.mockReset()
     resetCoworkImageRefusals()
+    resetCoworkNativeToolVerdicts()
     toolMocks.loadImage.mockResolvedValue(Buffer.from('pixels'))
     visionMocks.verdict.mockReset()
     visionMocks.verdict.mockReturnValue(null)
@@ -3187,4 +3203,208 @@ describe.sequential('Cowork runner vision probing', () => {
     expect(state.task!.status).toBe('completed')
     expect(visionMocks.record).not.toHaveBeenCalled()
   })
+})
+
+describe.sequential('Cowork runner leaked tool-call markup', () => {
+  beforeEach(() => {
+    state.project = makeProject()
+    state.task = makeTask()
+    state.replaceCalls = 0
+    state.failReplaceCall = undefined
+    extensionState.catalog = { projectInstructions: null, skills: [] }
+    toolMocks.execute.mockReset()
+    toolMocks.loadImage.mockReset()
+    resetCoworkImageRefusals()
+    resetCoworkNativeToolVerdicts()
+    toolMocks.loadImage.mockResolvedValue(Buffer.from('pixels'))
+    visionMocks.verdict.mockReset()
+    visionMocks.verdict.mockReturnValue(null)
+    visionMocks.record.mockReset()
+    visionMocks.run.mockClear()
+    webMocks.retrieve.mockReset()
+    vi.unstubAllGlobals()
+  })
+
+  const runToRest = async (): Promise<void> => {
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false), { timeout: 20_000 })
+  }
+
+  const requestBody = (fetchMock: ReturnType<typeof vi.fn>, index: number): any =>
+    JSON.parse(String(fetchMock.mock.calls[index]?.[1]?.body))
+
+  const shownText = (): string => state.task!.messages.map((message) => message.content).join('\n')
+
+  const expectNoMarkupShown = (): void => {
+    const shown = shownText()
+    expect(shown).not.toContain('<tool_calls>')
+    expect(shown).not.toContain('<update_plan_step>')
+    expect(shown).not.toContain('"list_files"')
+    expect(state.task!.summary ?? '').not.toContain('<tool_calls>')
+  }
+
+  it('discards the reported placeholder reply and replays the turn without native tools', async () => {
+    toolMocks.execute.mockResolvedValue({ result: { entries: [{ name: 'a.md' }] } })
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(completionResponse({ content: LEAKED_PLACEHOLDER_REPLY }))
+      .mockResolvedValueOnce(
+        textEnvelopeResponse({ type: 'tool_call', name: 'list_files', arguments: { path: '.' } })
+      )
+      .mockResolvedValueOnce(
+        textEnvelopeResponse({ type: 'final', content: 'The project contains a.md.' })
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToRest()
+
+    expect(state.task!.status).toBe('completed')
+    expect(state.task!.summary).toBe('The project contains a.md.')
+    expect(state.task!.toolProtocol).toBe('text-v1')
+    // Only the validated envelope ran; the markup authorised nothing.
+    expect(toolMocks.execute).toHaveBeenCalledTimes(1)
+    expect(requestBody(fetchMock, 0).tools.length).toBeGreaterThan(0)
+    for (let index = 1; index < fetchMock.mock.calls.length; index++) {
+      expect(requestBody(fetchMock, index)).not.toHaveProperty('tools')
+    }
+    // The placeholder never reached the transcript or the model's history.
+    expectNoMarkupShown()
+    expect(JSON.stringify(state.task!.agentMessages)).not.toContain('<tool_calls>')
+    expect(state.task!.messages[0]).toMatchObject({ role: 'user', content: 'Create two files.' })
+    expect(state.task!.activities).toContainEqual(
+      expect.objectContaining({
+        label: 'Using Workspace tool compatibility mode',
+        detail: expect.stringContaining('printed tool calls as text')
+      })
+    )
+  }, 25_000)
+
+  it('never offers native tools again to a model caught printing tool markup', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(completionResponse({ content: LEAKED_TOOL_CALLS_BLOCK }))
+      .mockResolvedValueOnce(textEnvelopeResponse({ type: 'final', content: 'First answer.' }))
+      .mockResolvedValueOnce(textEnvelopeResponse({ type: 'final', content: 'Second answer.' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToRest()
+    expect(state.task!.status).toBe('completed')
+
+    // A new task on the same model, with no per-task protocol memory.
+    state.task = { ...makeTask(), id: 'task-2' }
+    await runToRest()
+
+    expect(state.task!.status).toBe('completed')
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(requestBody(fetchMock, 2)).not.toHaveProperty('tools')
+    expect(requestBody(fetchMock, 2).messages[0].content).toContain('morpheus-cowork-v1')
+  }, 25_000)
+
+  it('fails clearly, keeping the conversation, when the model only ever returns markup', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(async () => completionResponse({ content: LEAKED_PLACEHOLDER_REPLY }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToRest()
+
+    expect(state.task!.status).toBe('failed')
+    expect(toolMocks.execute).not.toHaveBeenCalled()
+    // One native attempt, its compatibility replay, then one per correction.
+    expect(fetchMock).toHaveBeenCalledTimes(2 + MAX_TOOL_PROTOCOL_CORRECTIONS)
+    expect(state.task!.error).toMatch(/compatibility protocol|tool-call markup/)
+    expectNoMarkupShown()
+    expect(state.task!.messages).toEqual([
+      expect.objectContaining({ role: 'user', content: 'Create two files.' })
+    ])
+    expect(state.task!.agentMessages[0]).toEqual({ role: 'user', content: 'Create two files.' })
+    expect(JSON.stringify(state.task!.agentMessages)).not.toContain('<tool_calls>')
+  }, 25_000)
+
+  it('rejects a compatibility-mode final answer that is only tool markup', async () => {
+    state.task!.toolProtocol = 'text-v1'
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        textEnvelopeResponse({ type: 'final', content: LEAKED_TOOL_CALLS_BLOCK })
+      )
+      .mockResolvedValueOnce(textEnvelopeResponse({ type: 'final', content: 'A real answer.' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToRest()
+
+    expect(state.task!.status).toBe('completed')
+    expect(state.task!.summary).toBe('A real answer.')
+    expectNoMarkupShown()
+    expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toContain('raw tool-call markup')
+  }, 25_000)
+
+  it('refuses a finish_task summary made of plan-update markup', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        completionResponse({
+          content: null,
+          tool_calls: [
+            {
+              id: 'finish-1',
+              type: 'function',
+              function: {
+                name: 'finish_task',
+                arguments: JSON.stringify({ summary: LEAKED_PLAN_UPDATE })
+              }
+            }
+          ]
+        })
+      )
+      .mockResolvedValueOnce(
+        completionResponse({
+          content: null,
+          tool_calls: [
+            {
+              id: 'finish-2',
+              type: 'function',
+              function: {
+                name: 'finish_task',
+                arguments: JSON.stringify({ summary: 'Both files are created.' })
+              }
+            }
+          ]
+        })
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToRest()
+
+    expect(state.task!.status).toBe('completed')
+    expect(state.task!.summary).toBe('Both files are created.')
+    expectNoMarkupShown()
+  }, 25_000)
+
+  it('hides markup echoed beside real native tool calls and still runs them', async () => {
+    toolMocks.execute.mockResolvedValue({ result: { entries: [] } })
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        completionResponse({
+          content: LEAKED_TOOL_CALLS_BLOCK,
+          tool_calls: [
+            {
+              id: 'list-1',
+              type: 'function',
+              function: { name: 'list_files', arguments: JSON.stringify({ path: '.' }) }
+            }
+          ]
+        })
+      )
+      .mockResolvedValueOnce(completionResponse({ content: 'The folder is empty.' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToRest()
+
+    expect(state.task!.status).toBe('completed')
+    expect(toolMocks.execute).toHaveBeenCalledTimes(1)
+    expect(state.task!.toolProtocol).toBeUndefined()
+    expectNoMarkupShown()
+  }, 25_000)
 })

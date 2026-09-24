@@ -214,18 +214,18 @@ func (cfg *Config) SetDefaults() {
 	if cfg.Proxy.AuthConfigFilePath == "" {
 		cfg.Proxy.AuthConfigFilePath = "./proxy.conf"
 	}
-	// LLMTimeout and CNodePNodeTimeout deliberately have no default. Zero means
-	// no deadline, and no deadline is the default.
-	//
-	// They used to be 240s and 90s. A reasoning model routinely spends longer
-	// than either budget before it emits a single token, and when the deadline
-	// fired the request died mid-thought and surfaced as "context deadline
-	// exceeded", which reads to the user as the model having failed rather than
-	// as us having hung up on it. A wall clock cannot tell a model that is
-	// thinking apart from a model that is stuck, so it should not be the thing
-	// deciding. Set LLM_TIMEOUT or CNODE_PNODE_TIMEOUT to a duration to put a
-	// ceiling back; the connection dial budget and the caller's own context
-	// still bound a genuinely dead provider.
+	if cfg.Proxy.LLMTimeout == 0 {
+		cfg.Proxy.LLMTimeout = 240 * time.Second
+	}
+	if cfg.Proxy.CNodePNodeTimeout == 0 {
+		cfg.Proxy.CNodePNodeTimeout = 90 * time.Second
+	}
+	// A provider that accepts the connection and then goes silent should fail
+	// with an error the user can act on, not hang forever. Anyone who needs an
+	// unbounded budget for a genuinely slow reasoning model can opt out
+	// explicitly with LLM_TIMEOUT= or CNODE_PNODE_TIMEOUT= (empty) in their
+	// .env; that is a deliberate choice per deployment, not a silent default
+	// change for everyone already running this.
 	if cfg.Proxy.CNodePNodeMaxRetries == 0 {
 		cfg.Proxy.CNodePNodeMaxRetries = 3
 	}

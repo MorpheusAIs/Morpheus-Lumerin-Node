@@ -71,6 +71,8 @@ definitions:
         $ref: '#/definitions/attestation.BackendAttestationStatus'
       teeType:
         $ref: '#/definitions/attestation.TEEType'
+      tlsBindingKind:
+        $ref: '#/definitions/attestation.TLSBindingKind'
       verifiedAt:
         type: string
       vmTemplateName:
@@ -96,6 +98,14 @@ definitions:
     x-enum-varnames:
     - TEETypeTDX
     - TEETypeSEV
+  attestation.TLSBindingKind:
+    enum:
+    - spki
+    - certificate
+    type: string
+    x-enum-varnames:
+    - TLSBindingSPKI
+    - TLSBindingCertificate
   authapi.AddUserReq:
     properties:
       password:
@@ -126,7 +136,7 @@ definitions:
     properties:
       allowances:
         additionalProperties:
-          $ref: '#/definitions/lib.BigInt'
+          type: string
         type: object
       isConfirmed:
         type: boolean
@@ -278,11 +288,6 @@ definitions:
         type: string
       responseAt:
         type: integer
-    type: object
-  lib.BigInt:
-    properties:
-      big.Int:
-        type: string
     type: object
   morrpcmesssage.SessionRes:
     properties:
@@ -809,6 +814,18 @@ definitions:
     - endpoint
     - stake
     type: object
+  structs.ErrRes:
+    properties:
+      error:
+        example: error message
+        type: string
+    type: object
+  structs.ExistingSessionRes:
+    properties:
+      existingSessionID:
+        example: "0x1234"
+        type: string
+    type: object
   structs.InputEntry:
     properties:
       key:
@@ -861,6 +878,38 @@ definitions:
           type: string
         type: array
     type: object
+  structs.ModelPrice:
+    properties:
+      bid_count:
+        description: |-
+          BidCount counts the live bids the prices were taken from, so a client can
+          say "cheapest of 4" rather than implying a single quoted price.
+        type: integer
+      max_price_per_second_wei:
+        type: string
+      min_price_per_second_wei:
+        description: |-
+          MinPricePerSecondWei and MaxPricePerSecondWei are equal when a model has
+          exactly one live bid, and both are empty when it has none. An empty pair
+          means "no provider", which is not the same as "free", so clients must not
+          coerce it to zero.
+        type: string
+      model_id:
+        type: string
+    type: object
+  structs.ModelPricesRes:
+    properties:
+      failed_model_ids:
+        description: FailedModelIDs lists models whose bids could not be read this
+          time.
+        items:
+          type: string
+        type: array
+      prices:
+        items:
+          $ref: '#/definitions/structs.ModelPrice'
+        type: array
+    type: object
   structs.ModelRes:
     properties:
       model:
@@ -909,20 +958,57 @@ definitions:
     - approvalSig
     - stake
     type: object
-  structs.ExistingSessionRes:
-    properties:
-      existingSessionID:
-        example: "0x1234"
-        type: string
-    type: object
   structs.OpenSessionRes:
     properties:
       sessionID:
         example: "0x1234"
         type: string
     type: object
+  structs.OpenSessionStakeEstimate:
+    properties:
+      bid_id:
+        type: string
+      direct_payment:
+        type: boolean
+      duration_seconds:
+        type: string
+      emissions_budget_wei:
+        type: string
+      explanation:
+        type: string
+      mor_supply_wei:
+        type: string
+      price_per_second_wei:
+        type: string
+      session_cost_wei:
+        type: string
+      stake_wei:
+        type: string
+      top_bid_provider:
+        type: string
+      top_bid_score:
+        type: number
+    type: object
   structs.OpenSessionWithDurationRequest:
     properties:
+      directPayment:
+        description: |-
+          DirectPayment pays the provider out of the amount escrowed for this
+          session instead of out of the emissions pool. Opening against a chosen
+          bid used to force staking, so a consumer picking their own provider had
+          no way to pay directly.
+        type: boolean
+      rejectExisting:
+        description: |-
+          RejectExisting asks the router to refuse this open when the wallet already
+          has a live session for the bid's model. It mirrors the field of the same
+          name on OpenSessionWithFailover: a consumer who picks their own provider
+          is choosing a route to a model, not asking for a second session, and
+          without this the by-bid route was the one way to lock a second lot of MOR
+          against a model the wallet was already paying for. Opt-in for the same
+          reason as on the by-model route, so callers that deliberately run parallel
+          sessions keep working.
+        type: boolean
       sessionDuration:
         type: integer
     type: object
@@ -932,6 +1018,12 @@ definitions:
         type: boolean
       failover:
         type: boolean
+      omitProvider:
+        description: |-
+          OmitProvider excludes a provider from bid selection, e.g. one whose
+          backend just failed a prompt (impaired provider failover).
+        example: 0x1234567890abcdef1234567890abcdef12345678
+        type: string
       rejectExisting:
         description: |-
           RejectExisting asks the router to refuse this open when the wallet already
@@ -939,12 +1031,6 @@ definitions:
           mobile callers that intentionally manage multiple sessions keep their
           current behaviour.
         type: boolean
-      omitProvider:
-        description: |-
-          OmitProvider excludes a provider from bid selection, e.g. one whose
-          backend just failed a prompt (impaired provider failover).
-        example: 0x1234567890abcdef1234567890abcdef12345678
-        type: string
       sessionDuration:
         type: integer
     type: object
@@ -1028,6 +1114,15 @@ definitions:
       user:
         type: string
     type: object
+  structs.SessionDurationBounds:
+    properties:
+      max_seconds:
+        example: "86400"
+        type: string
+      min_seconds:
+        example: "300"
+        type: string
+    type: object
   structs.SessionRes:
     properties:
       session:
@@ -1054,15 +1149,6 @@ definitions:
       mor:
         example: 100000000
         type: integer
-    type: object
-  structs.UserStakesOnHoldRes:
-    properties:
-      available:
-        example: "100000000"
-        type: string
-      hold:
-        example: "200000000"
-        type: string
     type: object
   structs.TokenTransfer:
     properties:
@@ -1095,6 +1181,15 @@ definitions:
     properties:
       tx:
         example: "0x1234"
+        type: string
+    type: object
+  structs.UserStakesOnHoldRes:
+    properties:
+      available:
+        example: "100000000"
+        type: string
+      hold:
+        example: "200000000"
         type: string
     type: object
   system.ConfigResponse:
@@ -1175,6 +1270,13 @@ definitions:
       status:
         type: string
     type: object
+  walletapi.SetDerivationPathReqBody:
+    properties:
+      derivationPath:
+        type: string
+    required:
+    - derivationPath
+    type: object
   walletapi.SetupWalletMnemonicReqBody:
     properties:
       derivationPath:
@@ -1202,6 +1304,19 @@ definitions:
     properties:
       address:
         example: "0x1234"
+        type: string
+      derivationPath:
+        description: |-
+          DerivationPath is the active path for a mnemonic wallet. A bare index
+          ("0", "1") is interpreted relative to m/44'/60'/0'/0.
+        example: "0"
+        type: string
+      kind:
+        description: |-
+          Kind is how the key is stored: "mnemonic", "privateKey" or "env".
+          Clients use it to decide whether HD account switching is offered — a
+          privateKey or env wallet has no seed to derive further accounts from.
+        example: mnemonic
         type: string
     type: object
 externalDocs:
@@ -1477,57 +1592,6 @@ paths:
       summary: Get ETH and MOR balance
       tags:
       - transactions
-  /blockchain/stakes/onhold:
-    get:
-      description: Get the releasable and still time-locked MOR stake for the proxy-router
-        wallet
-      parameters:
-      - default: 255
-        description: Maximum on-hold entries to inspect
-        in: query
-        maximum: 255
-        minimum: 1
-        name: iterations
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/structs.UserStakesOnHoldRes'
-      security:
-      - BasicAuth: []
-      summary: Get consumer stakes on hold
-      tags:
-      - transactions
-  /blockchain/stakes/withdraw:
-    post:
-      consumes:
-      - application/json
-      description: Claim releasable MOR stake for the proxy-router wallet
-      parameters:
-      - description: Withdrawal options; iterations defaults to 255 and accepts 1 through
-          255
-        in: body
-        name: request
-        schema:
-          properties:
-            iterations:
-              type: integer
-          type: object
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/structs.TxRes'
-      security:
-      - BasicAuth: []
-      summary: Withdraw consumer stakes on hold
-      tags:
-      - transactions
   /blockchain/bids:
     post:
       consumes:
@@ -1615,6 +1679,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.OpenSessionRes'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/structs.ExistingSessionRes'
       security:
       - BasicAuth: []
       summary: Open Session by bidId in blockchain
@@ -1805,6 +1873,61 @@ paths:
       summary: Open Session by ModelID in blockchain
       tags:
       - sessions
+  /blockchain/models/{id}/session/estimate:
+    get:
+      description: Returns the MOR amount an open would move and every input it was
+        derived from, for the top-scored bid or for one named bid
+      parameters:
+      - description: Model ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Session length in seconds
+        in: query
+        name: sessionDuration
+        required: true
+        type: integer
+      - description: Pay the provider from the escrowed amount instead of staking
+        in: query
+        name: directPayment
+        type: boolean
+      - description: Quote this bid instead of the top-scored one
+        in: query
+        name: bidId
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.OpenSessionStakeEstimate'
+      security:
+      - BasicAuth: []
+      summary: Estimate what opening a session costs
+      tags:
+      - sessions
+  /blockchain/models/prices:
+    get:
+      description: Get the live price range per second of compute for every registered
+        model, so a client can rank models by cost without one request per model
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.ModelPricesRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+      security:
+      - BasicAuth: []
+      summary: Get price index for every model
+      tags:
+      - models
   /blockchain/providers:
     get:
       description: Get providers list from blokchain
@@ -2081,6 +2204,22 @@ paths:
       summary: Get Todays Budget
       tags:
       - sessions
+  /blockchain/sessions/duration:
+    get:
+      description: Returns MIN_SESSION_DURATION and getMaxSessionDuration so consumers
+        stop hardcoding them
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.SessionDurationBounds'
+      security:
+      - BasicAuth: []
+      summary: Get the session length range the contract accepts
+      tags:
+      - sessions
   /blockchain/sessions/provider:
     get:
       description: Get sessions from blockchain by provider
@@ -2195,6 +2334,57 @@ paths:
       summary: Get Sessions for User
       tags:
       - sessions
+  /blockchain/stakes/onhold:
+    get:
+      description: Get the releasable and still time-locked MOR stake for the proxy-router
+        wallet
+      parameters:
+      - default: 255
+        description: Maximum on-hold entries to inspect
+        in: query
+        maximum: 255
+        minimum: 1
+        name: iterations
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.UserStakesOnHoldRes'
+      security:
+      - BasicAuth: []
+      summary: Get consumer stakes on hold
+      tags:
+      - transactions
+  /blockchain/stakes/withdraw:
+    post:
+      consumes:
+      - application/json
+      description: Claim releasable MOR stake for the proxy-router wallet
+      parameters:
+      - description: Withdrawal options; iterations defaults to 255 and accepts 1
+          through 255
+        in: body
+        name: request
+        schema:
+          properties:
+            iterations:
+              type: integer
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.TxRes'
+      security:
+      - BasicAuth: []
+      summary: Withdraw consumer stakes on hold
+      tags:
+      - transactions
   /blockchain/token/supply:
     get:
       description: Get MOR token supply from blockchain
@@ -2869,8 +3059,7 @@ paths:
       responses:
         "200":
           description: OK
-          schema:
-            type: object
+          schema: {}
       security:
       - BasicAuth: []
       summary: Call agent tool
@@ -3187,6 +3376,30 @@ paths:
       security:
       - BasicAuth: []
       summary: Get Wallet
+      tags:
+      - wallet
+  /wallet/derivationPath:
+    post:
+      description: Re-derives the active key from the stored mnemonic using a new
+        derivation path. A bare index ("0", "1") is relative to m/44'/60'/0'/0. Fails
+        if the wallet was imported as a raw private key.
+      parameters:
+      - description: Derivation path or account index
+        in: body
+        name: derivationPath
+        required: true
+        schema:
+          $ref: '#/definitions/walletapi.SetDerivationPathReqBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/walletapi.WalletRes'
+      security:
+      - BasicAuth: []
+      summary: Switch HD account
       tags:
       - wallet
   /wallet/mnemonic:

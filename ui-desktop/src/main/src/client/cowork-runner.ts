@@ -57,6 +57,7 @@ import {
   unsupportedNativeToolFields
 } from './cowork-tool-protocol'
 import type { TextToolEnvelope } from './cowork-tool-protocol'
+import { analyzeToolCallMarkup } from './tool-call-markup'
 import {
   CoworkContentPart,
   CoworkModelTarget,
@@ -239,6 +240,29 @@ const imagePixelsRefused = new Set<string>()
 
 /** Test seam. A refusal is otherwise meant to outlive the task that found it. */
 export const resetCoworkImageRefusals = (): void => imagePixelsRefused.clear()
+
+/**
+ * Endpoints that accepted the native `tools` field but answered by printing
+ * tool-call markup (`<tool_calls>…`, `<update_plan_step>…`) as text. Their
+ * serving stack has no tool parser, so offering them native tools again only
+ * produces more placeholder replies. Keyed by endpoint fingerprint (else the
+ * session, else the model id) so a different provider is judged afresh.
+ */
+const nativeToolsUnsupported = new Set<string>()
+const nativeToolsKey = (task: CoworkTask): string =>
+  task.modelFingerprint ?? coworkSessionKey(task.model) ?? `model:${task.model.modelId}`
+export const resetCoworkNativeToolVerdicts = (): void => nativeToolsUnsupported.clear()
+
+function leakedToolMarkupViolation(toolNames: string[]): CoworkToolProtocolViolation {
+  const named = toolNames.length ? ` (${toolNames.slice(0, 5).join(', ')})` : ''
+  return new CoworkToolProtocolViolation(
+    `The selected model replied with raw tool-call markup${named} instead of a usable response. Nothing ran.`,
+    'Your last reply contained raw tool-call markup as text. Workspace never executes tool calls ' +
+      'written as text, and never shows them to the user. Nothing ran. Reply with exactly one JSON ' +
+      'envelope and no other text.\n\n' +
+      textToolProtocolInstructions(tools)
+  )
+}
 
 const historyHasImages = (task: CoworkTask): boolean =>
   task.agentMessages.some(
@@ -1098,6 +1122,8 @@ async function complete(
   /** Provider's own account of why it stopped; 'length' means it was cut off. */
   finishReason?: string | null
   toolProtocol: 'native' | 'text-v1'
+  /** Why compatibility mode is in use when this turn switched to it. */
+  toolProtocolReason?: 'rejected-native-tools' | 'leaked-tool-markup'
 }> {
   if (!project) throw new Error('Workspace project not found.')
   const headers: Record<string, string> = {
@@ -1206,7 +1232,10 @@ async function complete(
     }
   }
 
-  let mode: 'native' | 'text-v1' = task.toolProtocol ?? 'native'
+  // A model already caught printing tool markup never gets native tools again.
+  let mode: 'native' | 'text-v1' =
+    task.toolProtocol ?? (nativeToolsUnsupported.has(nativeToolsKey(task)) ? 'text-v1' : 'native')
+  let toolProtocolReason: 'rejected-native-tools' | 'leaked-tool-markup' | undefined
   let { response, text } = await requestAllowingTransientFailure(mode)
   if (!response.ok && mode === 'native') {
     const unsupported = unsupportedNativeToolFields(response.status, text)
@@ -1215,6 +1244,8 @@ async function complete(
       // exactly one compatibility retry is safe. Never retry ambiguous
       // timeouts, transport failures, auth/rate limits, generic 400s, or generic 5xxs.
       mode = 'text-v1'
+      toolProtocolReason = 'rejected-native-tools'
+      nativeToolsUnsupported.add(nativeToolsKey(task))
       ;({ response, text } = await requestAllowingTransientFailure(mode))
     }
   }
@@ -1240,9 +1271,33 @@ async function complete(
     ;({ response, text } = await requestAllowingTransientFailure(mode))
   }
   if (!response.ok) throw new Error(text || `Model request failed with HTTP ${response.status}.`)
-  const data = parseCompletion(text)
-  const message = data?.choices?.[0]?.message
+  let data = parseCompletion(text)
+  let message = data?.choices?.[0]?.message
   if (!message) throw new Error('The selected model returned no assistant message.')
+
+  // An endpoint without a tool parser accepts the tools field and then prints
+  // the call as text: `<tool_calls>[{"name":"list_files",…}]</tool_calls>`.
+  // That reply used to be filed as the answer and end the task. The request
+  // could not have executed anything, so replaying it once under the strict
+  // text protocol is as safe as the rejected-tools fallback above.
+  if (mode === 'native' && !(Array.isArray(message.tool_calls) && message.tool_calls.length)) {
+    const leaked =
+      typeof message.content === 'string'
+        ? analyzeToolCallMarkup(message.content, ALLOWED_TOOL_NAMES)
+        : null
+    if (leaked?.found) {
+      mode = 'text-v1'
+      toolProtocolReason = 'leaked-tool-markup'
+      nativeToolsUnsupported.add(nativeToolsKey(task))
+      ;({ response, text } = await requestAllowingTransientFailure(mode))
+      if (!response.ok) {
+        throw new Error(text || `Model request failed with HTTP ${response.status}.`)
+      }
+      data = parseCompletion(text)
+      message = data?.choices?.[0]?.message
+      if (!message) throw new Error('The selected model returned no assistant message.')
+    }
+  }
   const rawFinishReason = (data?.choices?.[0] as { finish_reason?: unknown } | undefined)
     ?.finish_reason
   const finishReason = typeof rawFinishReason === 'string' ? rawFinishReason : null
@@ -1272,10 +1327,14 @@ async function complete(
       )
     }
     if (envelope.type === 'final') {
+      // A final envelope wrapping tool markup is a placeholder, not an answer.
+      const leaked = analyzeToolCallMarkup(envelope.content, ALLOWED_TOOL_NAMES)
+      if (leaked.found) throw leakedToolMarkupViolation(leaked.toolNames)
       return {
         content: envelope.content.slice(0, 200_000),
         finishReason,
-        toolProtocol: mode
+        toolProtocol: mode,
+        ...(toolProtocolReason ? { toolProtocolReason } : {})
       }
     }
     const args = JSON.stringify(envelope.arguments)
@@ -1305,7 +1364,8 @@ async function complete(
         }
       ]),
       finishReason,
-      toolProtocol: mode
+      toolProtocol: mode,
+      ...(toolProtocolReason ? { toolProtocolReason } : {})
     }
   }
 
@@ -1322,13 +1382,21 @@ async function complete(
   if (reasoning !== undefined && reasoning !== null && typeof reasoning !== 'string') {
     throw new Error('The selected model returned invalid assistant reasoning state.')
   }
+  const toolCalls = normaliseToolCalls(message.tool_calls)
+  let content: string | null | undefined =
+    typeof message.content === 'string' ? message.content.slice(0, 200_000) : message.content
+  if (typeof content === 'string') {
+    // Real structured calls arrived; any markup echoed beside them is noise and
+    // is never shown. Without calls the markup was handled above.
+    const leaked = analyzeToolCallMarkup(content, ALLOWED_TOOL_NAMES)
+    if (leaked.found) content = leaked.markupOnly ? null : leaked.cleaned
+  }
   return {
-    content:
-      typeof message.content === 'string' ? message.content.slice(0, 200_000) : message.content,
+    content,
     // Opaque and byte-exact. Providers such as DeepSeek reject a thinking-mode
     // tool continuation whose prior reasoning was altered or dropped.
     ...(reasoning === undefined ? {} : { reasoning_content: reasoning }),
-    tool_calls: normaliseToolCalls(message.tool_calls),
+    tool_calls: toolCalls,
     finishReason,
     toolProtocol: mode
   }
@@ -2114,6 +2182,13 @@ async function executeToolCall(
 
   if (name === 'finish_task') {
     const summary = String(input.summary ?? '').trim()
+    // A summary that is itself a tool call would be shown as the final answer.
+    if (analyzeToolCallMarkup(summary, ALLOWED_TOOL_NAMES).found) {
+      throw new CoworkToolRejection(
+        'finish_task summary contained raw tool-call markup instead of a summary. ' +
+          'Call the tool you need, or finish with a plain-language summary.'
+      )
+    }
     task.summary = summary.slice(0, MAX_SUMMARY_CHARACTERS)
     task.status = 'completed'
     task.completedAt = Date.now()
@@ -2630,7 +2705,9 @@ async function loop(
         type: 'system',
         label: 'Using Workspace tool compatibility mode',
         detail:
-          'This model rejected native tool fields. Workspace switched to a strict, locally validated text tool protocol for this session.',
+          message.toolProtocolReason === 'leaked-tool-markup'
+            ? 'This model printed tool calls as text instead of using native tools. Workspace discarded that reply, ran nothing, and switched to a strict, locally validated text tool protocol for this session.'
+            : 'This model rejected native tool fields. Workspace switched to a strict, locally validated text tool protocol for this session.',
         status: 'success'
       })
     }

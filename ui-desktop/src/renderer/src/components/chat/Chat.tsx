@@ -67,6 +67,7 @@ import {
 import withChatState from '../../store/hocs/withChatState';
 import { abbreviateAddress } from '../../utils';
 import { ThinkingMessageBody } from './ThinkingMessageBody';
+import { AssistantReplyBody } from './AssistantReplyBody';
 import {
   ActivityStatus,
   derivePhase,
@@ -2954,7 +2955,12 @@ const Chat = (props: ChatProps) => {
   );
 };
 
-const renderMessage = (message, onOpenImage) => {
+const renderMessage = (
+  message,
+  onOpenImage,
+  onRegenerate?: () => void,
+  busy?: boolean,
+) => {
   if (message.isAudioContent) {
     return (
       <MessageBody>
@@ -3042,7 +3048,15 @@ const renderMessage = (message, onOpenImage) => {
           )}
         </div>
       )}
-      <ThinkingMessageBody text={message.text} />
+      {message.role === 'assistant' ? (
+        <AssistantReplyBody
+          text={message.text}
+          onRetry={onRegenerate}
+          busy={busy}
+        />
+      ) : (
+        <ThinkingMessageBody text={message.text} />
+      )}
     </MessageBody>
   );
 };
@@ -3079,7 +3093,7 @@ const Message = memo(
             than the column instead of wrapping. */}
         <div style={{ minWidth: 0, flex: 1 }}>
           <AvatarHeader>{message.user}</AvatarHeader>
-          {renderMessage(message, onOpenImage)}
+          {renderMessage(message, onOpenImage, onRegenerate, busy)}
           {!isMedia && (
             <MessageActions
               text={message.text}
