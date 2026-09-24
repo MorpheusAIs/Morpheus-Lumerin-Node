@@ -109,6 +109,18 @@ func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isLocal bool
 			IsVideoRawContent: isVideoRawContent,
 			IsAudioContent:    isAudioContent,
 		}
+	case *gcs.DecisionsRequest:
+		// Embeddings parity: store the prompt; short title only (J2 — no state/questions).
+		newEntry = gcs.ChatMessage{
+			Prompt:            p,
+			Response:          strings.Join(resps, ""),
+			PromptAt:          promptAt.Unix(),
+			ResponseAt:        responseAt.Unix(),
+			IsImageContent:    isImageContent,
+			IsVideoRawContent: isVideoRawContent,
+			IsAudioContent:    isAudioContent,
+		}
+		title = "Decisions"
 	case *gcs.AudioSpeechRequest:
 		// Store audio speech request directly
 		newEntry = gcs.ChatMessage{

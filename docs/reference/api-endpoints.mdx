@@ -3,7 +3,7 @@ title: "API endpoints (selected)"
 description: "Hand-picked, prose-explained endpoints of the proxy-router HTTP API. Full schema lives in the repo at proxy-router/docs/swagger.yaml."
 audience: ["developer", "prosumer", "provider-full", "provider-resale"]
 product: ["proxy-router"]
-last_verified: "2026-09-22"
+last_verified: "2026-09-23"
 source: "docs/proxy-router-api-endpoints.md"
 ---
 
@@ -110,6 +110,41 @@ curl --location 'http://localhost:8084/v1/embeddings' \
 
 ---
 
+## Decisions
+
+`POST /v1/decisions` — permission `decisions`
+
+Non-streaming JSON. Body is the TypeSafe System One / OpenRouter Decisions core (`state` + `questions`). Response is `{ model, answers, usage }`. The provider's `models-config.modelName` overwrites any client `model` field (same as embeddings).
+
+```bash
+curl --location 'http://localhost:8082/v1/decisions' \
+  --header 'session_id: 0x...' \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: Basic YWRtaW46YWRtaW4=' \
+  --data '{
+    "state": "Ticket: invoice dispute, customer asks chargeback timeline.",
+    "questions": {
+      "dept": {
+        "type": "choice",
+        "instructions": "Route the ticket.",
+        "criteria": {
+          "billing": "Payment, invoice, refund",
+          "technical": "Product bug or outage",
+          "general": "Other"
+        }
+      },
+      "urgent": {
+        "type": "noul",
+        "instructions": "Needs same-day human review?"
+      }
+    }
+  }'
+```
+
+See [Decisions](/consumers/decisions) for consumer how-to and [models-config.json](/reference/models-config) for provider `apiType=decisions` rows.
+
+---
+
 ## Get providers
 
 `GET /blockchain/providers`
@@ -127,7 +162,7 @@ curl --location 'http://localhost:8082/blockchain/providers' \
 
 `GET /blockchain/models`
 
-`ModelType` is one of `LLM`, `STT`, `TTS`, `EMBEDDING`, `UNKNOWN`. Use it to choose the appropriate endpoint family. Full sample response in [`proxy-router/docs/swagger.yaml`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/docs/swagger.yaml).
+`ModelType` is one of `LLM`, `STT`, `TTS`, `EMBEDDING`, `DECISIONS`, `UNKNOWN`. Use it to choose the appropriate endpoint family. Full sample response in [`proxy-router/docs/swagger.yaml`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/docs/swagger.yaml).
 
 ---
 

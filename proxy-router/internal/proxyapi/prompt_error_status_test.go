@@ -35,6 +35,10 @@ func (s *stubAdapter) Embeddings(ctx context.Context, prompt *gsc.EmbeddingsRequ
 	return nil
 }
 
+func (s *stubAdapter) Decisions(ctx context.Context, prompt *gsc.DecisionsRequest, cb gsc.CompletionCallback) error {
+	return nil
+}
+
 func (s *stubAdapter) ApiType() string { return "openai" }
 
 type stubAIEngine struct {
