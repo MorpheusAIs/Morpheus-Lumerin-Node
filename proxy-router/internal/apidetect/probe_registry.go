@@ -66,9 +66,9 @@ func probeHostedRegistry(ctx context.Context, d *Detector, bases []string, cfg c
 
 func (d *Detector) probeRegistryShape(ctx context.Context, bases []string, modelName, apiKey string, ev *apispec.Evidence) {
 	// A stack set before the listing is read came from hostname recognition;
-	// the fingerprint fallback arrives with none, and service-level facts are
-	// then not asserted from the listing's shape alone.
-	hosted := ev.Stack != ""
+	// the fingerprint fallback arrives with none. Captured here because the
+	// shape branches below name a stack of their own.
+	host := ev.Stack
 	for _, base := range bases {
 		// The listing is shared with every other model on this host and key
 		// (listing_cache.go): read only, never edited in place.
@@ -91,7 +91,7 @@ func (d *Detector) probeRegistryShape(ctx context.Context, bases []string, model
 				ev.Stack = "openrouter"
 			}
 			tracef(ctx, "model listing at %s/models has supported_parameters -> openrouter-style registry", base)
-			readOpenRouterEntry(ctx, entry, params, modelName, hosted, ev)
+			readOpenRouterEntry(ctx, entry, params, modelName, host, ev)
 			return
 		}
 
@@ -106,7 +106,12 @@ func (d *Detector) probeRegistryShape(ctx context.Context, bases []string, model
 	}
 }
 
-func readOpenRouterEntry(ctx context.Context, entry map[string]any, params []any, modelName string, hosted bool, ev *apispec.Evidence) {
+// host is the hostname-recognised stack ("" for an unrecognised host). The
+// web plugin is a fact about OpenRouter the service (contract §4, rule 8:
+// webSearch "always true on openrouter"), so it is asserted only when the
+// host is OpenRouter itself, never from the listing's shape: another vendor
+// may serve an openrouter-shaped listing without the plugin.
+func readOpenRouterEntry(ctx context.Context, entry map[string]any, params []any, modelName, host string, ev *apispec.Evidence) {
 	var structured []string
 	for _, p := range params {
 		s, ok := p.(string)
@@ -145,11 +150,14 @@ func readOpenRouterEntry(ctx context.Context, entry map[string]any, params []any
 		ev.Caps.SetStructured(structured, openrouterParamsSource)
 	}
 	if ev.Caps.WebSearch == nil {
-		if hosted {
+		switch host {
+		case "openrouter":
 			ev.Caps.SetWebSearch(true, openrouterPluginsSource)
 			tracef(ctx, "/models: the web plugin searches for any openrouter model -> webSearch")
-		} else {
+		case "":
 			tracef(ctx, "/models: openrouter-shaped listing on an unrecognized host; the web plugin is not assumed, webSearch left unset")
+		default:
+			tracef(ctx, "/models: openrouter-shaped listing on a %s host; the web plugin is openrouter's own, webSearch left unset", host)
 		}
 	}
 

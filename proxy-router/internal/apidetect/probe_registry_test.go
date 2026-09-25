@@ -310,6 +310,27 @@ func TestOpenRouterEntryVariants(t *testing.T) {
 		require.NotContains(t, trace, "the web plugin searches for any openrouter model")
 	})
 
+	// Rule 8 ties the always-true webSearch to OpenRouter itself: a venice host
+	// serving an openrouter-shaped listing keeps its own stack and gets no
+	// plugin fact, so the venice web_search.* bindings stay gated shut.
+	t.Run("the web plugin is not asserted for another vendor's openrouter-shaped listing", func(t *testing.T) {
+		withoutRegistry(t)
+		api, trace := detectListing(t, "venice", openrouterEntry("vendor/model", nil))
+		require.Equal(t, "venice", api.Stack)
+		require.NotNil(t, api.Capabilities)
+		require.Nil(t, api.Capabilities.WebSearch)
+		require.NotContains(t, api.Evidence, "capabilities.webSearch")
+		require.Equal(t, true, *api.Capabilities.Tools, "facts read from the listing itself still apply")
+		for intent := range api.Bindings {
+			require.False(t, strings.HasPrefix(intent, "web_search."), "binding %s published without a webSearch fact", intent)
+		}
+		for key := range api.Evidence {
+			require.False(t, strings.HasPrefix(key, "bindings.web_search."), "evidence %s without a webSearch fact", key)
+		}
+		require.Contains(t, trace, "/models: openrouter-shaped listing on a venice host; the web plugin is openrouter's own, webSearch left unset")
+		require.NotContains(t, trace, "the web plugin searches for any openrouter model")
+	})
+
 	t.Run("web_search_options on an unrecognized host is still the model's own evidence", func(t *testing.T) {
 		api, _ := detectListingByShape(t, openrouterEntry("vendor/search", map[string]any{
 			"supported_parameters": []string{"tools", "web_search_options"},
