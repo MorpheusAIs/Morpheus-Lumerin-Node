@@ -35,14 +35,14 @@ func TestHostedProbeDispatch(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		}))
 		defer srv.Close()
-		mapHostToVendor(t, srv.URL, "anthropic")
-		_, dispatched := hostedProbes["anthropic"]
+		mapHostToVendor(t, srv.URL, "openai")
+		_, dispatched := hostedProbes["openai"]
 		require.False(t, dispatched, "this case needs a vendor without a hosted probe")
 
-		api, trace := newTestDetector().DetectWithTrace(context.Background(), config.ModelConfig{ModelName: "claude-x", ApiType: config.StackTransport["anthropic"], ApiURL: srv.URL + "/v1/messages"})
+		api, trace := newTestDetector().DetectWithTrace(context.Background(), config.ModelConfig{ModelName: "gpt-x", ApiType: config.StackTransport["openai"], ApiURL: srv.URL + "/v1/chat/completions"})
 		require.NotNil(t, api)
-		require.Equal(t, "anthropic", api.Stack)
-		require.Contains(t, trace, `host recognized as hosted vendor "anthropic" by hostname; no probing needed`)
+		require.Equal(t, "openai", api.Stack)
+		require.Contains(t, trace, `host recognized as hosted vendor "openai" by hostname; no probing needed`)
 		require.Zero(t, hits.Load())
 	})
 

@@ -302,14 +302,18 @@ func TestDetectVeniceByShape(t *testing.T) {
 	require.Equal(t, "venice:/models.model_spec.capabilities.supportsWebSearch", api.Evidence["capabilities.webSearch"])
 }
 
-func TestDetectHostedVendorSkipsProbing(t *testing.T) {
+// The static anthropic spec stands whatever the vendor lookup answers: one
+// request to /v1/models/{id}, a 404, and the preset tables fill the rest.
+func TestDetectHostedVendorStaticSpecSurvivesProbeMiss(t *testing.T) {
+	origin, hits := stubVendorHost(t, "anthropic")
 	d := newTestDetector()
 	api := d.Detect(context.Background(), config.ModelConfig{
 		ModelName: "claude-sonnet-4-5",
 		ApiType:   "claudeai",
-		ApiURL:    "https://api.anthropic.com/v1/messages",
+		ApiURL:    origin + "/v1/messages",
 	})
 	require.NotNil(t, api)
+	require.Equal(t, int32(1), hits.Load(), "one vendor lookup, nothing else")
 	require.Equal(t, "anthropic", api.Stack)
 	require.Equal(t, "claude", api.ModelFamily)
 	require.NotNil(t, api.Thinking)
@@ -376,12 +380,14 @@ func TestDetectWithTraceExplainsSteps(t *testing.T) {
 }
 
 func TestDetectWithTraceHostedVendor(t *testing.T) {
+	origin, hits := stubVendorHost(t, "anthropic")
 	d := newTestDetector()
 	_, trace := d.DetectWithTrace(context.Background(), config.ModelConfig{
 		ModelName: "claude-opus-4-6",
 		ApiType:   "claudeai",
-		ApiURL:    "https://api.anthropic.com/v1/messages",
+		ApiURL:    origin + "/v1/messages",
 	})
+	require.Equal(t, int32(1), hits.Load())
 	joined := strings.Join(trace, "\n")
 	require.Contains(t, joined, "anthropic")
 	require.Contains(t, joined, "family")
@@ -446,13 +452,15 @@ func TestDetectServedIDRefinesGenericArchitecture(t *testing.T) {
 }
 
 func TestDetectHostedVendorSkipsTemplateKwargDefaults(t *testing.T) {
+	origin, hits := stubVendorHost(t, "groq")
 	d := newTestDetector()
 	api := d.Detect(context.Background(), config.ModelConfig{
 		ModelName: "qwen/qwen3-32b",
 		ApiType:   "openai",
-		ApiURL:    "https://api.groq.com/openai/v1/chat/completions",
+		ApiURL:    origin + "/openai/v1/chat/completions",
 	})
 	require.NotNil(t, api)
+	require.Equal(t, int32(1), hits.Load(), "the groq model lookup only")
 	require.Equal(t, "groq", api.Stack)
 	require.Equal(t, "qwen3", api.ModelFamily)
 	require.Empty(t, api.Bindings)
@@ -460,13 +468,15 @@ func TestDetectHostedVendorSkipsTemplateKwargDefaults(t *testing.T) {
 }
 
 func TestDetectHostedVendorKeepsNativeFamilyDefaults(t *testing.T) {
+	origin, hits := stubVendorHost(t, "together")
 	d := newTestDetector()
 	api := d.Detect(context.Background(), config.ModelConfig{
 		ModelName: "claude-sonnet-4-5",
 		ApiType:   "openai",
-		ApiURL:    "https://api.together.xyz/v1/chat/completions",
+		ApiURL:    origin + "/v1/chat/completions",
 	})
 	require.NotNil(t, api)
+	require.Equal(t, int32(1), hits.Load(), "the together listing only")
 	require.Equal(t, "together", api.Stack)
 	require.Empty(t, api.Bindings)
 }
@@ -823,9 +833,11 @@ func TestDetectRegistryListingOverLimitIsIgnoredNotFatal(t *testing.T) {
 }
 
 func TestDetectOpenAIHostAdvertisesStandardParameters(t *testing.T) {
+	origin, hits := stubVendorHost(t, "openai")
 	d := newTestDetector()
-	api := d.Detect(context.Background(), config.ModelConfig{ModelName: "gpt-4o-mini", ApiType: "openai", ApiURL: "https://api.openai.com/v1/chat/completions"})
+	api := d.Detect(context.Background(), config.ModelConfig{ModelName: "gpt-4o-mini", ApiType: "openai", ApiURL: origin + "/v1/chat/completions"})
 	require.NotNil(t, api)
+	require.Zero(t, hits.Load(), "openai has no hosted probe")
 	require.Contains(t, api.Parameters, "response_format")
 	require.Contains(t, api.Parameters, "seed")
 }
@@ -1093,8 +1105,10 @@ func TestDetectDropsStackContradictingTransport(t *testing.T) {
 	})
 
 	t.Run("openai model at a claudeai-only vendor host", func(t *testing.T) {
-		api, lines := newTestDetector().DetectWithTrace(context.Background(), config.ModelConfig{ModelName: "claude-sonnet-4-5", ApiType: "openai", ApiURL: "https://api.anthropic.com/v1/messages"})
+		origin, hits := stubVendorHost(t, "anthropic")
+		api, lines := newTestDetector().DetectWithTrace(context.Background(), config.ModelConfig{ModelName: "claude-sonnet-4-5", ApiType: "openai", ApiURL: origin + "/v1/messages"})
 		require.NotNil(t, api)
+		require.Equal(t, int32(1), hits.Load())
 		require.Equal(t, "", api.Stack)
 		require.Equal(t, "claude", api.ModelFamily)
 		require.Nil(t, api.Thinking)
