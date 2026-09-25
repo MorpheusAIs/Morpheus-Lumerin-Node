@@ -261,6 +261,24 @@ func jsonPositiveInt(v any) (int64, bool) {
 	return n, true
 }
 
+// jsonStrings is the one reader of a decoded JSON array's string members:
+// non-strings are skipped, and a missing, non-array or all-non-string value
+// reads as nil. A probe that must distinguish "empty" from "unreadable"
+// (LiteLLM's supported_openai_params) tests the array itself first.
+func jsonStrings(v any) []string {
+	items, ok := v.([]any)
+	if !ok {
+		return nil
+	}
+	var out []string
+	for _, item := range items {
+		if s, ok := item.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 func containsString(list []string, s string) bool {
 	for _, item := range list {
 		if item == s {

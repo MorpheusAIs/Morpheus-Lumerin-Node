@@ -301,12 +301,7 @@ func (d *Detector) probeLiteLLM(ctx context.Context, base, modelName, apiKey str
 		if group != nil {
 			if params, ok := group["supported_openai_params"].([]any); ok {
 				// Non-nil even when empty: nil means the list could not be read.
-				supported := make([]string, 0, len(params))
-				for _, p := range params {
-					if s, ok := p.(string); ok {
-						supported = append(supported, s)
-					}
-				}
+				supported := append(make([]string, 0, len(params)), jsonStrings(params)...)
 				sort.Strings(supported)
 				ev.LiteLLMSupportedParams = supported
 				tracef(ctx, "litellm /model_group/info lists %d supported_openai_params", len(supported))
@@ -315,12 +310,8 @@ func (d *Detector) probeLiteLLM(ctx context.Context, base, modelName, apiKey str
 				ev.GatewayReasoning = true
 				tracef(ctx, "litellm /model_group/info reports supports_reasoning")
 			}
-			if efforts, ok := group["supported_reasoning_efforts"].([]any); ok {
-				for _, e := range efforts {
-					if s, ok := e.(string); ok {
-						ev.ReasoningEfforts = append(ev.ReasoningEfforts, s)
-					}
-				}
+			if efforts := jsonStrings(group["supported_reasoning_efforts"]); efforts != nil {
+				ev.ReasoningEfforts = append(ev.ReasoningEfforts, efforts...)
 				if len(ev.ReasoningEfforts) > 0 {
 					ev.EffortsSource = litellmGroupSource + "supported_reasoning_efforts"
 					tracef(ctx, "litellm /model_group/info lists supported_reasoning_efforts %v", ev.ReasoningEfforts)

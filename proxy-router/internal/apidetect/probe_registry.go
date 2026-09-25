@@ -187,7 +187,7 @@ func readOpenRouterEntry(ctx context.Context, entry map[string]any, params []any
 		}
 	}
 	if arch, ok := entry["architecture"].(map[string]any); ok {
-		if in := registryStrings(arch["input_modalities"]); in != nil {
+		if in := jsonStrings(arch["input_modalities"]); in != nil {
 			// OpenRouter names document input "file"; the wire vocabulary calls it pdf.
 			for i, m := range in {
 				if m == "file" {
@@ -200,7 +200,7 @@ func readOpenRouterEntry(ctx context.Context, entry map[string]any, params []any
 				tracef(ctx, "/models.architecture.input_modalities %v has no known entry; ignored", in)
 			}
 		}
-		if out := registryStrings(arch["output_modalities"]); out != nil {
+		if out := jsonStrings(arch["output_modalities"]); out != nil {
 			if ev.Caps.SetOutputModalities(out, openrouterModelsSource+".architecture.output_modalities") {
 				tracef(ctx, "/models.architecture.output_modalities %v -> modalities.output %v", out, ev.Caps.Modalities.Output)
 			} else {
@@ -218,7 +218,7 @@ func readOpenRouterEntry(ctx context.Context, entry map[string]any, params []any
 		ev.MandatoryReasoning = true
 		tracef(ctx, "/models.reasoning.mandatory -> reasoning cannot be disabled")
 	}
-	if efforts := registryStrings(reasoning["supported_efforts"]); efforts != nil {
+	if efforts := jsonStrings(reasoning["supported_efforts"]); efforts != nil {
 		ev.ReasoningEfforts = efforts
 		ev.EffortsSource = openrouterEffortsSource
 		tracef(ctx, "/models.reasoning.supported_efforts %v -> reasoning.effort levels", efforts)
@@ -301,7 +301,7 @@ func readVeniceSpec(ctx context.Context, spec map[string]any, ev *apispec.Eviden
 		}
 	}
 	if effortful, ok := caps["supportsReasoningEffort"].(bool); ok && effortful {
-		if efforts := registryStrings(caps["reasoningEffortOptions"]); efforts != nil {
+		if efforts := jsonStrings(caps["reasoningEffortOptions"]); efforts != nil {
 			ev.ReasoningEfforts = efforts
 			ev.EffortsSource = veniceCapsSource + ".reasoningEffortOptions"
 			tracef(ctx, "/models.model_spec.capabilities.reasoningEffortOptions %v -> reasoning.effort levels", efforts)
@@ -319,18 +319,4 @@ func readVeniceSpec(ctx context.Context, spec map[string]any, ev *apispec.Eviden
 			tracef(ctx, "/models.model_spec.capabilities.quantization is not a plain label; ignored")
 		}
 	}
-}
-
-func registryStrings(v any) []string {
-	items, ok := v.([]any)
-	if !ok {
-		return nil
-	}
-	var out []string
-	for _, item := range items {
-		if s, ok := item.(string); ok {
-			out = append(out, s)
-		}
-	}
-	return out
 }

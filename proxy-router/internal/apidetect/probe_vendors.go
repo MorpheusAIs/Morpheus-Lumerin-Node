@@ -182,16 +182,7 @@ func boolAt(m map[string]any, key string) (bool, bool) {
 	return b, ok
 }
 
-func stringsAt(m map[string]any, key string) []string {
-	items, _ := m[key].([]any)
-	var out []string
-	for _, it := range items {
-		if s, ok := it.(string); ok {
-			out = append(out, s)
-		}
-	}
-	return out
-}
+func stringsAt(m map[string]any, key string) []string { return jsonStrings(m[key]) }
 
 // Anthropic capability leaves are {"supported": bool}.
 func supportedAt(m map[string]any, key string) bool {
