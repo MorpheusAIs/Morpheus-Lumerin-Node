@@ -36,21 +36,27 @@ func formatResult(api *system.ModelApiSpec, trace []string) string {
 		thinking := "unknown"
 		if api.Thinking != nil {
 			thinking = api.Thinking.Mode
+			if api.Thinking.Default != "" {
+				thinking += " (default " + api.Thinking.Default + ")"
+			}
 		}
 		fmt.Fprintf(&b, "    thinking:    %s\n", thinking)
+		writeCapabilities(&b, api.Capabilities)
 		if len(api.Bindings) > 0 {
 			b.WriteString("    bindings:\n")
-			intents := make([]string, 0, len(api.Bindings))
-			for intent := range api.Bindings {
-				intents = append(intents, intent)
-			}
-			sort.Strings(intents)
-			for _, intent := range intents {
-				fmt.Fprintf(&b, "      %-18s %s\n", intent+":", apispec.DescribeBinding(api.Bindings[intent]))
+			for _, intent := range sortedKeys(api.Bindings) {
+				binding := api.Bindings[intent]
+				fmt.Fprintf(&b, "      %-18s %s%s\n", intent+":", apispec.DescribeBinding(binding), describeVerified(binding, api.Evidence[system.EvidenceKeyBinding(intent)]))
 			}
 		}
 		if len(api.Parameters) > 0 {
 			fmt.Fprintf(&b, "    parameters:  %s\n", strings.Join(api.Parameters, ", "))
+		}
+		if len(api.Evidence) > 0 {
+			b.WriteString("    evidence:\n")
+			for _, key := range sortedKeys(api.Evidence) {
+				fmt.Fprintf(&b, "      %s -> %s\n", key, api.Evidence[key])
+			}
 		}
 	}
 
@@ -62,6 +68,82 @@ func formatResult(api *system.ModelApiSpec, trace []string) string {
 		fmt.Fprintf(&b, "    - %s\n", line)
 	}
 	return b.String()
+}
+
+// Field order follows the wire contract (system.ModelCapabilities); an
+// absent field is unknown and is not printed.
+func writeCapabilities(b *strings.Builder, c *system.ModelCapabilities) {
+	if c == nil {
+		return
+	}
+	var lines []string
+	addInt := func(name string, v *int64) {
+		if v != nil {
+			lines = append(lines, fmt.Sprintf("%-18s %d", name+":", *v))
+		}
+	}
+	addBool := func(name string, v *bool) {
+		if v != nil {
+			lines = append(lines, fmt.Sprintf("%-18s %t", name+":", *v))
+		}
+	}
+	addList := func(name string, v []string) {
+		if len(v) > 0 {
+			lines = append(lines, fmt.Sprintf("%-18s %s", name+":", strings.Join(v, ", ")))
+		}
+	}
+	addInt("context", c.Context)
+	addInt("contextTrained", c.ContextTrained)
+	addInt("maxOutput", c.MaxOutput)
+	if c.Modalities != nil {
+		addList("modalities.input", c.Modalities.Input)
+		addList("modalities.output", c.Modalities.Output)
+	}
+	addBool("tools", c.Tools)
+	addBool("toolsParallel", c.ToolsParallel)
+	addList("structured", c.Structured)
+	addBool("reasoning", c.Reasoning)
+	addBool("webSearch", c.WebSearch)
+	addBool("embeddings", c.Embeddings)
+	addBool("promptCache", c.PromptCache)
+	if c.Quantization != "" {
+		lines = append(lines, fmt.Sprintf("%-18s %s", "quantization:", c.Quantization))
+	}
+	if len(lines) == 0 {
+		return
+	}
+	b.WriteString("    capabilities:\n")
+	for _, line := range lines {
+		fmt.Fprintf(b, "      %s\n", line)
+	}
+}
+
+// An unset Verified means never checked. The verifier records the outcome
+// of a failed check as the binding's evidence entry ("verify:<what>@<unix>",
+// contract §1), which is the reason shown.
+func describeVerified(binding *system.ParamBinding, evidence string) string {
+	if binding == nil || binding.Verified == nil {
+		return ""
+	}
+	if *binding.Verified {
+		if binding.VerifiedAt == 0 {
+			return " [verified]"
+		}
+		return " [verified " + time.Unix(binding.VerifiedAt, 0).UTC().Format(time.RFC3339) + "]"
+	}
+	if evidence == "" {
+		evidence = "reason not recorded"
+	}
+	return " [unverified: " + evidence + "]"
+}
+
+func sortedKeys[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func orDash(s string) string {
