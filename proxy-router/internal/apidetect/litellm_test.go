@@ -1091,3 +1091,250 @@ func TestDetectLiteLLMTwoHopIdentifiedUpstreamBecomesStack(t *testing.T) {
 		require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
 	})
 }
+
+// ModelGroupInfo shape, https://github.com/BerriAI/litellm/blob/main/litellm/types/router.py
+var capsGroup = map[string]any{
+	"model_group": "my-chat", "providers": []string{"openai"}, "mode": "chat",
+	"max_input_tokens": 128000, "max_output_tokens": 16384,
+	"supports_vision": true, "supports_function_calling": true, "supports_parallel_function_calling": true,
+	"supports_web_search": false, "supports_url_context": true, "supports_reasoning": false,
+	"supported_openai_params": []string{"temperature", "tools", "response_format", "parallel_tool_calls", "max_tokens"},
+}
+
+// ModelInfoBase shape, https://github.com/BerriAI/litellm/blob/main/litellm/types/utils.py
+var capsModelInfo = map[string]any{
+	"litellm_provider": "openai", "mode": "chat", "db_model": false,
+	"max_input_tokens": 128000, "max_output_tokens": 16384,
+	"supports_prompt_caching": true, "supports_response_schema": true,
+	"supports_pdf_input": true, "supports_audio_input": false, "supports_vision": true,
+}
+
+func groupWith(base map[string]any, overrides map[string]any) map[string]any {
+	out := make(map[string]any, len(base)+len(overrides))
+	for k, v := range base {
+		out[k] = v
+	}
+	for k, v := range overrides {
+		out[k] = v
+	}
+	return out
+}
+
+func deploymentWithInfo(name, model, apiBase string, info map[string]any) map[string]any {
+	dep := deployment(name, model, apiBase, nil)
+	modelInfo := dep["model_info"].(map[string]any)
+	for k, v := range info {
+		modelInfo[k] = v
+	}
+	return dep
+}
+
+func (l *requestLog) count(p string) int {
+	n := 0
+	for _, seen := range l.seen() {
+		if seen == p {
+			n++
+		}
+	}
+	return n
+}
+
+func TestDetectLiteLLMCapabilityFacts(t *testing.T) {
+	t.Run("group and deployment facts, stack litellm", func(t *testing.T) {
+		dead, _ := loggingServer(t, http.NewServeMux())
+		litellm, llLog := litellmServer(t, capsGroup, []map[string]any{deploymentWithInfo("my-chat", "openai/qwen3-235b", dead.URL+"/v1", capsModelInfo)})
+
+		api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
+		require.NotNil(t, api)
+		require.Equal(t, "litellm", api.Stack)
+		require.Equal(t, "", api.Via)
+		require.Equal(t, 1, llLog.count("/model/info"), "the deployment is read once")
+
+		caps := api.Capabilities
+		require.NotNil(t, caps)
+		require.Equal(t, int64(128000), *caps.Context)
+		require.Nil(t, caps.ContextTrained)
+		require.Equal(t, int64(16384), *caps.MaxOutput)
+		require.Equal(t, []string{"image", "pdf"}, caps.Modalities.Input)
+		require.Nil(t, caps.Modalities.Output)
+		require.Equal(t, true, *caps.Tools)
+		require.Equal(t, true, *caps.ToolsParallel)
+		require.Equal(t, false, *caps.WebSearch)
+		require.Equal(t, false, *caps.Reasoning)
+		require.Equal(t, true, *caps.PromptCache)
+		require.Equal(t, []string{"json_object", "json_schema"}, caps.Structured)
+		require.Nil(t, caps.Embeddings)
+		require.Equal(t, "", caps.Quantization)
+
+		require.Equal(t, "litellm:/model_group/info.max_input_tokens", api.Evidence["capabilities.context"])
+		require.Equal(t, "litellm:/model_group/info.max_output_tokens", api.Evidence["capabilities.maxOutput"])
+		require.Equal(t, "litellm:/model/info.model_info.supports_pdf_input", api.Evidence["capabilities.modalities.input"])
+		require.Equal(t, "litellm:/model_group/info.supports_function_calling", api.Evidence["capabilities.tools"])
+		require.Equal(t, "litellm:/model_group/info.supports_parallel_function_calling", api.Evidence["capabilities.toolsParallel"])
+		require.Equal(t, "litellm:/model_group/info.supports_web_search", api.Evidence["capabilities.webSearch"])
+		require.Equal(t, "litellm:/model_group/info.supports_reasoning", api.Evidence["capabilities.reasoning"])
+		require.Equal(t, "litellm:/model/info.model_info.supports_prompt_caching", api.Evidence["capabilities.promptCache"])
+		require.Equal(t, "litellm:/model/info.model_info.supports_response_schema", api.Evidence["capabilities.structured"])
+		for key, source := range api.Evidence {
+			require.True(t, strings.HasPrefix(source, "litellm:"), "%s = %s", key, source)
+			require.NotContains(t, source, dead.URL)
+		}
+
+		for _, line := range []string{
+			"litellm /model_group/info max_input_tokens 128000 -> capabilities.context",
+			"litellm /model_group/info max_output_tokens 16384 -> capabilities.maxOutput",
+			"litellm /model_group/info supports_vision -> capabilities.modalities.input += image",
+			"litellm /model_group/info supports_function_calling true -> capabilities.tools",
+			"litellm /model_group/info supports_parallel_function_calling true -> capabilities.toolsParallel",
+			"litellm /model_group/info supports_web_search false -> capabilities.webSearch",
+			"litellm /model_group/info supports_reasoning false -> capabilities.reasoning",
+			"litellm /model_group/info supported_openai_params lists response_format -> capabilities.structured = json_object",
+			"litellm /model/info model_info.supports_prompt_caching -> capabilities.promptCache",
+			"litellm /model/info model_info.supports_response_schema -> capabilities.structured = json_object, json_schema",
+			"litellm /model/info model_info.supports_pdf_input -> capabilities.modalities.input += pdf",
+			"capabilities.context = 128000 (litellm:/model_group/info.max_input_tokens)",
+		} {
+			require.Contains(t, trace, line)
+		}
+		require.NotContains(t, trace, "supports_url_context")
+		require.NotContains(t, trace, "supports_audio_input")
+	})
+
+	t.Run("identified upstream keeps litellm as the source prefix", func(t *testing.T) {
+		venice, veniceLog := registryServer(t, veniceEntry("qwen3-235b", true), 0)
+		mapHostToVendor(t, venice.URL, "venice")
+		litellm, _ := litellmServer(t, capsGroup, []map[string]any{deploymentWithInfo("my-chat", "openai/qwen3-235b", venice.URL+"/api/v1", capsModelInfo)})
+
+		api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
+		require.NotNil(t, api)
+		require.Equal(t, "venice", api.Stack)
+		require.Equal(t, "litellm", api.Via)
+		require.NotNil(t, api.Capabilities)
+		require.Equal(t, int64(128000), *api.Capabilities.Context)
+		require.Equal(t, true, *api.Capabilities.PromptCache)
+		require.Equal(t, false, *api.Capabilities.Reasoning, "a backend-reported false stands (rule 3) even when the upstream listing says otherwise")
+		require.Equal(t, "litellm:/model_group/info.max_input_tokens", api.Evidence["capabilities.context"])
+		require.Equal(t, "litellm:/model/info.model_info.supports_prompt_caching", api.Evidence["capabilities.promptCache"])
+		for key, source := range api.Evidence {
+			require.True(t, strings.HasPrefix(source, "litellm:"), "%s = %s", key, source)
+			require.NotContains(t, source, venice.URL)
+		}
+		require.Contains(t, trace, "upstream venice identified: it becomes the stack (via litellm)")
+		veniceLog.requireAnonymous(t)
+	})
+
+	t.Run("hop disabled: group facts only", func(t *testing.T) {
+		litellm, llLog := litellmServer(t, capsGroup, []map[string]any{deploymentWithInfo("my-chat", "openai/qwen3-235b", "http://upstream.invalid/v1", capsModelInfo)})
+
+		api, _ := detectVia(t, litellm.URL, "my-chat", Options{TwoHop: false})
+		require.NotNil(t, api)
+		require.False(t, llLog.sawPath("/model/info"))
+		require.Equal(t, int64(128000), *api.Capabilities.Context)
+		require.Equal(t, []string{"image"}, api.Capabilities.Modalities.Input)
+		require.Nil(t, api.Capabilities.PromptCache)
+		require.Equal(t, []string{"json_object"}, api.Capabilities.Structured)
+		require.Equal(t, "litellm:/model_group/info.supported_openai_params", api.Evidence["capabilities.structured"])
+		require.Equal(t, "litellm:/model_group/info.supports_vision", api.Evidence["capabilities.modalities.input"])
+	})
+
+	t.Run("supports_reasoning true is not a capability false", func(t *testing.T) {
+		dead, _ := loggingServer(t, http.NewServeMux())
+		group := groupWith(capsGroup, map[string]any{
+			"supports_reasoning": true, "supported_reasoning_efforts": []string{"low", "medium", "high"},
+			"supported_openai_params": []string{"temperature", "reasoning_effort"},
+		})
+		litellm, _ := litellmServer(t, group, []map[string]any{deployment("my-chat", "openai/qwen3-235b", dead.URL+"/v1", nil)})
+
+		api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
+		require.NotNil(t, api.Capabilities)
+		require.NotNil(t, api.Capabilities.Reasoning)
+		require.Equal(t, true, *api.Capabilities.Reasoning)
+		require.NotEqual(t, "litellm:/model_group/info.supports_reasoning", api.Evidence["capabilities.reasoning"])
+		require.Equal(t, "litellm:/model_group/info.supported_reasoning_efforts", api.Evidence["bindings."+system.IntentReasoningEffort])
+		require.Equal(t, []string{"low", "medium", "high"}, api.Bindings[system.IntentReasoningEffort].EnumValues)
+		require.Nil(t, api.Capabilities.Structured, "response_format is not among the supported params")
+		require.Contains(t, trace, "bindings: reasoning.effort levels from litellm:/model_group/info.supported_reasoning_efforts -> low|medium|high")
+	})
+
+	t.Run("efforts source stays litellm's when venice becomes the stack", func(t *testing.T) {
+		venice, _ := registryServer(t, veniceEntry("qwen3-235b", true), 0)
+		mapHostToVendor(t, venice.URL, "venice")
+		group := groupWith(capsGroup, map[string]any{
+			"supports_reasoning": true, "supported_reasoning_efforts": []string{"low", "medium", "high"},
+			"supported_openai_params": []string{"temperature", "reasoning_effort"},
+		})
+		litellm, _ := litellmServer(t, group, []map[string]any{deployment("my-chat", "openai/qwen3-235b", venice.URL+"/api/v1", nil)})
+
+		api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
+		require.Equal(t, "venice", api.Stack)
+		require.NotContains(t, api.Evidence, "bindings."+system.IntentReasoningEffort)
+		require.Contains(t, trace, "bindings: reasoning.effort levels from litellm:/model_group/info.supported_reasoning_efforts skipped — they describe litellm's param, not venice's")
+	})
+
+	t.Run("json_schema only with supports_response_schema", func(t *testing.T) {
+		dead, _ := loggingServer(t, http.NewServeMux())
+		info := groupWith(capsModelInfo, map[string]any{"supports_response_schema": false})
+		litellm, _ := litellmServer(t, capsGroup, []map[string]any{deploymentWithInfo("my-chat", "openai/qwen3-235b", dead.URL+"/v1", info)})
+
+		api, _ := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
+		require.Equal(t, []string{"json_object"}, api.Capabilities.Structured)
+		require.Equal(t, "litellm:/model_group/info.supported_openai_params", api.Evidence["capabilities.structured"])
+	})
+
+	t.Run("audio from either endpoint, deduped", func(t *testing.T) {
+		dead, _ := loggingServer(t, http.NewServeMux())
+		group := groupWith(capsGroup, map[string]any{"supports_audio_input": true, "supports_vision": false})
+		info := groupWith(capsModelInfo, map[string]any{"supports_audio_input": true, "supports_pdf_input": false})
+		litellm, _ := litellmServer(t, group, []map[string]any{deploymentWithInfo("my-chat", "openai/qwen3-235b", dead.URL+"/v1", info)})
+
+		api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
+		require.Equal(t, []string{"audio"}, api.Capabilities.Modalities.Input)
+		require.Equal(t, "litellm:/model/info.model_info.supports_audio_input", api.Evidence["capabilities.modalities.input"])
+		require.Contains(t, trace, "litellm /model_group/info supports_audio_input -> capabilities.modalities.input += audio")
+		require.Contains(t, trace, "litellm /model/info model_info.supports_audio_input -> capabilities.modalities.input += audio")
+	})
+
+	t.Run("out-of-range or mistyped values are ignored", func(t *testing.T) {
+		dead, _ := loggingServer(t, http.NewServeMux())
+		group := groupWith(capsGroup, map[string]any{
+			"max_input_tokens": 1 << 31, "max_output_tokens": "16384",
+			"supports_vision": "yes", "supports_function_calling": nil, "supports_web_search": 1,
+		})
+		info := groupWith(capsModelInfo, map[string]any{"supports_prompt_caching": "true", "supports_response_schema": nil})
+		litellm, _ := litellmServer(t, group, []map[string]any{deploymentWithInfo("my-chat", "openai/qwen3-235b", dead.URL+"/v1", info)})
+
+		api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
+		require.NotNil(t, api.Capabilities)
+		require.Nil(t, api.Capabilities.Context)
+		require.Nil(t, api.Capabilities.MaxOutput)
+		require.Nil(t, api.Capabilities.Tools)
+		require.Nil(t, api.Capabilities.WebSearch)
+		require.Nil(t, api.Capabilities.PromptCache)
+		require.Equal(t, []string{"pdf"}, api.Capabilities.Modalities.Input)
+		require.Equal(t, []string{"json_object"}, api.Capabilities.Structured)
+		require.Equal(t, true, *api.Capabilities.ToolsParallel)
+		require.Contains(t, trace, fmt.Sprintf("litellm /model_group/info max_input_tokens %d out of bounds; ignored", 1<<31))
+		require.NotContains(t, trace, "-> capabilities.context")
+
+		for _, v := range []any{2.5, float64(1 << 60), -float64(1 << 60), 128000, "1", true, nil, []any{1}} {
+			_, ok := litellmInt(v)
+			require.False(t, ok, "%v", v)
+		}
+		for _, v := range []float64{0, -1, 128000, 1 << 31} {
+			n, ok := litellmInt(v)
+			require.True(t, ok, "%v", v)
+			require.Equal(t, int64(v), n)
+		}
+	})
+
+	t.Run("no capabilities without capability fields", func(t *testing.T) {
+		dead, _ := loggingServer(t, http.NewServeMux())
+		group := map[string]any{"model_group": "my-chat", "supported_openai_params": []string{"temperature", "tools"}}
+		litellm, _ := litellmServer(t, group, []map[string]any{deployment("my-chat", "openai/qwen3-235b", dead.URL+"/v1", nil)})
+
+		api, _ := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
+		require.NotNil(t, api)
+		require.Nil(t, api.Capabilities)
+		require.Nil(t, api.Evidence)
+	})
+}

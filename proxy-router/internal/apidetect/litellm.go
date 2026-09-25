@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"net/http"
 	"net/netip"
@@ -69,6 +70,7 @@ func (d *Detector) litellmUpstream(ctx context.Context, base, modelName, apiKey 
 		tracef(ctx, "litellm /model/info lists %d deployments but none is named %q; no upstream evidence", len(data), modelName)
 		return
 	}
+	litellmDeploymentCaps(ctx, dep, ev)
 	params, _ := dep["litellm_params"].(map[string]any)
 	model, _ := params["model"].(string)
 	provider, _ := params["custom_llm_provider"].(string)
@@ -321,13 +323,121 @@ func (d *Detector) probeLiteLLM(ctx context.Context, base, modelName, apiKey str
 					}
 				}
 				if len(ev.ReasoningEfforts) > 0 {
+					ev.EffortsSource = litellmGroupSource + "supported_reasoning_efforts"
 					tracef(ctx, "litellm /model_group/info lists supported_reasoning_efforts %v", ev.ReasoningEfforts)
 				}
 			}
+			litellmGroupCaps(ctx, group, ev)
 		}
 	}
 	if d.opts.TwoHop {
 		d.litellmUpstream(ctx, base, modelName, apiKey, ev)
 	}
 	return true
+}
+
+// Evidence source prefixes: the facts below describe what LiteLLM serves and
+// stay attributed to litellm even when an identified upstream becomes the
+// stack (Via = litellm).
+const (
+	litellmGroupSource      = "litellm:/model_group/info."
+	litellmDeploymentSource = "litellm:/model/info.model_info."
+)
+
+// ModelGroupInfo (https://github.com/BerriAI/litellm/blob/main/litellm/types/router.py)
+// aggregates the group's deployments: a limit is the group's, a supports_*
+// flag is true when any deployment's cost-map entry says so and false
+// otherwise, so false also covers a model the cost map does not know.
+// supports_url_context has no wire field.
+func litellmGroupCaps(ctx context.Context, group map[string]any, ev *apispec.Evidence) {
+	src := func(field string) string { return litellmGroupSource + field }
+	if v, ok := litellmInt(group["max_input_tokens"]); ok {
+		if ev.Caps.SetContext(v, src("max_input_tokens")) {
+			tracef(ctx, "litellm /model_group/info max_input_tokens %d -> capabilities.context", v)
+		} else {
+			tracef(ctx, "litellm /model_group/info max_input_tokens %d out of bounds; ignored", v)
+		}
+	}
+	if v, ok := litellmInt(group["max_output_tokens"]); ok {
+		if ev.Caps.SetMaxOutput(v, src("max_output_tokens")) {
+			tracef(ctx, "litellm /model_group/info max_output_tokens %d -> capabilities.maxOutput", v)
+		} else {
+			tracef(ctx, "litellm /model_group/info max_output_tokens %d out of bounds; ignored", v)
+		}
+	}
+	if v, ok := group["supports_vision"].(bool); ok && v && ev.Caps.AddInputModality("image", src("supports_vision")) {
+		tracef(ctx, "litellm /model_group/info supports_vision -> capabilities.modalities.input += image")
+	}
+	if v, ok := group["supports_audio_input"].(bool); ok && v && ev.Caps.AddInputModality("audio", src("supports_audio_input")) {
+		tracef(ctx, "litellm /model_group/info supports_audio_input -> capabilities.modalities.input += audio")
+	}
+	if v, ok := group["supports_function_calling"].(bool); ok {
+		ev.Caps.SetTools(v, src("supports_function_calling"))
+		tracef(ctx, "litellm /model_group/info supports_function_calling %t -> capabilities.tools", v)
+	}
+	if v, ok := group["supports_parallel_function_calling"].(bool); ok {
+		ev.Caps.SetToolsParallel(v, src("supports_parallel_function_calling"))
+		tracef(ctx, "litellm /model_group/info supports_parallel_function_calling %t -> capabilities.toolsParallel", v)
+	}
+	if v, ok := group["supports_web_search"].(bool); ok {
+		ev.Caps.SetWebSearch(v, src("supports_web_search"))
+		tracef(ctx, "litellm /model_group/info supports_web_search %t -> capabilities.webSearch", v)
+	}
+	// A true flag is GatewayReasoning (read above); only the false crosses as
+	// a capability, since reasoning = true is derived from surviving bindings.
+	if v, ok := group["supports_reasoning"].(bool); ok && !v {
+		ev.Caps.SetReasoning(false, src("supports_reasoning"))
+		tracef(ctx, "litellm /model_group/info supports_reasoning false -> capabilities.reasoning")
+	}
+	// JSON mode (response_format {type: json_object}) is available whenever
+	// litellm lists response_format among the model's supported params; a
+	// schema needs supports_response_schema on a deployment
+	// (https://docs.litellm.ai/docs/completion/json_mode).
+	if litellmListed(ev.LiteLLMSupportedParams, "response_format") && ev.Caps.SetStructured([]string{"json_object"}, src("supported_openai_params")) {
+		tracef(ctx, "litellm /model_group/info supported_openai_params lists response_format -> capabilities.structured = json_object")
+	}
+}
+
+// Per-deployment model_info (https://github.com/BerriAI/litellm/blob/main/litellm/types/utils.py
+// ModelInfoBase); read from the deployment the hop already matched, so no
+// second request. Only true flags are facts: an absent cost-map entry leaves
+// them false.
+func litellmDeploymentCaps(ctx context.Context, dep map[string]any, ev *apispec.Evidence) {
+	info, _ := dep["model_info"].(map[string]any)
+	if info == nil {
+		return
+	}
+	src := func(field string) string { return litellmDeploymentSource + field }
+	if v, ok := info["supports_prompt_caching"].(bool); ok && v {
+		ev.Caps.SetPromptCache(true, src("supports_prompt_caching"))
+		tracef(ctx, "litellm /model/info model_info.supports_prompt_caching -> capabilities.promptCache")
+	}
+	if v, ok := info["supports_response_schema"].(bool); ok && v && ev.Caps.SetStructured([]string{"json_object", "json_schema"}, src("supports_response_schema")) {
+		tracef(ctx, "litellm /model/info model_info.supports_response_schema -> capabilities.structured = json_object, json_schema")
+	}
+	if v, ok := info["supports_pdf_input"].(bool); ok && v && ev.Caps.AddInputModality("pdf", src("supports_pdf_input")) {
+		tracef(ctx, "litellm /model/info model_info.supports_pdf_input -> capabilities.modalities.input += pdf")
+	}
+	if v, ok := info["supports_audio_input"].(bool); ok && v && ev.Caps.AddInputModality("audio", src("supports_audio_input")) {
+		tracef(ctx, "litellm /model/info model_info.supports_audio_input -> capabilities.modalities.input += audio")
+	}
+}
+
+// JSON numbers arrive as float64; only whole numbers a float64 represents
+// exactly (|v| <= 2^53) convert, and the setters apply the (0, 1<<31) bound.
+func litellmInt(v any) (int64, bool) {
+	f, ok := v.(float64)
+	if !ok || f != math.Trunc(f) || math.Abs(f) > 1<<53 {
+		return 0, false
+	}
+	return int64(f), true
+}
+
+func litellmListed(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
