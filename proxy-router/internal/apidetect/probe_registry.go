@@ -152,7 +152,7 @@ func readOpenRouterEntry(ctx context.Context, entry map[string]any, params []any
 		}
 	}
 
-	if n, ok := registryInt(entry["context_length"]); ok {
+	if n, ok := jsonWholeNumber(entry["context_length"]); ok {
 		if ev.Caps.SetContext(n, openrouterModelsSource+".context_length") {
 			tracef(ctx, "/models.context_length %d -> context", n)
 		} else {
@@ -161,7 +161,7 @@ func readOpenRouterEntry(ctx context.Context, entry map[string]any, params []any
 	}
 	if top, ok := entry["top_provider"].(map[string]any); ok {
 		if ev.Caps.Context == nil {
-			if n, ok := registryInt(top["context_length"]); ok {
+			if n, ok := jsonWholeNumber(top["context_length"]); ok {
 				if ev.Caps.SetContext(n, openrouterModelsSource+".top_provider.context_length") {
 					tracef(ctx, "/models.top_provider.context_length %d -> context (context_length absent)", n)
 				} else {
@@ -169,7 +169,7 @@ func readOpenRouterEntry(ctx context.Context, entry map[string]any, params []any
 				}
 			}
 		}
-		if n, ok := registryInt(top["max_completion_tokens"]); ok {
+		if n, ok := jsonWholeNumber(top["max_completion_tokens"]); ok {
 			if ev.Caps.SetMaxOutput(n, openrouterModelsSource+".top_provider.max_completion_tokens") {
 				tracef(ctx, "/models.top_provider.max_completion_tokens %d -> maxOutput", n)
 			} else {
@@ -246,14 +246,14 @@ func readOpenRouterEntry(ctx context.Context, entry map[string]any, params []any
 }
 
 func readVeniceSpec(ctx context.Context, spec map[string]any, ev *apispec.Evidence) {
-	if n, ok := registryInt(spec["availableContextTokens"]); ok {
+	if n, ok := jsonWholeNumber(spec["availableContextTokens"]); ok {
 		if ev.Caps.SetContext(n, veniceSpecSource+".availableContextTokens") {
 			tracef(ctx, "/models.model_spec.availableContextTokens %d -> context", n)
 		} else {
 			tracef(ctx, "/models.model_spec.availableContextTokens %d is out of range; ignored", n)
 		}
 	}
-	if n, ok := registryInt(spec["maxCompletionTokens"]); ok {
+	if n, ok := jsonWholeNumber(spec["maxCompletionTokens"]); ok {
 		if ev.Caps.SetMaxOutput(n, veniceSpecSource+".maxCompletionTokens") {
 			tracef(ctx, "/models.model_spec.maxCompletionTokens %d -> maxOutput", n)
 		} else {
@@ -310,16 +310,6 @@ func readVeniceSpec(ctx context.Context, spec map[string]any, ev *apispec.Eviden
 			tracef(ctx, "/models.model_spec.capabilities.quantization is not a plain label; ignored")
 		}
 	}
-}
-
-// JSON numbers decode as float64; a fractional or non-numeric value is not a
-// token count.
-func registryInt(v any) (int64, bool) {
-	f, ok := v.(float64)
-	if !ok || f != float64(int64(f)) {
-		return 0, false
-	}
-	return int64(f), true
 }
 
 func registryStrings(v any) []string {

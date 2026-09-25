@@ -172,13 +172,9 @@ func objectAt(m map[string]any, key string) map[string]any {
 	return sub
 }
 
-// JSON numbers decode as float64; a fraction is not a token count.
+// The setters apply the capability bound; the reader only wants a whole number.
 func integerAt(m map[string]any, key string) (int64, bool) {
-	f, ok := m[key].(float64)
-	if !ok || f != float64(int64(f)) {
-		return 0, false
-	}
-	return int64(f), true
+	return jsonWholeNumber(m[key])
 }
 
 func boolAt(m map[string]any, key string) (bool, bool) {

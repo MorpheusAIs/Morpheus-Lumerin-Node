@@ -39,7 +39,7 @@ func (d *Detector) probeKoboldCpp(ctx context.Context, base, apiKey string, ev *
 	}
 
 	if maxCtx := d.getJSONKeyFree(ctx, base+"/api/extra/true_max_context_length", apiKey); maxCtx != nil {
-		if v, ok := capInt64(maxCtx["value"]); ok && ev.Caps.SetContext(v, "koboldcpp:/api/extra/true_max_context_length.value") {
+		if v, ok := jsonPositiveInt(maxCtx["value"]); ok && ev.Caps.SetContext(v, "koboldcpp:/api/extra/true_max_context_length.value") {
 			tracef(ctx, "koboldcpp /api/extra/true_max_context_length value %d -> context", v)
 		}
 	}

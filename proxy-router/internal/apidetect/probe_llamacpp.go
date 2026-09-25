@@ -54,7 +54,7 @@ func (d *Detector) probeLlamaCpp(ctx context.Context, base, apiKey string, ev *a
 // "multimodal" flag adds nothing).
 func (d *Detector) llamaCppPropsFacts(ctx context.Context, props map[string]any, ev *apispec.Evidence) bool {
 	if settings, ok := props["default_generation_settings"].(map[string]any); ok {
-		if n, ok := llamaCppNumber(settings["n_ctx"]); ok {
+		if n, ok := jsonWholeNumber(settings["n_ctx"]); ok {
 			if ev.Caps.SetContext(n, llamaCppSrcNCtx) {
 				tracef(ctx, "/props default_generation_settings.n_ctx = %d: served context", n)
 			} else {
@@ -130,14 +130,14 @@ func (d *Detector) llamaCppModelsFacts(ctx context.Context, base, apiKey string,
 }
 
 func (d *Detector) llamaCppMetaFacts(ctx context.Context, meta map[string]any, ev *apispec.Evidence) {
-	if n, ok := llamaCppNumber(meta["n_ctx_train"]); ok {
+	if n, ok := jsonWholeNumber(meta["n_ctx_train"]); ok {
 		if ev.Caps.SetContextTrained(n, llamaCppSrcMetaNCtxTrain) {
 			tracef(ctx, "/v1/models meta.n_ctx_train = %d: trained context", n)
 		} else {
 			tracef(ctx, "/v1/models meta.n_ctx_train = %d out of range; ignored", n)
 		}
 	}
-	if n, ok := llamaCppNumber(meta["n_ctx"]); ok {
+	if n, ok := jsonWholeNumber(meta["n_ctx"]); ok {
 		if _, served := ev.Caps.Sources[apispec.CapFieldContext]; served {
 			tracef(ctx, "/v1/models meta.n_ctx = %d: /props already gave the served context", n)
 		} else if ev.Caps.SetContext(n, llamaCppSrcMetaNCtx) {
@@ -181,15 +181,6 @@ func llamaCppModelsEntry(raw any, modelName string) map[string]any {
 		return entries[0]
 	}
 	return nil
-}
-
-// JSON integers arrive as float64; a fractional value is not an integer fact.
-func llamaCppNumber(v any) (int64, bool) {
-	f, ok := v.(float64)
-	if !ok || f != float64(int64(f)) {
-		return 0, false
-	}
-	return int64(f), true
 }
 
 // llamaCppFtype pairs a llama_ftype enum value with the GGUF file-type name
@@ -251,7 +242,7 @@ const llamaCppGuessedPrefix = "(guessed) "
 func llamaCppFtypeLabel(raw any) (string, bool) {
 	switch v := raw.(type) {
 	case float64:
-		n, ok := llamaCppNumber(v)
+		n, ok := jsonWholeNumber(v)
 		if !ok {
 			return "", false
 		}

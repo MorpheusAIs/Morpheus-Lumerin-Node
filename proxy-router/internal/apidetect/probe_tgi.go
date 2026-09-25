@@ -24,7 +24,7 @@ func (d *Detector) probeTGI(ctx context.Context, base, apiKey string, ev *apispe
 	ev.ServedModelID = modelID
 	tracef(ctx, "identified tgi by /info; served model id %q", modelID)
 
-	total, ok := capInt64(info["max_total_tokens"])
+	total, ok := jsonPositiveInt(info["max_total_tokens"])
 	if !ok || !ev.Caps.SetContext(total, "tgi:/info.max_total_tokens") {
 		return true
 	}
@@ -34,7 +34,7 @@ func (d *Detector) probeTGI(ctx context.Context, base, apiKey string, ev *apispe
 	// max_total_tokens - prompt_len), i.e. the guaranteed floor, not the
 	// largest completion a short prompt may request. With TGI's default
 	// max_input_tokens = max_total_tokens - 1 this is 1.
-	if input, ok := capInt64(info["max_input_tokens"]); ok && input < total {
+	if input, ok := jsonPositiveInt(info["max_input_tokens"]); ok && input < total {
 		if ev.Caps.SetMaxOutput(total-input, "tgi:/info.max_total_tokens-max_input_tokens") {
 			tracef(ctx, "tgi /info max_total_tokens - max_input_tokens = %d -> maxOutput", total-input)
 		}

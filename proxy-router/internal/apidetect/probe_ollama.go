@@ -3,7 +3,6 @@ package apidetect
 import (
 	"context"
 	"encoding/json"
-	"math"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -268,22 +267,4 @@ func ollamaNumCtx(parameters string) (int64, bool) {
 		return n, err == nil && n > 0
 	}
 	return 0, false
-}
-
-// Integers arrive as JSON numbers; a string, bool or fraction is not one.
-func jsonPositiveInt(v any) (int64, bool) {
-	f, ok := v.(float64)
-	if !ok || f <= 0 || f != math.Trunc(f) || f >= math.MaxInt64 {
-		return 0, false
-	}
-	return int64(f), true
-}
-
-func containsString(list []string, s string) bool {
-	for _, item := range list {
-		if item == s {
-			return true
-		}
-	}
-	return false
 }

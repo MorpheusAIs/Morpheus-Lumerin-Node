@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"net"
 	"net/http"
 	"net/netip"
@@ -354,14 +353,14 @@ const (
 // supports_url_context has no wire field.
 func litellmGroupCaps(ctx context.Context, group map[string]any, ev *apispec.Evidence) {
 	src := func(field string) string { return litellmGroupSource + field }
-	if v, ok := litellmInt(group["max_input_tokens"]); ok {
+	if v, ok := jsonWholeNumber(group["max_input_tokens"]); ok {
 		if ev.Caps.SetContext(v, src("max_input_tokens")) {
 			tracef(ctx, "litellm /model_group/info max_input_tokens %d -> capabilities.context", v)
 		} else {
 			tracef(ctx, "litellm /model_group/info max_input_tokens %d out of bounds; ignored", v)
 		}
 	}
-	if v, ok := litellmInt(group["max_output_tokens"]); ok {
+	if v, ok := jsonWholeNumber(group["max_output_tokens"]); ok {
 		if ev.Caps.SetMaxOutput(v, src("max_output_tokens")) {
 			tracef(ctx, "litellm /model_group/info max_output_tokens %d -> capabilities.maxOutput", v)
 		} else {
@@ -393,7 +392,7 @@ func litellmGroupCaps(ctx context.Context, group map[string]any, ev *apispec.Evi
 	// litellm lists response_format among the model's supported params; a
 	// schema needs supports_response_schema on a deployment
 	// (https://docs.litellm.ai/docs/completion/json_mode).
-	if litellmListed(ev.LiteLLMSupportedParams, "response_format") && ev.Caps.SetStructured([]string{"json_object"}, src("supported_openai_params")) {
+	if containsString(ev.LiteLLMSupportedParams, "response_format") && ev.Caps.SetStructured([]string{"json_object"}, src("supported_openai_params")) {
 		tracef(ctx, "litellm /model_group/info supported_openai_params lists response_format -> capabilities.structured = json_object")
 	}
 }
@@ -421,23 +420,4 @@ func litellmDeploymentCaps(ctx context.Context, dep map[string]any, ev *apispec.
 	if v, ok := info["supports_audio_input"].(bool); ok && v && ev.Caps.AddInputModality("audio", src("supports_audio_input")) {
 		tracef(ctx, "litellm /model/info model_info.supports_audio_input -> capabilities.modalities.input += audio")
 	}
-}
-
-// JSON numbers arrive as float64; only whole numbers a float64 represents
-// exactly (|v| <= 2^53) convert, and the setters apply the (0, 1<<31) bound.
-func litellmInt(v any) (int64, bool) {
-	f, ok := v.(float64)
-	if !ok || f != math.Trunc(f) || math.Abs(f) > 1<<53 {
-		return 0, false
-	}
-	return int64(f), true
-}
-
-func litellmListed(list []string, s string) bool {
-	for _, v := range list {
-		if v == s {
-			return true
-		}
-	}
-	return false
 }

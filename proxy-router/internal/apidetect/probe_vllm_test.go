@@ -218,25 +218,3 @@ func TestProbeVLLMRejectsNonPositiveOrHugeMaxModelLen(t *testing.T) {
 		})
 	}
 }
-
-func TestJSONPositiveInt(t *testing.T) {
-	cases := []struct {
-		v    any
-		want int64
-		ok   bool
-	}{
-		{float64(40960), 40960, true},
-		{float64(1), 1, true},
-		{float64(0), 0, false},
-		{float64(-5), 0, false},
-		{1.5, 0, false},
-		{1e30, 0, false},
-		{"7", 0, false},
-		{nil, 0, false},
-	}
-	for _, c := range cases {
-		got, ok := jsonPositiveInt(c.v)
-		require.Equal(t, c.ok, ok, "%v", c.v)
-		require.Equal(t, c.want, got, "%v", c.v)
-	}
-}

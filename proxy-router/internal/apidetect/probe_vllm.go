@@ -3,7 +3,6 @@ package apidetect
 import (
 	"context"
 	"encoding/json"
-	"math"
 	"net/http"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apispec"
@@ -78,14 +77,4 @@ func (d *Detector) probeVLLMTokenize(ctx context.Context, base, modelName, apiKe
 	if n, ok := jsonPositiveInt(out["max_model_len"]); ok && ev.Caps.SetContext(n, "vllm:/tokenize.max_model_len") {
 		tracef(ctx, "vllm: /tokenize max_model_len = %d -> capabilities.context", n)
 	}
-}
-
-// Decoded JSON numbers are float64; only an integral value inside the int64
-// range converts without an implementation-defined result.
-func jsonPositiveInt(v any) (int64, bool) {
-	f, ok := v.(float64)
-	if !ok || f <= 0 || f >= math.MaxInt64 || f != math.Trunc(f) {
-		return 0, false
-	}
-	return int64(f), true
 }

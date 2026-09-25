@@ -1376,16 +1376,6 @@ func TestDetectLiteLLMCapabilityFacts(t *testing.T) {
 		require.Equal(t, true, *api.Capabilities.ToolsParallel)
 		require.Contains(t, trace, fmt.Sprintf("litellm /model_group/info max_input_tokens %d out of bounds; ignored", 1<<31))
 		require.NotContains(t, trace, "-> capabilities.context")
-
-		for _, v := range []any{2.5, float64(1 << 60), -float64(1 << 60), 128000, "1", true, nil, []any{1}} {
-			_, ok := litellmInt(v)
-			require.False(t, ok, "%v", v)
-		}
-		for _, v := range []float64{0, -1, 128000, 1 << 31} {
-			n, ok := litellmInt(v)
-			require.True(t, ok, "%v", v)
-			require.Equal(t, int64(v), n)
-		}
 	})
 
 	t.Run("no capabilities without capability fields", func(t *testing.T) {

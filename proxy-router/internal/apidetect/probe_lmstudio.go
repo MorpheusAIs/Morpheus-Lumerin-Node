@@ -61,7 +61,7 @@ func readLMStudioV1(ctx context.Context, entry map[string]any, ev *apispec.Evide
 			tracef(ctx, "lmstudio /api/v1/models quantization.name %q", name)
 		}
 	}
-	if v, ok := capInt64(entry["max_context_length"]); ok && ev.Caps.SetContextTrained(v, ep+".max_context_length") {
+	if v, ok := jsonPositiveInt(entry["max_context_length"]); ok && ev.Caps.SetContextTrained(v, ep+".max_context_length") {
 		tracef(ctx, "lmstudio /api/v1/models max_context_length %d -> contextTrained", v)
 	}
 	// Requests may land on any loaded instance, so the smallest configured
@@ -77,7 +77,7 @@ func readLMStudioV1(ctx context.Context, entry map[string]any, ev *apispec.Evide
 			if !ok {
 				continue
 			}
-			if v, ok := capInt64(cfg["context_length"]); ok && (served == 0 || v < served) {
+			if v, ok := jsonPositiveInt(cfg["context_length"]); ok && (served == 0 || v < served) {
 				served = v
 			}
 		}
@@ -151,7 +151,7 @@ func readLMStudioV0(ctx context.Context, entry map[string]any, ev *apispec.Evide
 	if id, ok := entry["id"].(string); ok && ev.ServedModelID == "" {
 		ev.ServedModelID = id
 	}
-	if v, ok := capInt64(entry["max_context_length"]); ok && ev.Caps.SetContext(v, ep+".max_context_length") {
+	if v, ok := jsonPositiveInt(entry["max_context_length"]); ok && ev.Caps.SetContext(v, ep+".max_context_length") {
 		tracef(ctx, "lmstudio /api/v0/models max_context_length %d -> context", v)
 	}
 	switch typ, _ := entry["type"].(string); typ {
@@ -175,51 +175,4 @@ func readLMStudioV0(ctx context.Context, entry map[string]any, ev *apispec.Evide
 			}
 		}
 	}
-}
-
-// matchModelEntryBy is matchModelEntry for listings whose identifier lives in
-// a field other than "id" (LM Studio v1 uses "key").
-func matchModelEntryBy(data []any, modelName, field string) map[string]any {
-	var entries []map[string]any
-	for _, item := range data {
-		if m, ok := item.(map[string]any); ok {
-			entries = append(entries, m)
-		}
-	}
-
-	bare := bareModelID(modelName)
-	candidates := []string{modelName}
-	if bare != modelName {
-		candidates = append(candidates, bare)
-	}
-
-	for _, name := range candidates {
-		for _, m := range entries {
-			if id, ok := m[field].(string); ok && strings.EqualFold(id, name) {
-				return m
-			}
-		}
-	}
-	if len(entries) == 1 {
-		return entries[0]
-	}
-	for _, name := range candidates {
-		for _, m := range entries {
-			if id, ok := m[field].(string); ok && strings.HasSuffix(strings.ToLower(id), "/"+strings.ToLower(name)) {
-				return m
-			}
-		}
-	}
-	return nil
-}
-
-// capInt64 reads a JSON number as a positive whole token count; fractions,
-// non-numbers and values <= 0 are not counts (§0 bounds), so a bad operand
-// never reaches a subtraction or a minimum.
-func capInt64(v any) (int64, bool) {
-	f, ok := v.(float64)
-	if !ok || f <= 0 || f != float64(int64(f)) {
-		return 0, false
-	}
-	return int64(f), true
 }

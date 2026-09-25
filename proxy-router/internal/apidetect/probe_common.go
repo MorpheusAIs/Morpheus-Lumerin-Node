@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"sort"
@@ -12,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apispec"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 )
 
 const maxProbeBody = 2 << 20
@@ -185,7 +187,16 @@ func (d *Detector) getText(ctx context.Context, urlStr, apiKey string) string {
 	return text
 }
 
+// matchModelEntry finds the listing entry for modelName by its "id" field.
 func matchModelEntry(data []any, modelName string) map[string]any {
+	return matchModelEntryBy(data, modelName, "id")
+}
+
+// matchModelEntryBy is the one listing matcher: the configured name, then
+// its bare id (inline parameters stripped), each exactly (case-insensitive),
+// then a lone entry, then a "<prefix>/<name>" suffix match. field names the
+// identifier key ("id" for OpenAI-shaped listings, "key" for LM Studio v1).
+func matchModelEntryBy(data []any, modelName, field string) map[string]any {
 	var entries []map[string]any
 	for _, item := range data {
 		if m, ok := item.(map[string]any); ok {
@@ -201,7 +212,7 @@ func matchModelEntry(data []any, modelName string) map[string]any {
 
 	for _, name := range candidates {
 		for _, m := range entries {
-			if id, ok := m["id"].(string); ok && strings.EqualFold(id, name) {
+			if id, ok := m[field].(string); ok && strings.EqualFold(id, name) {
 				return m
 			}
 		}
@@ -211,10 +222,44 @@ func matchModelEntry(data []any, modelName string) map[string]any {
 	}
 	for _, name := range candidates {
 		for _, m := range entries {
-			if id, ok := m["id"].(string); ok && strings.HasSuffix(strings.ToLower(id), "/"+strings.ToLower(name)) {
+			if id, ok := m[field].(string); ok && strings.HasSuffix(strings.ToLower(id), "/"+strings.ToLower(name)) {
 				return m
 			}
 		}
 	}
 	return nil
+}
+
+// jsonWholeNumber reads a decoded JSON number (float64) as an integer: only
+// a whole value a float64 represents exactly (|v| <= 2^53) converts, so the
+// int64 conversion is never implementation-defined. Zero and negatives pass:
+// a probe that traces "out of range; ignored" for them gets the value and
+// leaves the (0, 1<<31) bound to the capability setter; llama.cpp's ftype
+// enum starts at 0.
+func jsonWholeNumber(v any) (int64, bool) {
+	f, ok := v.(float64)
+	if !ok || f != math.Trunc(f) || math.Abs(f) > 1<<53 {
+		return 0, false
+	}
+	return int64(f), true
+}
+
+// jsonPositiveInt is jsonWholeNumber within the capability bound
+// (0, config.MaxCapabilityInt): the value a token-count field must carry
+// before it reaches a subtraction, a minimum or a setter.
+func jsonPositiveInt(v any) (int64, bool) {
+	n, ok := jsonWholeNumber(v)
+	if !ok || !config.ValidCapabilityInt(n) {
+		return 0, false
+	}
+	return n, true
+}
+
+func containsString(list []string, s string) bool {
+	for _, item := range list {
+		if item == s {
+			return true
+		}
+	}
+	return false
 }
