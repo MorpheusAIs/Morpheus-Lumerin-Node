@@ -12,6 +12,7 @@ import (
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apiprobe"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apispec"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi/structs"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
@@ -159,6 +160,80 @@ func TestRuntimeLiteLLMHeadersComposeMinimalSpec(t *testing.T) {
 		require.NotContains(t, intent, "reasoning", "no reasoning evidence: no reasoning binding")
 	}
 	require.NotZero(t, llm.Api.DeclaredAt)
+}
+
+func TestRuntimeLiteLLMHeadersIgnoredWhenStackDetected(t *testing.T) {
+	backend := newChatBackend(t)
+	backend.set(http.StatusOK, "", "", "", map[string]string{"X-LiteLLM-Version": "1.50.0"})
+	checker := newTestChecker(runtimeDeps(backend, vllmCfg, &fakeDetector{spec: detectedVLLMNoFamily()}))
+	checker.checkAll(context.Background(), common.Address{})
+
+	llm := reportByID(t, checker.GetReports(), modelLLM)
+	require.Equal(t, system.ModelHealthStatusHealthy, llm.Status)
+	require.NotNil(t, llm.Api)
+	require.Equal(t, "vllm", llm.Api.Stack, "detection named the stack; the proxy's headers do not rename it")
+	require.Equal(t, "", llm.Api.Evidence["stack"])
+}
+
+func TestRuntimeRejectedParamDropsBindingWithStableEvidence(t *testing.T) {
+	const rejected = `{"error":{"message":"Unrecognized request argument supplied: chat_template_kwargs","type":"invalid_request_error"}}`
+	backend := newChatBackend(t)
+	backend.set(http.StatusBadRequest, "", "", rejected, nil)
+	deps := runtimeDeps(backend, vllmCfg, &fakeDetector{spec: detectedQwen3()})
+	checker := NewChecker(Deps{Adapters: deps, Bids: deps, Models: deps, ModelConfigs: deps, ApiDetect: deps.apiDetect, ApiDetectTTL: time.Hour},
+		time.Hour, time.Second, 0, 0, lib.NewTestLogger())
+	clock := time.Unix(1_700_000_000, 0)
+	checker.runtime.now = func() time.Time { return clock }
+	checker.checkAll(context.Background(), common.Address{})
+
+	first := reportByID(t, checker.GetReports(), modelLLM)
+	require.NotNil(t, first.Api)
+	require.Nil(t, first.Api.Bindings[system.IntentReasoningDisable], "the backend refused the binding's parameter")
+	require.Nil(t, first.Api.Thinking, "no reasoning binding remains")
+	const evidence = "verify:rejected:chat_template_kwargs@1700000000"
+	require.Equal(t, evidence, first.Api.Evidence[system.EvidenceKeyBinding(system.IntentReasoningDisable)])
+
+	seeded := first
+	seededAPI := first.Api.Clone()
+	seededAPI.DeclaredAt = 12345
+	seeded.Api = seededAPI
+	checker.setReport(seeded)
+
+	// A later plain 200 naming the served id adds a newer fact; the rejection's
+	// evidence keeps its own timestamp and declaredAt stands.
+	backend.set(http.StatusOK, "qwen3-8b", "", "", nil)
+	clock = clock.Add(5 * time.Minute)
+	checker.checkAll(context.Background(), common.Address{})
+	second := reportByID(t, checker.GetReports(), modelLLM)
+	require.Equal(t, system.ModelHealthStatusHealthy, second.Status)
+	require.Equal(t, evidence, second.Api.Evidence[system.EvidenceKeyBinding(system.IntentReasoningDisable)])
+	require.Equal(t, int64(12345), second.Api.DeclaredAt)
+	require.Equal(t, apiJSON(t, seededAPI), apiJSON(t, second.Api))
+}
+
+func TestRuntimeStoreVerifierOnlyEntryLeavesAtUnset(t *testing.T) {
+	store := newRuntimeStore(time.Minute)
+	clock := time.Unix(1_700_000_000, 0)
+	store.now = func() time.Time { return clock }
+	supported := true
+	store.byModel["m"] = &runtimeEntry{
+		rt:   apispec.Runtime{ToolsSupported: &supported, ServedModelID: "qwen3-8b"},
+		seen: map[runtimeFact]time.Time{factServedModelID: clock},
+	}
+
+	rt, ok := store.harvest("m", nil)
+	require.True(t, ok)
+	require.Equal(t, clock.Unix(), rt.At)
+	require.Equal(t, "qwen3-8b", rt.ServedModelID)
+
+	// The harvested fact expires; the verifier's fact keeps the entry, and At
+	// is left for MergeRuntime to fill with now rather than the zero time.
+	clock = clock.Add(2 * time.Minute)
+	rt, ok = store.harvest("m", nil)
+	require.True(t, ok, "verifier facts are not the harvest's to expire")
+	require.Equal(t, "", rt.ServedModelID)
+	require.NotNil(t, rt.ToolsSupported)
+	require.Zero(t, rt.At)
 }
 
 func TestRuntimeContextFromErrorFillsOnlyUnset(t *testing.T) {

@@ -108,7 +108,20 @@ func (s *runtimeStore) harvest(modelID string, meta *aiengine.ResponseMeta) (rt 
 		delete(s.byModel, modelID)
 		return apispec.Runtime{}, false
 	}
-	entry.rt.At = latest.Unix()
+	// At only reaches the wire through the verify:rejected:<param>@<at>
+	// evidence MergeRuntime writes for a refused parameter, so it follows that
+	// fact's own timestamp: stamped from the newest fact, a later served id
+	// would rewrite the string and reset declaredAt although nothing about the
+	// backend changed. An entry kept alive only by verifier facts leaves At at
+	// 0, which MergeRuntime reads as now.
+	switch rejectedAt := entry.seen[factRejectedParams]; {
+	case !rejectedAt.IsZero():
+		entry.rt.At = rejectedAt.Unix()
+	case !latest.IsZero():
+		entry.rt.At = latest.Unix()
+	default:
+		entry.rt.At = 0
+	}
 	return entry.rt, true
 }
 
@@ -130,8 +143,10 @@ func copyFact(dst, src *apispec.Runtime, fact runtimeFact) {
 	case factServedModelID:
 		dst.ServedModelID = src.ServedModelID
 	case factReasoningSeen:
+		// ReasoningDisabledInRequest is the verifier's fact (the health
+		// probe sends no reasoning.disable binding); a plain probe that sees
+		// reasoning content neither establishes nor refutes it.
 		dst.ReasoningSeen = src.ReasoningSeen
-		dst.ReasoningDisabledInRequest = src.ReasoningDisabledInRequest
 	case factStackHints:
 		dst.StackHints = src.StackHints
 	case factContext:
