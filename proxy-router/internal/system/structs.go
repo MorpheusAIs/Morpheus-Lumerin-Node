@@ -100,6 +100,10 @@ const (
 	// Informational only, unreachable on the OpenAI-compatible endpoint; Hint
 	// names the endpoint.
 	BindingKindNativeBodyParam = "native_body_param"
+	// Param is "tools"; Value is a tool object the consumer appends to the
+	// request's tools[] (Anthropic {"type":"web_search_20250305","name":"web_search"},
+	// Gemini {"googleSearch":{}}).
+	BindingKindToolEntry = "tool_entry"
 )
 
 const (
@@ -124,7 +128,19 @@ const (
 	IntentStreamIncludeUsage = "stream.include_usage"
 	IntentCachePrompt        = "cache.prompt"
 	IntentToolsParallel      = "tools.parallel"
+
+	IntentWebSearchEnable    = "web_search.enable"
+	IntentWebSearchCitations = "web_search.citations"
 )
+
+// Evidence keys are wire field paths. Sources are "<stack>:<endpoint>.<field>"
+// (vllm:/v1/models.max_model_len), "declared", "registry:<name>@<YYYY-MM-DD>",
+// "health-probe:<what>" or "verify:<what>@<unix>".
+const EvidenceKeyThinkingDefault = "thinking.default"
+
+func EvidenceKeyCapability(field string) string { return "capabilities." + field }
+
+func EvidenceKeyBinding(intent string) string { return "bindings." + intent }
 
 const (
 	ApiSpecSourceDeclared = "declared"
@@ -158,10 +174,51 @@ type ModelApiSpec struct {
 	// probing of the backend's service endpoints).
 	Source     string `json:"source,omitempty"`
 	DeclaredAt int64  `json:"declaredAt,omitempty"`
+	// Capabilities are backend-verified or declared facts about the model as
+	// served; an absent field is unknown, never false. Never derived from the
+	// stack tables or the family name.
+	Capabilities *ModelCapabilities `json:"capabilities,omitempty"`
+	// Evidence maps a wire field path (capabilities.context, thinking.default,
+	// bindings.reasoning.disable, ...) to the source it was set from.
+	Evidence map[string]string `json:"evidence,omitempty"`
 }
 
 type ThinkingSpec struct {
 	Mode string `json:"mode"` // always_on (cannot be disabled) | controllable (reasoning.disable/enable bindings) | tunable (effort/budget bindings only)
+	// Default is "on", "off" or an effort level name; absent when unknown.
+	Default string `json:"default,omitempty"`
+}
+
+// Pointers so that an explicit false or a reported value survives omitempty;
+// 0 is never a valid capability value (setters reject it).
+type ModelCapabilities struct {
+	// Context is the served window (prompt + completion tokens): the number to
+	// plan requests against.
+	Context *int64 `json:"context,omitempty"`
+	// ContextTrained is the model's trained window when the backend reports
+	// both.
+	ContextTrained *int64      `json:"contextTrained,omitempty"`
+	MaxOutput      *int64      `json:"maxOutput,omitempty"`
+	Modalities     *Modalities `json:"modalities,omitempty"`
+	Tools          *bool       `json:"tools,omitempty"`
+	ToolsParallel  *bool       `json:"toolsParallel,omitempty"`
+	// Structured is a subset of json_object, json_schema, grammar, regex, choice.
+	Structured []string `json:"structured,omitempty"`
+	// Reasoning says the model can reason; the control is in Thinking and
+	// Bindings.
+	Reasoning *bool `json:"reasoning,omitempty"`
+	// WebSearch says the backend can search the web for this model on request;
+	// the knob is a web_search.* binding.
+	WebSearch   *bool `json:"webSearch,omitempty"`
+	Embeddings  *bool `json:"embeddings,omitempty"`
+	PromptCache *bool `json:"promptCache,omitempty"`
+	// Quantization is the backend's own label (fp8, Q4_K_M, bf16, ...).
+	Quantization string `json:"quantization,omitempty"`
+}
+
+type Modalities struct {
+	Input  []string `json:"input,omitempty"`  // text, image, audio, video, pdf
+	Output []string `json:"output,omitempty"` // text, image, audio, embeddings
 }
 
 type ParamBinding struct {
@@ -173,6 +230,9 @@ type ParamBinding struct {
 	Value      any      `json:"value,omitempty"`
 	EnumValues []string `json:"enumValues,omitempty"`
 	Hint       string   `json:"hint,omitempty"`
+	// Verified is set by the runtime verifier; absent means never checked.
+	Verified   *bool `json:"verified,omitempty"`
+	VerifiedAt int64 `json:"verifiedAt,omitempty"`
 }
 
 func (s *ModelApiSpec) Clone() *ModelApiSpec {
@@ -193,7 +253,60 @@ func (s *ModelApiSpec) Clone() *ModelApiSpec {
 	if s.Parameters != nil {
 		c.Parameters = append([]string(nil), s.Parameters...)
 	}
+	c.Capabilities = s.Capabilities.Clone()
+	if s.Evidence != nil {
+		c.Evidence = make(map[string]string, len(s.Evidence))
+		for k, v := range s.Evidence {
+			c.Evidence[k] = v
+		}
+	}
 	return &c
+}
+
+func (m *ModelCapabilities) Clone() *ModelCapabilities {
+	if m == nil {
+		return nil
+	}
+	c := *m
+	c.Context = cloneInt64(m.Context)
+	c.ContextTrained = cloneInt64(m.ContextTrained)
+	c.MaxOutput = cloneInt64(m.MaxOutput)
+	c.Tools = cloneBool(m.Tools)
+	c.ToolsParallel = cloneBool(m.ToolsParallel)
+	c.Reasoning = cloneBool(m.Reasoning)
+	c.WebSearch = cloneBool(m.WebSearch)
+	c.Embeddings = cloneBool(m.Embeddings)
+	c.PromptCache = cloneBool(m.PromptCache)
+	if m.Structured != nil {
+		c.Structured = append([]string(nil), m.Structured...)
+	}
+	if m.Modalities != nil {
+		mod := Modalities{}
+		if m.Modalities.Input != nil {
+			mod.Input = append([]string(nil), m.Modalities.Input...)
+		}
+		if m.Modalities.Output != nil {
+			mod.Output = append([]string(nil), m.Modalities.Output...)
+		}
+		c.Modalities = &mod
+	}
+	return &c
+}
+
+func cloneInt64(p *int64) *int64 {
+	if p == nil {
+		return nil
+	}
+	v := *p
+	return &v
+}
+
+func cloneBool(p *bool) *bool {
+	if p == nil {
+		return nil
+	}
+	v := *p
+	return &v
 }
 
 func (b *ParamBinding) Clone() *ParamBinding {
@@ -211,6 +324,7 @@ func (b *ParamBinding) Clone() *ParamBinding {
 		}
 		c.Value = mc
 	}
+	c.Verified = cloneBool(b.Verified)
 	return &c
 }
 
