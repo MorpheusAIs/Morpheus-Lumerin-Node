@@ -26,6 +26,10 @@ import (
 const (
 	modelsDevURL = "https://models.dev/api.json"
 	liteLLMURL   = "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
+	// The merged source set, named the way an entry drawn from both is
+	// (src.name for srcBoth); written into the snapshot so a trace about the
+	// whole snapshot, not one entry, carries the label of what was merged.
+	snapshotSources = "models.dev+litellm"
 
 	// maxBody is the detector's registry-body bound (16 MiB).
 	maxBody = 16 << 20
@@ -528,6 +532,7 @@ func renderEntries(entries []entry, date string, dropped dropReport) ([]byte, er
 	}
 	b.WriteString("\npackage registry\n\n")
 	fmt.Fprintf(&b, "const snapshotDate = %q\n\n", date)
+	fmt.Fprintf(&b, "const snapshotSources = %q\n\n", snapshotSources)
 	b.WriteString("var entries = []entry{\n")
 	for _, e := range entries {
 		writeEntry(&b, e)

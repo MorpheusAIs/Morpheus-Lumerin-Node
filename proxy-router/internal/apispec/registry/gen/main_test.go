@@ -155,6 +155,7 @@ func TestRenderDeterministicAndCapped(t *testing.T) {
 		"// Dropped for the size cap: none.",
 		"package registry",
 		`const snapshotDate = "2026-09-25"`,
+		`const snapshotSources = "models.dev+litellm"`,
 		"var entries = []entry{",
 	} {
 		if !strings.Contains(string(full), want) {

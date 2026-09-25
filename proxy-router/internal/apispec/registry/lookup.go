@@ -135,19 +135,13 @@ func snapshot() *index {
 	return snapshotIndex
 }
 
-// Lookup finds the snapshot entry for the first candidate that matches
+// Match finds the snapshot entry for the first candidate that matches
 // (callers pass the served id, the bare model name and the configured name,
 // in that order): exact normalised id first across all candidates, then a
-// unique match on the segment after the last "/". No fuzzy matching. The
+// unique match on the segment after the last "/". No fuzzy matching. It
+// also reports which candidate matched, as its position in candidates, so a
+// caller can trace "matched the served id" without echoing the id. The
 // result is a fresh copy the caller may keep.
-func Lookup(candidates ...string) (*apispec.RegistryFacts, bool) {
-	f, _, ok := Match(candidates...)
-	return f, ok
-}
-
-// Match is Lookup that also reports which candidate matched, as its position
-// in candidates, so a caller can trace "matched the served id" without
-// echoing the id.
 func Match(candidates ...string) (*apispec.RegistryFacts, int, bool) {
 	e, pos, ok := snapshot().lookup(candidates)
 	if !ok {
@@ -158,6 +152,12 @@ func Match(candidates ...string) (*apispec.RegistryFacts, int, bool) {
 
 // Date is the snapshot's generation date, YYYY-MM-DD.
 func Date() string { return snapshotDate }
+
+// Sources is the label of the snapshot's merged source set, written by the
+// generator: the name an entry drawn from every source carries. A trace
+// about the snapshot as a whole (a miss) uses it; a matched entry carries
+// its own RegistryFacts.Name, which may name fewer sources.
+func Sources() string { return snapshotSources }
 
 // Size is the number of ids in the snapshot.
 func Size() int { return len(entries) }

@@ -71,7 +71,7 @@ func TestRegistryMissIsTraced(t *testing.T) {
 	api, trace := newTestDetector().DetectWithTrace(context.Background(), config.ModelConfig{ModelName: "no-such-model-xyz", ApiType: "openai", ApiURL: origin + "/v1/chat/completions"})
 	require.NotNil(t, api)
 	require.Nil(t, api.Capabilities)
-	require.Equal(t, []string{"registry: models.dev+litellm@" + registry.Date() + " has no entry for the served id, bare name or configured name"}, registryLines(trace))
+	require.Equal(t, []string{"registry: " + registry.Sources() + "@" + registry.Date() + " has no entry for the served id, bare name or configured name"}, registryLines(trace), "the miss line carries the snapshot's own source label")
 }
 
 // A self-hosted engine serves whatever it was started with; the snapshot's

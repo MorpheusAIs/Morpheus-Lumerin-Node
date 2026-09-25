@@ -10,6 +10,8 @@ package registry
 
 const snapshotDate = "2026-09-25"
 
+const snapshotSources = "models.dev+litellm"
+
 var entries = []entry{
 	{ID: "*/1-month-commitment/cohere.command-light-text-v14", Context: 4096, Output: 4096, In: []string{"text"}, Out: []string{"text"}, Src: srcLiteLLM},
 	{ID: "*/1-month-commitment/cohere.command-text-v14", Context: 4096, Output: 4096, In: []string{"text"}, Out: []string{"text"}, Src: srcLiteLLM},

@@ -149,13 +149,17 @@ func TestSnapshot(t *testing.T) {
 	}
 
 	for _, id := range []string{"gpt-4o", "claude-sonnet-4-5"} {
-		f, ok := Lookup(id)
-		if !ok || f.Context == nil || *f.Context <= 0 || f.Date != Date() || !strings.HasPrefix(f.Name, "models.dev") {
-			t.Fatalf("Lookup(%q) = %+v, %v", id, f, ok)
+		f, pos, ok := Match(id)
+		if !ok || pos != 0 || f.Context == nil || *f.Context <= 0 || f.Date != Date() || !strings.HasPrefix(f.Name, "models.dev") {
+			t.Fatalf("Match(%q) = %+v, %d, %v", id, f, pos, ok)
 		}
 	}
-	if f, ok := Lookup("claude-sonnet-4-5"); !ok || f.Reasoning == nil || !*f.Reasoning || f.Tools == nil || !*f.Tools {
+	if f, _, ok := Match("claude-sonnet-4-5"); !ok || f.Reasoning == nil || !*f.Reasoning || f.Tools == nil || !*f.Tools {
 		t.Fatalf("claude-sonnet-4-5 must carry reasoning and tools: %+v", f)
+	}
+	// The whole-snapshot label is the name of an entry drawn from every source.
+	if Sources() != srcBoth.name() {
+		t.Fatalf("Sources() = %q, want %q", Sources(), srcBoth.name())
 	}
 
 	// The generator folds "<provider>/<x>" into "<x>" at any nesting depth, so
@@ -169,19 +173,19 @@ func TestSnapshot(t *testing.T) {
 		}
 	}
 	for served, bare := range map[string]string{"anthropic/claude-sonnet-4-5": "claude-sonnet-4-5", "openai/gpt-4o": "gpt-4o"} {
-		got, ok := Lookup(served)
-		want, _ := Lookup(bare)
+		got, _, ok := Match(served)
+		want, _, _ := Match(bare)
 		if !ok || got.Context == nil || !reflect.DeepEqual(got, want) {
-			t.Fatalf("Lookup(%q) = %+v, want the %q row %+v", served, got, bare, want)
+			t.Fatalf("Match(%q) = %+v, want the %q row %+v", served, got, bare, want)
 		}
 	}
-	if _, ok := Lookup("no-such-model-xyz"); ok {
-		t.Fatal("unknown id found")
+	if _, pos, ok := Match("no-such-model-xyz"); ok || pos != -1 {
+		t.Fatalf("unknown id found: pos %d", pos)
 	}
 }
 
-func BenchmarkLookup(b *testing.B) {
+func BenchmarkMatch(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		Lookup("openai/gpt-4o", "gpt-4o", "my-gpt")
+		Match("openai/gpt-4o", "gpt-4o", "my-gpt")
 	}
 }

@@ -251,7 +251,7 @@ func (d *Detector) detect(ctx context.Context, cfg config.ModelConfig) *system.M
 		tracef(ctx, "host recognized as hosted vendor %q by hostname; no probing needed", ev.Stack)
 	}
 
-	if ev.Registry == nil && (hostRecognised || ev.Stack == "openai") {
+	if ev.Registry == nil && hostRecognised {
 		lookupRegistry(ctx, cfg.ModelName, &ev)
 	}
 
@@ -297,8 +297,10 @@ func (d *Detector) detect(ctx context.Context, cfg config.ModelConfig) *system.M
 }
 
 // The offline registry (contract §3 rule 10, §6) describes hosted vendors'
-// catalogues, so it is consulted for a hostname-recognised vendor and the
-// openai stack only; a self-hosted engine serves whatever window and
+// catalogues, so it is consulted for a hostname-recognised vendor only (the
+// openai stack reaches it that way: nothing but the hostname names it in
+// detect, and a models-config apiStack short-circuits to the static spec
+// before probing); a self-hosted engine serves whatever window and
 // quantisation it was started with, and the snapshot would be a guess. The
 // composer lets the entry fill only fields nothing else set. The trace names
 // which candidate matched, never the id: a configured name may be anything.
@@ -306,15 +308,12 @@ func lookupRegistry(ctx context.Context, modelName string, ev *apispec.Evidence)
 	kinds := []string{"served model id", "bare model name", "configured model name"}
 	facts, pos, ok := registryMatch(ev.ServedModelID, bareModelID(modelName), modelName)
 	if !ok {
-		tracef(ctx, "registry: %s@%s has no entry for the served id, bare name or configured name", registryName, registry.Date())
+		tracef(ctx, "registry: %s@%s has no entry for the served id, bare name or configured name", registry.Sources(), registry.Date())
 		return
 	}
 	ev.Registry = facts
 	tracef(ctx, "registry: %s@%s matched %q", facts.Name, facts.Date, kinds[pos])
 }
-
-// The snapshot's sources, for the trace line when nothing matched.
-const registryName = "models.dev+litellm"
 
 // The key hash is part of the cache key so a rotated key re-inspects a
 // backend whose cached result may have failed auth; the declared
