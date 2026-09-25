@@ -134,7 +134,9 @@ func TestProbeOllamaShowDocsSample(t *testing.T) {
 	require.Contains(t, trace, "ollama /api/show details.quantization_level = Q4_0 -> quantization")
 	require.Contains(t, trace, "ollama /api/ps does not list the configured model as loaded; context stays as configured")
 
-	require.Equal(t, []string{""}, f.authSeen("/api/ps"), "/api/ps is a local API: no key unless it asks")
+	for _, path := range []string{"/api/tags", "/api/show", "/api/ps"} {
+		require.Equal(t, []string{""}, f.authSeen(path), "%s is a local API: no key unless it asks", path)
+	}
 }
 
 func TestProbeOllamaThinkingModelLoaded(t *testing.T) {
@@ -243,6 +245,47 @@ func TestProbeOllamaThinkingValues(t *testing.T) {
 			},
 		},
 		{
+			name:  "only true accepts no off switch: reasoning is mandatory",
+			model: "qwen3:8b",
+			show:  show("qwen3", []string{"completion", "thinking"}, map[string]any{"values": []any{true}, "default": true}),
+			check: func(t *testing.T, api *system.ModelApiSpec, trace []string) {
+				require.Equal(t, true, *api.Capabilities.Reasoning)
+				require.Equal(t, "ollama:/api/show.thinking.values", api.Evidence["capabilities.reasoning"])
+				require.Equal(t, system.ThinkingModeAlwaysOn, api.Thinking.Mode)
+				require.Nil(t, api.Bindings[system.IntentReasoningDisable])
+				require.Nil(t, api.Bindings[system.IntentReasoningEnable])
+				require.Nil(t, api.Bindings[system.IntentReasoningEffort], "no level was listed")
+				require.Contains(t, trace, "ollama /api/show thinking.values lists only true -> reasoning mandatory")
+			},
+		},
+		{
+			name:  "a values string is not a list: the capability list decides",
+			model: "qwen3:8b",
+			show:  show("qwen3", []string{"completion", "thinking"}, map[string]any{"values": "low", "default": "low"}),
+			check: func(t *testing.T, api *system.ModelApiSpec, trace []string) {
+				require.Nil(t, api.Capabilities)
+				require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
+				require.Equal(t, "none", api.Bindings[system.IntentReasoningDisable].Value)
+				require.Equal(t, []string{"low", "medium", "high", "max", "none"}, api.Bindings[system.IntentReasoningEffort].EnumValues, "the stack's list, not a report")
+				require.NotContains(t, api.Evidence, "bindings."+system.IntentReasoningEffort)
+				require.NotContains(t, api.Evidence, "thinking.default")
+			},
+		},
+		{
+			name:  "a numeric entry among booleans is skipped: toggle only, no efforts",
+			model: "qwen3:8b",
+			show:  show("qwen3", []string{"completion", "thinking"}, map[string]any{"values": []any{true, false, 3}, "default": 1}),
+			check: func(t *testing.T, api *system.ModelApiSpec, trace []string) {
+				require.Equal(t, true, *api.Capabilities.Reasoning)
+				require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
+				require.Equal(t, "none", api.Bindings[system.IntentReasoningDisable].Value)
+				require.Equal(t, []string{"low", "medium", "high", "max", "none"}, api.Bindings[system.IntentReasoningEffort].EnumValues)
+				require.NotContains(t, api.Evidence, "bindings."+system.IntentReasoningEffort)
+				require.Empty(t, api.Thinking.Default, "a numeric default is not on/off nor a level")
+				require.NotContains(t, api.Evidence, "thinking.default")
+			},
+		},
+		{
 			name:  "no thinking object falls back to the capability list",
 			model: "qwen3:8b",
 			show:  show("qwen3", []string{"completion", "thinking"}, nil),
@@ -325,10 +368,12 @@ func TestProbeOllamaContextPrecedence(t *testing.T) {
 		{
 			name: "a loaded context that is not a JSON number is ignored", model: "llama3:8b",
 			show: show(nil, "num_ctx 8192"), ps: ollamaPSLoaded("llama3:8b", "32768"), wantContext: 8192, wantSource: "ollama:/api/show.parameters.num_ctx",
+			wantTrace: "ollama /api/ps lists the model but context_length is not a positive JSON number; context stays as configured",
 		},
 		{
 			name: "non-positive values are rejected", model: "llama3:8b",
 			show: show(map[string]any{"context_length": 0}, "num_ctx -1"), ps: ollamaPSLoaded("llama3:8b", 0), wantContext: 131072, wantSource: "ollama:/api/show.model_info.llama.context_length",
+			wantTrace: "ollama /api/ps lists the model but context_length is not a positive JSON number; context stays as configured",
 		},
 	}
 	for _, c := range cases {
@@ -341,6 +386,27 @@ func TestProbeOllamaContextPrecedence(t *testing.T) {
 			require.Equal(t, c.wantSource, api.Evidence["capabilities.context"])
 			if c.wantTrace != "" {
 				require.Contains(t, trace, c.wantTrace)
+			}
+		})
+	}
+}
+
+func TestProbeOllamaRejectsOddTrainedContext(t *testing.T) {
+	for name, value := range map[string]any{"string": "8192", "fraction": 8192.5, "beyond 1<<31": 4294967296} {
+		t.Run(name, func(t *testing.T) {
+			f := newOllamaFixture(t, map[string]any{
+				"template":   "{{ .Prompt }}",
+				"model_info": map[string]any{"general.architecture": "llama", "llama.context_length": value},
+			}, nil)
+			api, trace := f.detect(t, "llama3:8b", "")
+			if api.Capabilities != nil {
+				require.Nil(t, api.Capabilities.Context)
+				require.Nil(t, api.Capabilities.ContextTrained)
+			}
+			require.NotContains(t, api.Evidence, "capabilities.contextTrained")
+			require.NotContains(t, api.Evidence, "capabilities.context")
+			for _, line := range trace {
+				require.NotContains(t, line, "-> contextTrained")
 			}
 		})
 	}
@@ -372,12 +438,16 @@ func TestProbeOllamaCapabilityList(t *testing.T) {
 				require.Equal(t, true, *caps.Tools)
 				require.Nil(t, caps.Modalities)
 				require.Nil(t, caps.Embeddings)
+				require.Empty(t, caps.Quantization, "a numeric quantization_level is not a label")
 			},
 		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			f := newOllamaFixture(t, map[string]any{"template": "{{ .Prompt }}", "capabilities": c.capabilities}, nil)
+			f := newOllamaFixture(t, map[string]any{
+				"template": "{{ .Prompt }}", "capabilities": c.capabilities,
+				"details": map[string]any{"quantization_level": 4},
+			}, nil)
 			api, _ := f.detect(t, "m:latest", "")
 			require.NotNil(t, api.Capabilities)
 			c.check(t, api.Capabilities)
@@ -402,22 +472,27 @@ func TestProbeOllamaRejectsOddArchitectureKey(t *testing.T) {
 	}
 }
 
-func TestProbeOllamaLoadedRetriesWithKeyOnUnauthorized(t *testing.T) {
-	var calls []string
+// A proxy in front of Ollama that guards every path: each request is
+// repeated with the key exactly once.
+func TestProbeOllamaRetriesWithKeyOnUnauthorized(t *testing.T) {
+	calls := map[string][]string{}
 	var mu sync.Mutex
-	mux := http.NewServeMux()
-	mux.HandleFunc("/api/tags", jsonHandler(map[string]any{"models": []map[string]any{{"name": "x"}}}))
-	mux.HandleFunc("/api/show", jsonHandler(map[string]any{"template": "{{ .Prompt }}"}))
-	mux.HandleFunc("/api/ps", func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		calls = append(calls, r.Header.Get("Authorization"))
-		mu.Unlock()
-		if r.Header.Get("Authorization") != "Bearer secret" {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
+	guarded := func(status int, body any) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			mu.Lock()
+			calls[r.URL.Path] = append(calls[r.URL.Path], r.Header.Get("Authorization"))
+			mu.Unlock()
+			if r.Header.Get("Authorization") != "Bearer secret" {
+				w.WriteHeader(status)
+				return
+			}
+			jsonHandler(body)(w, r)
 		}
-		jsonHandler(ollamaPSLoaded("m:latest", 32768))(w, r)
-	})
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/tags", guarded(http.StatusUnauthorized, map[string]any{"models": []map[string]any{{"name": "x"}}}))
+	mux.HandleFunc("/api/show", guarded(http.StatusForbidden, map[string]any{"template": "{{ .Prompt }}", "capabilities": []string{"completion", "tools"}}))
+	mux.HandleFunc("/api/ps", guarded(http.StatusUnauthorized, ollamaPSLoaded("m:latest", 32768)))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -425,6 +500,36 @@ func TestProbeOllamaLoadedRetriesWithKeyOnUnauthorized(t *testing.T) {
 		ModelName: "m:latest", ApiType: "openai", ApiURL: srv.URL + "/v1/chat/completions", ApiKey: "secret",
 	})
 	require.NotNil(t, api)
-	require.Equal(t, []string{"", "Bearer secret"}, calls)
+	require.Equal(t, "ollama", api.Stack)
+	mu.Lock()
+	defer mu.Unlock()
+	for _, path := range []string{"/api/tags", "/api/show", "/api/ps"} {
+		require.Equal(t, []string{"", "Bearer secret"}, calls[path], path)
+	}
+	require.Equal(t, true, *api.Capabilities.Tools)
 	require.Equal(t, int64(32768), *api.Capabilities.Context)
+}
+
+// Without a configured key a 401 is final: nothing to retry with.
+func TestProbeOllamaNoKeyNoRetry(t *testing.T) {
+	var calls []string
+	var mu sync.Mutex
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/tags", jsonHandler(map[string]any{"models": []map[string]any{{"name": "x"}}}))
+	mux.HandleFunc("/api/show", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		calls = append(calls, r.Header.Get("Authorization"))
+		mu.Unlock()
+		w.WriteHeader(http.StatusUnauthorized)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	api := newTestDetector().Detect(context.Background(), config.ModelConfig{
+		ModelName: "m:latest", ApiType: "openai", ApiURL: srv.URL + "/v1/chat/completions",
+	})
+	require.NotNil(t, api)
+	require.Equal(t, "ollama", api.Stack)
+	require.Equal(t, []string{""}, calls)
+	require.Nil(t, api.Capabilities)
 }

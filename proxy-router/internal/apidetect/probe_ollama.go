@@ -30,8 +30,10 @@ const (
 // is not echoed into a source string.
 var ollamaArchRe = regexp.MustCompile(`^[a-z0-9_-]{1,32}$`)
 
+// The local API has no auth (plan §6.A), so every request goes out without
+// the key and repeats with it only after a 401/403 from a fronting proxy.
 func (d *Detector) probeOllama(ctx context.Context, base, modelName, apiKey string, ev *apispec.Evidence) bool {
-	tags := d.getJSON(ctx, base+"/api/tags", apiKey)
+	tags := d.getJSONKeyFree(ctx, base+"/api/tags", apiKey)
 	if tags == nil {
 		return false
 	}
@@ -41,12 +43,23 @@ func (d *Detector) probeOllama(ctx context.Context, base, modelName, apiKey stri
 	ev.Stack = "ollama"
 	tracef(ctx, "identified ollama by /api/tags shape")
 
-	body, _ := json.Marshal(map[string]string{"model": modelName, "name": modelName})
-	if show := d.requestJSON(ctx, http.MethodPost, base+"/api/show", apiKey, body, maxProbeBody); show != nil {
+	if show := d.ollamaShow(ctx, base, modelName, apiKey); show != nil {
 		ollamaShowFacts(ctx, show, ev)
 	}
 	d.probeOllamaLoaded(ctx, base, modelName, apiKey, ev)
 	return true
+}
+
+func (d *Detector) ollamaShow(ctx context.Context, base, modelName, apiKey string) map[string]any {
+	body, _ := json.Marshal(map[string]string{"model": modelName, "name": modelName})
+	urlStr := base + "/api/show"
+	out, status := d.requestJSONStatus(ctx, http.MethodPost, urlStr, "", body, maxProbeBody)
+	if out != nil || apiKey == "" || (status != http.StatusUnauthorized && status != http.StatusForbidden) {
+		return out
+	}
+	tracef(ctx, "POST %s -> HTTP %d without a key; retrying with the configured key", urlStr, status)
+	out, _ = d.requestJSONStatus(ctx, http.MethodPost, urlStr, apiKey, body, maxProbeBody)
+	return out
 }
 
 func ollamaShowFacts(ctx context.Context, show map[string]any, ev *apispec.Evidence) {
@@ -109,16 +122,17 @@ func ollamaShowFacts(ctx context.Context, show map[string]any, ev *apispec.Evide
 
 // thinking.values is the accepted set of the think request field: booleans
 // (a toggle) and level strings, https://github.com/ollama/ollama/blob/v0.34.4/docs/capabilities/thinking.mdx.
-// [false] alone is a backend report of no reasoning (rule 3). Levels become
+// [false] alone is a backend report of no reasoning (rule 3); [true] alone
+// accepts no off switch, so reasoning is mandatory (rule 4). Levels become
 // ReasoningEfforts in the reported order, false among them as "none" (rule 5);
-// booleans alone leave the toggle to OllamaThinking. Returns false when there
-// is no usable object, so the capabilities list decides.
+// a true/false pair leaves the toggle to OllamaThinking. Returns false when
+// there is no usable object, so the capabilities list decides.
 func ollamaThinkingFacts(ctx context.Context, thinking map[string]any, ev *apispec.Evidence) bool {
 	values, _ := thinking["values"].([]any)
 	if len(values) == 0 {
 		return false
 	}
-	var on, levels bool
+	var on, off, levels bool
 	var efforts []string
 	add := func(e string) {
 		for _, seen := range efforts {
@@ -134,6 +148,7 @@ func ollamaThinkingFacts(ctx context.Context, thinking map[string]any, ev *apisp
 			if x {
 				on = true
 			} else {
+				off = true
 				add("none")
 			}
 		case string:
@@ -149,9 +164,15 @@ func ollamaThinkingFacts(ctx context.Context, thinking map[string]any, ev *apisp
 		return true
 	}
 
-	ev.OllamaThinking = true
 	ev.Caps.SetReasoning(true, srcOllamaThinkValues)
 	tracef(ctx, "ollama /api/show thinking.values = %v -> reasoning true", values)
+	switch {
+	case !levels && !off:
+		ev.MandatoryReasoning = true
+		tracef(ctx, "ollama /api/show thinking.values lists only true -> reasoning mandatory")
+	default:
+		ev.OllamaThinking = true
+	}
 	if levels {
 		ev.ReasoningEfforts = efforts
 		ev.EffortsSource = srcOllamaThinkValues
@@ -191,6 +212,7 @@ func (d *Detector) probeOllamaLoaded(ctx context.Context, base, modelName, apiKe
 	}
 	n, ok := jsonPositiveInt(entry["context_length"])
 	if !ok {
+		tracef(ctx, "ollama /api/ps lists the model but context_length is not a positive JSON number; context stays as configured")
 		return
 	}
 	prev := ev.Caps.Sources[apispec.CapFieldContext]
