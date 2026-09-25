@@ -269,8 +269,7 @@ func (c *Checker) checkAll(ctx context.Context, walletAddr common.Address) {
 	c.firstTeeSweepDone = true
 	c.mu.Unlock()
 
-	probed := false
-	detectProbed := false
+	backendHit := false
 	for i, modelID := range modelIDs {
 		select {
 		case <-ctx.Done():
@@ -282,21 +281,19 @@ func (c *Checker) checkAll(ctx context.Context, walletAddr common.Address) {
 		if i < len(modelCfgs) {
 			cfg = modelCfgs[i]
 		}
-		// Pace backend probes so a provider with many models doesn't burst
+		// Pace backend requests so a provider with many models doesn't burst
 		// its upstream (often a single account behind all models) and
 		// self-inflict rate-limit failures. Only requests that reach the
 		// backend are paced: the health probe of a model with an active bid,
 		// and an API detection the detector cannot answer from its cache.
-		willDetect := c.detectionWouldProbe(cfg)
-		if ((hasBid && probed) || (willDetect && detectProbed)) && !c.sleep(ctx, c.probeDelay) {
+		// Both kinds share one pace, since they share that account.
+		willHit := hasBid || c.detectionWouldProbe(cfg)
+		if willHit && backendHit && !c.sleep(ctx, c.probeDelay) {
 			return
 		}
 		c.checkModel(ctx, modelID, bidID, hasBid, cfg, reattestTee)
-		if hasBid {
-			probed = true
-		}
-		if willDetect {
-			detectProbed = true
+		if willHit {
+			backendHit = true
 		}
 		seen[modelID.Hex()] = true
 	}

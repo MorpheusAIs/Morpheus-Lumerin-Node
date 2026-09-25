@@ -1257,6 +1257,32 @@ func TestCheckAllPacesDetectionsThatProbe(t *testing.T) {
 		require.GreaterOrEqual(t, time.Since(start), 2*delay)
 	})
 
+	// A health probe and a detection cache miss reach the same upstream
+	// account, so they pace each other in either order.
+	t.Run("a cache miss after a health probe waits probeDelay", func(t *testing.T) {
+		const delay = 150 * time.Millisecond
+		det := &probeAwareDetector{fakeDetector: fakeDetector{spec: detectedQwen3()}, probes: map[string]bool{"a": false, "b": true, "c": false}}
+		deps := newDeps(det)
+		deps.bids = []*structs.Bid{bidFor(modelA)}
+		start := time.Now()
+		newChecker(deps, delay).checkAll(context.Background(), common.Address{})
+		require.Len(t, det.at, 3)
+		require.GreaterOrEqual(t, det.at[1].Sub(det.at[0]), delay, "b's cache miss follows a's health probe: paced")
+		require.Less(t, time.Since(start), 2*delay, "c is a cache hit without a bid: not paced")
+	})
+
+	t.Run("a health probe after a cache miss waits probeDelay", func(t *testing.T) {
+		const delay = 150 * time.Millisecond
+		det := &probeAwareDetector{fakeDetector: fakeDetector{spec: detectedQwen3()}, probes: map[string]bool{"a": true, "b": false, "c": false}}
+		deps := newDeps(det)
+		deps.bids = []*structs.Bid{bidFor(modelB)}
+		start := time.Now()
+		newChecker(deps, delay).checkAll(context.Background(), common.Address{})
+		require.Len(t, det.at, 3)
+		require.GreaterOrEqual(t, det.at[1].Sub(det.at[0]), delay, "b's health probe follows a's cache miss: paced")
+		require.Less(t, time.Since(start), 2*delay, "c is a cache hit without a bid: not paced")
+	})
+
 	t.Run("a cancelled pause ends the sweep", func(t *testing.T) {
 		det := &probeAwareDetector{fakeDetector: fakeDetector{spec: detectedQwen3()}, probes: map[string]bool{"a": true, "b": true, "c": true}}
 		ctx, cancel := context.WithCancel(context.Background())
