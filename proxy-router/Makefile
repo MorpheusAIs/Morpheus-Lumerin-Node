@@ -49,3 +49,6 @@ reset-keychain:
 
 update-bindings:
 	cd ../smart-contracts && yarn bindings-go && cp -r bindings/go/contracts/{diamond/facets/*,tokens/*,mock/tokens/*} ../proxy-router/internal/repositories/contracts/bindings
+
+registry:
+	go generate ./internal/apispec/registry/...

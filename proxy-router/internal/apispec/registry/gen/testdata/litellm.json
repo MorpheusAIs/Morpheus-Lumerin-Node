@@ -1,0 +1,64 @@
+{
+  "sample_spec": {
+    "mode": "one of: chat, embedding, completion",
+    "max_input_tokens": "set to max input tokens, if unknown, use max_tokens",
+    "supports_function_calling": true
+  },
+  "gpt-4o": {
+    "litellm_provider": "openai",
+    "mode": "chat",
+    "max_input_tokens": 128000,
+    "max_output_tokens": 16384,
+    "supports_function_calling": true,
+    "supports_vision": true,
+    "supports_prompt_caching": true,
+    "supports_web_search": true
+  },
+  "azure/gpt-4o": {
+    "litellm_provider": "azure",
+    "mode": "chat",
+    "max_input_tokens": 100000,
+    "supports_function_calling": true
+  },
+  "dall-e-3": {
+    "litellm_provider": "openai",
+    "mode": "image_generation"
+  },
+  "text-embedding-3-small": {
+    "litellm_provider": "openai",
+    "mode": "embedding",
+    "max_input_tokens": 8191
+  },
+  "o1-pro": {
+    "litellm_provider": "openai",
+    "mode": "responses",
+    "max_input_tokens": 200000,
+    "max_output_tokens": 100000,
+    "supports_reasoning": true,
+    "supports_response_schema": true
+  },
+  "fireworks_ai/accounts/fireworks/models/llama-v3p1-8b-instruct": {
+    "litellm_provider": "fireworks_ai",
+    "mode": "chat",
+    "max_input_tokens": 131072,
+    "supports_function_calling": true,
+    "supports_pdf_input": true,
+    "supports_audio_input": true,
+    "supports_audio_output": true,
+    "supports_video_input": true
+  },
+  "together_ai/meta-llama/Llama-3-70b": {
+    "litellm_provider": "together_ai",
+    "mode": "chat",
+    "max_input_tokens": 131072,
+    "max_output_tokens": 4096,
+    "supports_function_calling": false,
+    "supports_web_search": false,
+    "supports_prompt_caching": true
+  },
+  "bare-litellm": {
+    "litellm_provider": "foo",
+    "mode": "chat",
+    "max_input_tokens": 4096
+  }
+}
