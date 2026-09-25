@@ -67,6 +67,62 @@
             "description": "The policy to be used for capacity management",
             "type": "string",
             "enum": ["simple", "idle_timeout"]
+          },
+          "capabilities": {
+            "title": "Declared capabilities",
+            "description": "Optional facts about the model as served, published in the model's api block (capabilities.*) with evidence \"declared\". Each declared field wins over the detected or registry value for that field; other fields are still filled by detection. Applied to every chat-transport model whether apiStack is set or detected. An invalid block (unknown key, wrong type, non-positive integer, unknown modality or structured kind) is logged and ignored for that model; the model itself is kept.",
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "context": {
+                "title": "Context window",
+                "description": "Served window in tokens (prompt + completion), e.g. the vLLM --max-model-len or llama.cpp -c value; the number consumers plan requests against.",
+                "type": "integer",
+                "minimum": 1,
+                "exclusiveMaximum": 2147483648
+              },
+              "maxOutput": {
+                "title": "Max output tokens",
+                "type": "integer",
+                "minimum": 1,
+                "exclusiveMaximum": 2147483648
+              },
+              "modalities": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "input": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": { "type": "string", "enum": ["text", "image", "audio", "video", "pdf"] }
+                  },
+                  "output": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": { "type": "string", "enum": ["text", "image", "audio", "embeddings"] }
+                  }
+                }
+              },
+              "tools": {
+                "title": "Tool calling",
+                "description": "Function/tool calling accepted by the backend for this model.",
+                "type": "boolean"
+              },
+              "structured": {
+                "title": "Structured output kinds",
+                "type": "array",
+                "uniqueItems": true,
+                "items": { "type": "string", "enum": ["json_object", "json_schema", "grammar", "regex", "choice"] }
+              },
+              "webSearch": {
+                "title": "Web search",
+                "description": "The backend can search the web for this model on request; the request knob is a web_search.* binding.",
+                "type": "boolean"
+              },
+              "embeddings": {
+                "type": "boolean"
+              }
+            }
           }
         },
         "required": ["modelId", "modelName", "apiType", "apiUrl"]

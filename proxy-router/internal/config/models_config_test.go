@@ -163,3 +163,61 @@ func TestInitLegacyMapAcceptsApiStack(t *testing.T) {
 	require.NoError(t, l.Init())
 	require.Equal(t, "sglang", l.ModelConfigFromID("0x01").ApiStack)
 }
+
+func TestInitV2KeepsValidCapabilitiesAndDropsInvalidOnes(t *testing.T) {
+	l := newLoaderFromContent(t, `{"models":[
+		{"modelId":"0x01","modelName":"ok","apiType":"openai","apiStack":"vllm","apiUrl":"http://h/v1","capabilities":{"context":32768,"maxOutput":4096,"modalities":{"input":["text","image"]},"tools":true,"structured":["json_schema"],"webSearch":false,"embeddings":false}},
+		{"modelId":"0x02","modelName":"zero","apiType":"openai","apiUrl":"http://h/v1","capabilities":{"context":0}},
+		{"modelId":"0x03","modelName":"unknownkey","apiType":"openai","apiUrl":"http://h/v1","capabilities":{"context":4096,"reasoning":true}},
+		{"modelId":"0x04","modelName":"badtype","apiType":"openai","apiUrl":"http://h/v1","capabilities":{"tools":"yes"}},
+		{"modelId":"0x05","modelName":"badvocab","apiType":"openai","apiStack":"ollama","apiUrl":"http://h/v1","capabilities":{"modalities":{"input":["vision"]}}},
+		{"modelId":"0x06","modelName":"none","apiType":"openai","apiUrl":"http://h/v1"}]}`)
+	require.NoError(t, l.Init(), "an invalid capabilities block never fails the load")
+	ids, _ := l.GetAll()
+	require.Len(t, ids, 6, "every model is stored; only the bad capabilities are dropped")
+
+	ok := l.ModelConfigFromID("0x01")
+	require.NotNil(t, ok.Capabilities)
+	require.Equal(t, int64(32768), *ok.Capabilities.Context)
+	require.Equal(t, int64(4096), *ok.Capabilities.MaxOutput)
+	require.Equal(t, []string{"text", "image"}, ok.Capabilities.Modalities.Input)
+	require.True(t, *ok.Capabilities.Tools)
+	require.Equal(t, []string{"json_schema"}, ok.Capabilities.Structured)
+	require.False(t, *ok.Capabilities.WebSearch, "an explicit false is kept")
+	require.False(t, *ok.Capabilities.Embeddings)
+	require.Equal(t, "vllm", ok.ApiStack, "apiStack unaffected")
+
+	for _, id := range []string{"0x02", "0x03", "0x04", "0x05"} {
+		cfg := l.ModelConfigFromID(id)
+		require.Nil(t, cfg.Capabilities, "%s: invalid block cleared, model kept", id)
+		require.NotEqual(t, "", cfg.ModelName, id)
+	}
+	require.Equal(t, "ollama", l.ModelConfigFromID("0x05").ApiStack, "a bad capabilities block does not cost the model its apiStack")
+	require.Nil(t, l.ModelConfigFromID("0x06").Capabilities)
+}
+
+func TestInitLegacyMapValidatesCapabilities(t *testing.T) {
+	l := newLoaderFromContent(t, `{
+		"0x01":{"modelName":"ok","apiType":"openai","apiUrl":"http://h/v1","capabilities":{"context":8192,"tools":false}},
+		"0x02":{"modelName":"bad","apiType":"openai","apiUrl":"http://h/v1","capabilities":{"structured":["xml"]}}}`)
+	require.NoError(t, l.Init())
+	ids, _ := l.GetAll()
+	require.Len(t, ids, 2)
+	require.Equal(t, int64(8192), *l.ModelConfigFromID("0x01").Capabilities.Context)
+	require.False(t, *l.ModelConfigFromID("0x01").Capabilities.Tools)
+	require.Nil(t, l.ModelConfigFromID("0x02").Capabilities)
+	require.Equal(t, "bad", l.ModelConfigFromID("0x02").ModelName)
+}
+
+func TestReloadRevalidatesCapabilities(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "models-config.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"models":[{"modelId":"0x01","modelName":"m","apiType":"openai","apiUrl":"http://h/v1","capabilities":{"context":4096}}]}`), 0o644))
+	l := NewModelConfigLoader(path, "", noopValidator{}, fakeChain{}, fakeConn{}, lib.NewTestLogger())
+	require.NoError(t, l.Init())
+	require.Equal(t, int64(4096), *l.ModelConfigFromID("0x01").Capabilities.Context)
+
+	require.NoError(t, os.WriteFile(path, []byte(`{"models":[{"modelId":"0x01","modelName":"m","apiType":"openai","apiUrl":"http://h/v1","capabilities":{"context":-1}}]}`), 0o644))
+	_, _, err := l.Reload()
+	require.NoError(t, err)
+	require.Nil(t, l.ModelConfigFromID("0x01").Capabilities, "the edited, now invalid block is dropped on reload; the model stays")
+}
