@@ -38,10 +38,107 @@ func TestFamilyFromNameTable(t *testing.T) {
 		"gemini-2.5-flash":              "gemini",
 		"command-r-plus":                "command",
 		"unknown-model-x":               "",
+
+		"Qwen/Qwen3.5-397B-A17B":                     "qwen3.5",
+		"qwen3.5:397b":                               "qwen3.5",
+		"qwen3_5-27b":                                "qwen3.5",
+		"NousResearch/Hermes-4-70B":                  "hermes",
+		"nousresearch/hermes-3-llama-3.1-8b":         "hermes",
+		"NousResearch/Hermes-2-Pro-Mistral-7B":       "hermes",
+		"deepcogito/cogito-v2-preview-llama-70B":     "cogito",
+		"deepcogito/cogito-v2-preview-deepseek-671B": "cogito",
+		"cogito:70b":                                 "cogito",
+		"mistralai/Magistral-Small-2509":             "magistral",
+		"magistral-medium-latest":                    "magistral",
+		"microsoft/Phi-4-reasoning-plus":             "phi-4-reasoning",
+		"phi4-reasoning:14b":                         "phi-4-reasoning",
+		"microsoft/Phi-4-mini-reasoning":             "phi",
+		"allenai/Olmo-3-32B-Think":                   "olmo",
+		"XiaomiMiMo/MiMo-V2-Flash":                   "mimo",
+		"XiaomiMiMo/MiMo-7B-RL":                      "mimo",
+		"arcee-ai/Trinity-Large-Thinking":            "arcee",
+		"trinity-large-preview":                      "arcee",
+		"nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16": "nemotron",
+		"nvidia/NVIDIA-Nemotron-Nano-9B-v2":          "nemotron",
 	}
 	for name, want := range cases {
 		require.Equal(t, want, FamilyFromName(name), "name %s", name)
 	}
+}
+
+func TestIsKnownFamilyFollowsRules(t *testing.T) {
+	for _, f := range []string{"qwen3.5", "hermes", "cogito", "magistral", "phi-4-reasoning", "mimo", "arcee", "olmo", "nemotron", "o-series", " Qwen3 "} {
+		require.True(t, IsKnownFamily(f), f)
+	}
+	for _, f := range []string{"", "trinity-large", "phi4-reasoning", "deepseek-v4", "bogus"} {
+		require.False(t, IsKnownFamily(f), f)
+	}
+}
+
+func TestBindingsForNewFamilies(t *testing.T) {
+	_, b := bindingsForFamily("qwen3.5", "qwen3.5-397b")
+	require.Equal(t, "chat_template_kwargs.enable_thinking", b[system.IntentReasoningDisable].Param)
+
+	_, b = bindingsForFamily("mimo", "XiaomiMiMo/MiMo-V2-Flash")
+	require.Equal(t, "chat_template_kwargs.enable_thinking", b[system.IntentReasoningEnable].Param)
+	for _, name := range []string{"XiaomiMiMo/MiMo-7B-RL", "XiaomiMiMo/MiMo-VL-7B-RL-2508"} {
+		alwaysOn, b := bindingsForFamily("mimo", name)
+		require.False(t, alwaysOn, name)
+		require.Empty(t, b, name)
+	}
+
+	_, b = bindingsForFamily("hermes", "NousResearch/Hermes-4-405B")
+	require.Equal(t, "chat_template_kwargs.thinking", b[system.IntentReasoningEnable].Param)
+	require.Equal(t, true, b[system.IntentReasoningEnable].Value)
+	alwaysOn, b := bindingsForFamily("hermes", "nousresearch/hermes-3-llama-3.1-8b")
+	require.False(t, alwaysOn)
+	require.Empty(t, b)
+
+	_, b = bindingsForFamily("cogito", "cogito-v2-preview-llama-70b")
+	require.Equal(t, "chat_template_kwargs.enable_thinking", b[system.IntentReasoningEnable].Param)
+	require.Contains(t, b[system.IntentReasoningEnable].Hint, "Enable deep thinking subroutine.")
+	require.Empty(t, b[system.IntentReasoningDisable].Hint)
+
+	alwaysOn, b = bindingsForFamily("phi-4-reasoning", "microsoft/Phi-4-reasoning")
+	require.True(t, alwaysOn)
+	require.Empty(t, b)
+
+	alwaysOn, b = bindingsForFamily("olmo", "allenai/Olmo-3-32B-Think")
+	require.True(t, alwaysOn)
+	require.Empty(t, b)
+	alwaysOn, b = bindingsForFamily("olmo", "allenai/Olmo-3-7B-Instruct")
+	require.False(t, alwaysOn)
+	require.Empty(t, b)
+	alwaysOn, _ = bindingsForFamily("olmo", "allenai/OLMo-2-1124-13B-Instruct")
+	require.False(t, alwaysOn)
+
+	_, b = bindingsForFamily("nemotron", "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16")
+	require.Equal(t, "chat_template_kwargs.enable_thinking", b[system.IntentReasoningDisable].Param)
+	require.Equal(t, system.BindingKindTemplateKwarg, b[system.IntentReasoningDisable].Kind)
+	for _, name := range []string{"nvidia/NVIDIA-Nemotron-Nano-9B-v2", "nvidia/Llama-3_3-Nemotron-Super-49B-v1_5", "nvidia/llama-3.3-nemotron-super-49b-v1.5"} {
+		_, b = bindingsForFamily("nemotron", name)
+		require.Equal(t, system.BindingKindSystemPrompt, b[system.IntentReasoningDisable].Kind, name)
+		require.Contains(t, b[system.IntentReasoningDisable].Hint, "/no_think", name)
+	}
+	_, b = bindingsForFamily("nemotron", "nvidia/Llama-3_3-Nemotron-Super-49B-v1")
+	require.Contains(t, b[system.IntentReasoningDisable].Hint, "detailed thinking off")
+
+	for _, f := range []string{"magistral", "arcee"} {
+		alwaysOn, b := bindingsForFamily(f, "m")
+		require.False(t, alwaysOn, f)
+		require.Empty(t, b, f)
+	}
+	alwaysOn, _ = bindingsForFamily("arcee", "arcee-ai/Trinity-Large-Thinking")
+	require.True(t, alwaysOn)
+}
+
+func TestBindingsFromTemplateThinkingMode(t *testing.T) {
+	m3 := `{%- if thinking_mode is defined and thinking_mode == "disabled" -%}x{%- elif thinking_mode == "adaptive" -%}y{%- endif -%}`
+	b := bindingsFromTemplate(m3)
+	require.Equal(t, "chat_template_kwargs.thinking_mode", b[system.IntentReasoningDisable].Param)
+	require.Equal(t, "disabled", b[system.IntentReasoningDisable].Value)
+	require.Equal(t, "enabled", b[system.IntentReasoningEnable].Value)
+	require.Nil(t, b[system.IntentReasoningEffort])
 }
 
 func TestBindingsForFamilyDefaults(t *testing.T) {
