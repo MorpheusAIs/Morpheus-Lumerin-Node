@@ -345,9 +345,12 @@ const (
 )
 
 // ModelGroupInfo (https://github.com/BerriAI/litellm/blob/main/litellm/types/router.py)
-// aggregates the group's deployments: a limit is the group's, a supports_*
-// flag is true when any deployment's cost-map entry says so and false
-// otherwise, so false also covers a model the cost map does not know.
+// aggregates the group's deployments: a limit is the group's, and every
+// supports_* flag is Field(default=False), flipped to true only when a
+// deployment's cost-map entry says so. A false therefore also covers a model
+// the cost map does not know, so only true crosses as a fact; the one
+// exception is supports_reasoning false (contract rule 3). The group carries
+// no supports_audio_input; audio is a deployment-level field.
 // supports_url_context has no wire field.
 func litellmGroupCaps(ctx context.Context, group map[string]any, ev *apispec.Evidence) {
 	src := func(field string) string { return litellmGroupSource + field }
@@ -368,20 +371,17 @@ func litellmGroupCaps(ctx context.Context, group map[string]any, ev *apispec.Evi
 	if v, ok := group["supports_vision"].(bool); ok && v && ev.Caps.AddInputModality("image", src("supports_vision")) {
 		tracef(ctx, "litellm /model_group/info supports_vision -> capabilities.modalities.input += image")
 	}
-	if v, ok := group["supports_audio_input"].(bool); ok && v && ev.Caps.AddInputModality("audio", src("supports_audio_input")) {
-		tracef(ctx, "litellm /model_group/info supports_audio_input -> capabilities.modalities.input += audio")
+	if v, ok := group["supports_function_calling"].(bool); ok && v {
+		ev.Caps.SetTools(true, src("supports_function_calling"))
+		tracef(ctx, "litellm /model_group/info supports_function_calling -> capabilities.tools")
 	}
-	if v, ok := group["supports_function_calling"].(bool); ok {
-		ev.Caps.SetTools(v, src("supports_function_calling"))
-		tracef(ctx, "litellm /model_group/info supports_function_calling %t -> capabilities.tools", v)
+	if v, ok := group["supports_parallel_function_calling"].(bool); ok && v {
+		ev.Caps.SetToolsParallel(true, src("supports_parallel_function_calling"))
+		tracef(ctx, "litellm /model_group/info supports_parallel_function_calling -> capabilities.toolsParallel")
 	}
-	if v, ok := group["supports_parallel_function_calling"].(bool); ok {
-		ev.Caps.SetToolsParallel(v, src("supports_parallel_function_calling"))
-		tracef(ctx, "litellm /model_group/info supports_parallel_function_calling %t -> capabilities.toolsParallel", v)
-	}
-	if v, ok := group["supports_web_search"].(bool); ok {
-		ev.Caps.SetWebSearch(v, src("supports_web_search"))
-		tracef(ctx, "litellm /model_group/info supports_web_search %t -> capabilities.webSearch", v)
+	if v, ok := group["supports_web_search"].(bool); ok && v {
+		ev.Caps.SetWebSearch(true, src("supports_web_search"))
+		tracef(ctx, "litellm /model_group/info supports_web_search -> capabilities.webSearch")
 	}
 	// A true flag is GatewayReasoning (read above); only the false crosses as
 	// a capability, since reasoning = true is derived from surviving bindings.

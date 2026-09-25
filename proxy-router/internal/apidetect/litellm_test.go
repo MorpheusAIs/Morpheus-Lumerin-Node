@@ -1159,7 +1159,7 @@ func TestDetectLiteLLMCapabilityFacts(t *testing.T) {
 		require.Nil(t, caps.Modalities.Output)
 		require.Equal(t, true, *caps.Tools)
 		require.Equal(t, true, *caps.ToolsParallel)
-		require.Equal(t, false, *caps.WebSearch)
+		require.Nil(t, caps.WebSearch, "supports_web_search false is LiteLLM's default for a cost-map-unknown model, not a negative")
 		require.Equal(t, false, *caps.Reasoning)
 		require.Equal(t, true, *caps.PromptCache)
 		require.Equal(t, []string{"json_object", "json_schema"}, caps.Structured)
@@ -1171,7 +1171,7 @@ func TestDetectLiteLLMCapabilityFacts(t *testing.T) {
 		require.Equal(t, "litellm:/model/info.model_info.supports_pdf_input", api.Evidence["capabilities.modalities.input"])
 		require.Equal(t, "litellm:/model_group/info.supports_function_calling", api.Evidence["capabilities.tools"])
 		require.Equal(t, "litellm:/model_group/info.supports_parallel_function_calling", api.Evidence["capabilities.toolsParallel"])
-		require.Equal(t, "litellm:/model_group/info.supports_web_search", api.Evidence["capabilities.webSearch"])
+		require.NotContains(t, api.Evidence, "capabilities.webSearch")
 		require.Equal(t, "litellm:/model_group/info.supports_reasoning", api.Evidence["capabilities.reasoning"])
 		require.Equal(t, "litellm:/model/info.model_info.supports_prompt_caching", api.Evidence["capabilities.promptCache"])
 		require.Equal(t, "litellm:/model/info.model_info.supports_response_schema", api.Evidence["capabilities.structured"])
@@ -1184,9 +1184,8 @@ func TestDetectLiteLLMCapabilityFacts(t *testing.T) {
 			"litellm /model_group/info max_input_tokens 128000 -> capabilities.context",
 			"litellm /model_group/info max_output_tokens 16384 -> capabilities.maxOutput",
 			"litellm /model_group/info supports_vision -> capabilities.modalities.input += image",
-			"litellm /model_group/info supports_function_calling true -> capabilities.tools",
-			"litellm /model_group/info supports_parallel_function_calling true -> capabilities.toolsParallel",
-			"litellm /model_group/info supports_web_search false -> capabilities.webSearch",
+			"litellm /model_group/info supports_function_calling -> capabilities.tools",
+			"litellm /model_group/info supports_parallel_function_calling -> capabilities.toolsParallel",
 			"litellm /model_group/info supports_reasoning false -> capabilities.reasoning",
 			"litellm /model_group/info supported_openai_params lists response_format -> capabilities.structured = json_object",
 			"litellm /model/info model_info.supports_prompt_caching -> capabilities.promptCache",
@@ -1198,6 +1197,7 @@ func TestDetectLiteLLMCapabilityFacts(t *testing.T) {
 		}
 		require.NotContains(t, trace, "supports_url_context")
 		require.NotContains(t, trace, "supports_audio_input")
+		require.NotContains(t, trace, "supports_web_search")
 	})
 
 	t.Run("identified upstream keeps litellm as the source prefix", func(t *testing.T) {
@@ -1281,17 +1281,78 @@ func TestDetectLiteLLMCapabilityFacts(t *testing.T) {
 		require.Equal(t, "litellm:/model_group/info.supported_openai_params", api.Evidence["capabilities.structured"])
 	})
 
-	t.Run("audio from either endpoint, deduped", func(t *testing.T) {
+	t.Run("audio comes from the deployment only (ModelGroupInfo carries no supports_audio_input)", func(t *testing.T) {
 		dead, _ := loggingServer(t, http.NewServeMux())
-		group := groupWith(capsGroup, map[string]any{"supports_audio_input": true, "supports_vision": false})
+		group := groupWith(capsGroup, map[string]any{"supports_vision": false})
 		info := groupWith(capsModelInfo, map[string]any{"supports_audio_input": true, "supports_pdf_input": false})
 		litellm, _ := litellmServer(t, group, []map[string]any{deploymentWithInfo("my-chat", "openai/qwen3-235b", dead.URL+"/v1", info)})
 
 		api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
 		require.Equal(t, []string{"audio"}, api.Capabilities.Modalities.Input)
 		require.Equal(t, "litellm:/model/info.model_info.supports_audio_input", api.Evidence["capabilities.modalities.input"])
-		require.Contains(t, trace, "litellm /model_group/info supports_audio_input -> capabilities.modalities.input += audio")
 		require.Contains(t, trace, "litellm /model/info model_info.supports_audio_input -> capabilities.modalities.input += audio")
+		require.NotContains(t, trace, "/model_group/info supports_audio_input")
+	})
+
+	// A wire false on a supports_* flag is ModelGroupInfo's Field(default=False)
+	// for a model the cost map does not know
+	// (https://github.com/BerriAI/litellm/blob/main/litellm/types/router.py);
+	// only supports_reasoning false is a backend negative (contract rule 3).
+	t.Run("explicit false flags publish nothing except supports_reasoning", func(t *testing.T) {
+		dead, _ := loggingServer(t, http.NewServeMux())
+		group := groupWith(capsGroup, map[string]any{
+			"supports_function_calling": false, "supports_parallel_function_calling": false,
+			"supports_web_search": false, "supports_vision": false, "supports_reasoning": false,
+		})
+		info := groupWith(capsModelInfo, map[string]any{
+			"supports_prompt_caching": false, "supports_response_schema": false,
+			"supports_pdf_input": false, "supports_audio_input": false,
+		})
+		litellm, _ := litellmServer(t, group, []map[string]any{deploymentWithInfo("my-chat", "openai/qwen3-235b", dead.URL+"/v1", info)})
+
+		api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
+		require.NotNil(t, api)
+		caps := api.Capabilities
+		require.NotNil(t, caps)
+		require.Nil(t, caps.Tools)
+		require.Nil(t, caps.ToolsParallel)
+		require.Nil(t, caps.WebSearch)
+		require.Nil(t, caps.PromptCache)
+		require.Nil(t, caps.Modalities)
+		require.Equal(t, []string{"json_object"}, caps.Structured, "response_format among supported params; no json_schema without supports_response_schema")
+		require.Equal(t, false, *caps.Reasoning)
+		require.Equal(t, "litellm:/model_group/info.supports_reasoning", api.Evidence["capabilities.reasoning"])
+		for _, key := range []string{"capabilities.tools", "capabilities.toolsParallel", "capabilities.webSearch", "capabilities.promptCache", "capabilities.modalities.input"} {
+			require.NotContains(t, api.Evidence, key)
+		}
+		for _, field := range []string{"supports_function_calling", "supports_parallel_function_calling", "supports_web_search", "supports_vision", "supports_prompt_caching", "supports_response_schema", "supports_pdf_input", "supports_audio_input"} {
+			require.NotContains(t, trace, field, "a false %s is not traced as a fact", field)
+		}
+		require.Contains(t, trace, "litellm /model_group/info supports_reasoning false -> capabilities.reasoning")
+	})
+
+	t.Run("deployment without model_info: group facts only", func(t *testing.T) {
+		dead, _ := loggingServer(t, http.NewServeMux())
+		dep := deployment("my-chat", "openai/qwen3-235b", dead.URL+"/v1", nil)
+		delete(dep, "model_info")
+		litellm, llLog := litellmServer(t, capsGroup, []map[string]any{dep})
+
+		api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
+		require.NotNil(t, api)
+		require.Equal(t, "litellm", api.Stack)
+		require.True(t, llLog.sawPath("/model/info"), "the deployment is read; it just carries no model_info")
+		caps := api.Capabilities
+		require.NotNil(t, caps)
+		require.Equal(t, int64(128000), *caps.Context)
+		require.Equal(t, []string{"image"}, caps.Modalities.Input)
+		require.Equal(t, true, *caps.Tools)
+		require.Nil(t, caps.PromptCache)
+		require.Equal(t, []string{"json_object"}, caps.Structured)
+		require.Equal(t, "litellm:/model_group/info.supported_openai_params", api.Evidence["capabilities.structured"])
+		for key, source := range api.Evidence {
+			require.False(t, strings.HasPrefix(source, litellmDeploymentSource), "%s = %s", key, source)
+		}
+		require.NotContains(t, trace, "litellm /model/info model_info.")
 	})
 
 	t.Run("out-of-range or mistyped values are ignored", func(t *testing.T) {
