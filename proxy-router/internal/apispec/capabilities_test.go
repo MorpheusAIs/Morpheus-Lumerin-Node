@@ -504,10 +504,12 @@ func TestComposeRule8WebSearchGatesTableBindings(t *testing.T) {
 	})
 	t.Run("registry true from a lower layer still gates", func(t *testing.T) {
 		reg := &RegistryFacts{Name: "litellm", Date: "2026-09-25", ModelCapabilities: system.ModelCapabilities{WebSearch: bp(true)}}
-		api := Compose(Evidence{Stack: "venice", ModelName: "llama-3.3-70b", Registry: reg})
+		api, lines := ComposeWithTrace(Evidence{Stack: "venice", ModelName: "llama-3.3-70b", Registry: reg})
 		require.Nil(t, api.Bindings[system.IntentWebSearchEnable], "the registry fills after the tables merge: a snapshot never enables a knob")
 		require.True(t, *api.Capabilities.WebSearch)
 	})
+		require.Contains(t, joined(lines), "bindings: web_search.enable dropped — capabilities.webSearch true comes from the registry only, which never opens a knob")
+		require.NotContains(t, joined(lines), "is not reported true")
 	t.Run("listing-provided web_search binding is not gated", func(t *testing.T) {
 		registry := bindingSet{system.IntentWebSearchEnable: {Kind: bodyParam, Param: "plugins", ParamType: "array", Value: []any{map[string]any{"id": "web"}}}}
 		api := Compose(Evidence{Stack: "openrouter", ModelName: "x/y", RegistryBindings: registry})

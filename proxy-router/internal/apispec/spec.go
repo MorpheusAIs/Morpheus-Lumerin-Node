@@ -227,6 +227,9 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 		caps.fill(factsLayer(&tpl.caps), layerTemplate, tracef)
 	}
 	webSearch := caps.caps.WebSearch != nil && *caps.caps.WebSearch
+	// The registry fills after the tables merge (rule 10, lowest precedence):
+	// a snapshot's view of a model id may publish webSearch, never open a knob.
+	registryWebSearch := !webSearch && ev.Registry != nil && ev.Registry.WebSearch != nil && *ev.Registry.WebSearch
 
 	// A detected gateway may hide its upstream's knob, so family knowledge alone
 	// counts as reasoning evidence only for a declared stack.
@@ -246,7 +249,11 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 		}
 		if !webSearch {
 			delete(api.Bindings, intent)
-			tracef("bindings: %s dropped — capabilities.webSearch is not reported true", intent)
+			if registryWebSearch {
+				tracef("bindings: %s dropped — capabilities.webSearch true comes from the registry only, which never opens a knob", intent)
+			} else {
+				tracef("bindings: %s dropped — capabilities.webSearch is not reported true", intent)
+			}
 			continue
 		}
 		if bindingSources == nil {
