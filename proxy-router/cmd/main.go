@@ -390,7 +390,9 @@ func start() error {
 		// nil check
 		var apiDetect modelhealth.ApiDetector
 		if cfg.Proxy.ModelApiDetectEnabled.Bool != nil && *cfg.Proxy.ModelApiDetectEnabled.Bool {
-			apiDetect = apidetect.NewDetector(appLog, apidetect.DefaultOptions())
+			detectOpts := apidetect.DefaultOptions()
+			detectOpts.CacheTTL = cfg.Proxy.ModelApiDetectTTL
+			apiDetect = apidetect.NewDetector(appLog, detectOpts)
 		} else {
 			appLog.Info("model API auto-detection disabled (MODEL_API_DETECT_ENABLED=false); models without apiStack advertise no api block")
 		}
