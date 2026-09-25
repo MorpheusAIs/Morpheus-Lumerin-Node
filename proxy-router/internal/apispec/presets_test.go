@@ -103,7 +103,8 @@ func TestStackWebSearchBindings(t *testing.T) {
 }
 
 // Every row is literal to https://ai.google.dev/gemini-api/docs/openai (the
-// compatibility endpoint), never to the native generateContent API.
+// compatibility endpoint), never to the native generateContent API, except
+// reasoning.budget's key, which the table comment marks as inferred.
 func TestGeminiPresetTables(t *testing.T) {
 	table := stackBindings["gemini"]
 	require.Len(t, table, 5)
@@ -118,6 +119,8 @@ func TestGeminiPresetTables(t *testing.T) {
 	require.Equal(t, system.BindingKindBodyParam, budget.Kind)
 	require.Equal(t, "extra_body.google.thinking_config.thinking_budget", budget.Param)
 	require.Equal(t, "number", budget.ParamType)
+	require.Contains(t, budget.Hint, "inferred", "the key is not shown in any example on the page")
+	require.NotContains(t, budget.Hint, "minimal|low", "3.1 Pro has no minimal level")
 
 	format := table[system.IntentReasoningFormat]
 	require.Equal(t, system.BindingKindBodyParam, format.Kind)
@@ -139,7 +142,8 @@ func TestGeminiPresetTables(t *testing.T) {
 		require.False(t, strings.HasPrefix(b.Param, "generationConfig."), "%s: native generateContent vocabulary on the compatible endpoint", intent)
 	}
 
-	require.Equal(t, []string{"model", "messages", "stream", "stream_options", "n", "tools", "tool_choice", "reasoning_effort", "response_format", "service_tier", "extra_body"}, stackParameters["gemini"])
+	require.Equal(t, []string{"model", "messages", "stream", "stream_options", "tools", "tool_choice", "reasoning_effort", "response_format", "service_tier", "extra_body"}, stackParameters["gemini"])
+	require.NotContains(t, stackParameters["gemini"], "n", "the page sends n only on images.generate")
 	require.Equal(t, "openai", config.StackTransport["gemini"])
 	require.NotContains(t, familyNativeVendor, "gemini", "the gemini family's rows are native-API vocabulary; the stack table carries the compatible ones")
 	require.True(t, gatedStack("gemini"))

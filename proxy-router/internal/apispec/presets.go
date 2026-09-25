@@ -187,11 +187,24 @@ var stackBindings = map[string]bindingSet{
 	//     chat completions.
 	//   cache.prompt — extra_body.google.cached_content names a pre-created
 	//     cache resource, not a per-request caching switch.
+	// reasoning.budget is the one inferred key: the page names thinking_budget
+	// only in the mapping-table header ("thinking_budget (Gemini 2.5)") and the
+	// overlap note ("reasoning_effort and thinking_level / thinking_budget
+	// ... can't be used at the same time"); every thinking_config example
+	// sends thinking_level and include_thoughts. Its nesting and snake_case
+	// follow those siblings (thinking_config "Corresponds to Gemini's
+	// ThinkingConfig", whose native field is thinkingBudget). The runtime
+	// verifier confirms it per model (ParamBinding.Verified).
+	// response_format.schema: the page shows only the SDK parse helpers
+	// (client.beta.chat.completions.parse(response_format=<Pydantic model>),
+	// zodResponseFormat); the json_schema wire shape is what those serialise.
+	// https://github.com/openai/openai-python/blob/main/helpers.md
+	// https://github.com/openai/openai-node/blob/master/helpers.md
 	"gemini": {
 		system.IntentReasoningEffort:      {Kind: bodyParam, Param: "reasoning_effort", ParamType: "enum", EnumValues: []string{"none", "minimal", "low", "medium", "high"}, Hint: "Gemini 3: thinking_level (minimal reads as low on 3.1 Pro); Gemini 2.5: thinking_budget 1024 / 1024 / 8192 / 24576; none only on Gemini 2.5 Flash / Flash-Lite (rejected on 2.5 Pro and Gemini 3); not combinable with extra_body.google.thinking_config"},
-		system.IntentReasoningBudget:      {Kind: bodyParam, Param: "extra_body.google.thinking_config.thinking_budget", ParamType: "number", Hint: "Gemini 2.5 only (Gemini 3 takes thinking_level minimal|low|medium|high in the same object); not combinable with reasoning_effort"},
+		system.IntentReasoningBudget:      {Kind: bodyParam, Param: "extra_body.google.thinking_config.thinking_budget", ParamType: "number", Hint: "Gemini 2.5 only (Gemini 3 takes thinking_level low|medium|high in the same object; minimal on 3.1 Flash-Lite / 3 Flash only); key inferred from the mapping table, not shown in an example; not combinable with reasoning_effort"},
 		system.IntentReasoningFormat:      {Kind: bodyParam, Param: "extra_body.google.thinking_config.include_thoughts", ParamType: "boolean", Hint: "true returns thought summaries with the message; Gemini 3 also returns thought signatures to resend on later turns"},
-		system.IntentResponseFormatSchema: {Kind: bodyParam, Param: "response_format", ParamType: "object", Hint: `{"type":"json_schema","json_schema":{"name":...,"schema":{...}}} as the SDK parse helpers send it`},
+		system.IntentResponseFormatSchema: {Kind: bodyParam, Param: "response_format", ParamType: "object", Hint: `{"type":"json_schema","json_schema":{"name":...,"schema":{...}}} as client.beta.chat.completions.parse(response_format=<Pydantic/zod schema>) sends it`},
 		system.IntentStreamIncludeUsage:   {Kind: bodyParam, Param: "stream_options.include_usage", ParamType: "boolean", Value: true},
 	},
 }
@@ -253,9 +266,10 @@ var stackParameters = map[string][]string{
 	// Only the request keys the compatibility page itself uses on chat
 	// completions: it publishes no exhaustive list ("Current limitations"), and
 	// silently ignored keys (the page says so for images) are not evidence.
-	// extra_body is the documented carrier of the Gemini-only fields.
+	// n appears only on images.generate there, so it is absent. extra_body is
+	// the documented carrier of the Gemini-only fields.
 	// https://ai.google.dev/gemini-api/docs/openai
-	"gemini": {"model", "messages", "stream", "stream_options", "n", "tools", "tool_choice", "reasoning_effort", "response_format", "service_tier", "extra_body"},
+	"gemini": {"model", "messages", "stream", "stream_options", "tools", "tool_choice", "reasoning_effort", "response_format", "service_tier", "extra_body"},
 }
 
 var openaiChatParameters = []string{"model", "messages", "temperature", "top_p", "n", "stream", "stream_options", "stop", "max_tokens", "max_completion_tokens", "presence_penalty", "frequency_penalty", "logit_bias", "logprobs", "top_logprobs", "user", "seed", "response_format", "tools", "tool_choice", "parallel_tool_calls", "reasoning_effort"}
