@@ -111,11 +111,11 @@ func (d *Detector) probeSGLang(ctx context.Context, base, apiKey string, ev *api
 				entry = matchModelEntry(data, ev.ModelName)
 			}
 			if entry != nil {
-				if n, ok := entry["max_model_len"].(float64); ok {
-					if ev.Caps.SetContext(int64(n), "sglang:/v1/models.max_model_len") {
-						tracef(ctx, "/v1/models.max_model_len %d -> context", int64(n))
+				if n, ok := jsonWholeNumber(entry["max_model_len"]); ok {
+					if ev.Caps.SetContext(n, "sglang:/v1/models.max_model_len") {
+						tracef(ctx, "/v1/models.max_model_len %d -> context", n)
 					} else {
-						tracef(ctx, "/v1/models.max_model_len %v is out of range; ignored", n)
+						tracef(ctx, "/v1/models.max_model_len %d is out of range; ignored", n)
 					}
 				}
 			}

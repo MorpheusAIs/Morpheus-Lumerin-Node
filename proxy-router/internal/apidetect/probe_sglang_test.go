@@ -187,6 +187,22 @@ func TestSGLangContextRejectsOutOfRangeAndUnmatched(t *testing.T) {
 		require.Contains(t, trace, "/v1/models.max_model_len 0 is out of range; ignored")
 	})
 
+	// The one JSON-number reader: a fractional value is not a token count.
+	t.Run("fractional", func(t *testing.T) {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/model_info", jsonHandler(sglangModelInfo(nil)))
+		mux.HandleFunc("/v1/models", jsonHandler(sglangModelsList("Qwen/Qwen3-VL-8B-Instruct", 4096.5)))
+		srv := httptest.NewServer(mux)
+		defer srv.Close()
+
+		api, trace := detectSGLang(t, srv.URL, "alias")
+		require.Nil(t, api.Capabilities.Context)
+		require.NotContains(t, api.Evidence, "capabilities.context")
+		for _, line := range trace {
+			require.NotContains(t, line, "max_model_len")
+		}
+	})
+
 	t.Run("no matching entry", func(t *testing.T) {
 		mux := http.NewServeMux()
 		mux.HandleFunc("/model_info", jsonHandler(sglangModelInfo(nil)))
@@ -334,6 +350,6 @@ func TestSGLangIgnoresWrongTypedFacts(t *testing.T) {
 
 		api, trace := detectSGLang(t, srv.URL, "alias")
 		require.Nil(t, api.Capabilities.Context)
-		require.Contains(t, trace, "/v1/models.max_model_len 2.147483648e+09 is out of range; ignored")
+		require.Contains(t, trace, "/v1/models.max_model_len 2147483648 is out of range; ignored")
 	})
 }
