@@ -332,11 +332,22 @@ func TestMergeRuntimeCapabilityFacts(t *testing.T) {
 		facts.SetMaxOutput(0, "verify:bogus@3")
 		trace := MergeRuntime(api, Runtime{CapabilityFacts: facts})
 		require.Equal(t, []string{"json_schema"}, api.Capabilities.Structured)
-		require.Equal(t, []string{"image"}, api.Capabilities.Modalities.Input)
+		require.Equal(t, []string{"text", "image"}, api.Capabilities.Modalities.Input, "a proven image input implies text (amendment b)")
 		require.Nil(t, api.Capabilities.MaxOutput)
 		require.Equal(t, "verify:json_schema@3", api.Evidence["capabilities.structured"])
 		require.Equal(t, "verify:image@3", api.Evidence["capabilities.modalities.input"])
 		require.Contains(t, trace, "capabilities.structured = json_schema (verify:json_schema@3)")
+		require.Contains(t, trace, "capabilities.modalities.input: text prepended — a chat model accepts text (verify:image@3)")
+	})
+	t.Run("a proven image input on a spec without modalities publishes text and image", func(t *testing.T) {
+		api := Compose(Evidence{Stack: "vllm", ModelName: "qwen3-32b"})
+		require.Nil(t, api.Capabilities)
+		var facts CapabilityFacts
+		facts.AddInputModality("image", verifySource("image", 3))
+		MergeRuntime(api, Runtime{CapabilityFacts: facts})
+		require.Equal(t, []string{"text", "image"}, api.Capabilities.Modalities.Input)
+		require.Nil(t, api.Capabilities.Modalities.Output, "the output list stays as reported")
+		require.Equal(t, verifySource("image", 3), api.Evidence["capabilities.modalities.input"])
 	})
 	t.Run("list facts extend a composed list instead of replacing it", func(t *testing.T) {
 		ev := Evidence{Stack: "vllm", ModelName: "qwen3-32b"}

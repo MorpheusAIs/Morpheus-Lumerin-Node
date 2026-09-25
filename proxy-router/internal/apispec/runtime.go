@@ -241,6 +241,9 @@ func mergeRuntimeCaps(api *system.ModelApiSpec, facts *CapabilityFacts, fillOnly
 	if !changed {
 		return
 	}
+	// Amendment b applies to a runtime fact as it does to a composed one: a
+	// probe proving an image input names the extra modality, not the set.
+	st.implyTextInput(tracef)
 	caps := st.caps
 	api.Capabilities = &caps
 	if api.Evidence == nil {
