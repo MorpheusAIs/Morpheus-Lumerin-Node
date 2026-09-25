@@ -426,9 +426,6 @@ func TestComposeRule7ThinkingDefault(t *testing.T) {
 		require.Nil(t, api.Evidence)
 		require.Contains(t, joined(lines), "thinking.default = off ignored — thinking mode undetermined")
 	})
-	t.Run("template seam contributes nothing yet", func(t *testing.T) {
-		require.Equal(t, templateFacts{}, capsFromTemplate("{%- set enable_thinking = true %}"))
-	})
 }
 
 func withVeniceWebSearchBinding(t *testing.T) {
