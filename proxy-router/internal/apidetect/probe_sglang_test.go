@@ -93,7 +93,8 @@ func TestSGLangModelInfoFacts(t *testing.T) {
 	require.NotNil(t, caps.Context)
 	require.Equal(t, int64(40960), *caps.Context)
 	require.Equal(t, "sglang:/v1/models.max_model_len", api.Evidence["capabilities.context"])
-	require.Equal(t, "qwen3", api.ModelFamily, "architectures[0] drives the family, not the alias")
+	require.Equal(t, "qwen3", api.ModelFamily)
+	require.Contains(t, trace, `family "qwen3": from backend-reported architecture "Qwen3VLForConditionalGeneration"`)
 	require.Contains(t, trace, `/model_info.architectures[0] "Qwen3VLForConditionalGeneration" -> architecture`)
 	require.Contains(t, trace, `/model_info.reasoning_parser "qwen3" -> reasoning`)
 	require.Contains(t, trace, `/model_info.tool_call_parser "qwen25" -> tools`)
@@ -112,9 +113,10 @@ func TestSGLangDeprecatedAliasFallback(t *testing.T) {
 	api, trace := detectSGLang(t, srv.URL, "alias")
 	require.Contains(t, trace, `identified sglang by /get_model_info; served model path "Qwen/Qwen3-VL-8B-Instruct"`)
 	require.Equal(t, []string{"image", "audio"}, api.Capabilities.Modalities.Input)
-	require.Equal(t, "sglang:/model_info.has_audio_understanding", api.Evidence["capabilities.modalities.input"])
+	require.Equal(t, "sglang:/get_model_info.has_audio_understanding", api.Evidence["capabilities.modalities.input"],
+		"evidence names the endpoint that answered")
 	require.Nil(t, api.Capabilities.Context, "no /v1/models answer leaves context unset")
-	require.Equal(t, "sglang:/model_info", api.Evidence["capabilities.structured"])
+	require.Equal(t, "sglang:/get_model_info", api.Evidence["capabilities.structured"])
 }
 
 func TestSGLangEmbeddingModel(t *testing.T) {
@@ -216,4 +218,122 @@ func TestSGLangArchitectureDoesNotOverrideEarlierEvidence(t *testing.T) {
 	for _, line := range tr.lines {
 		require.NotContains(t, line, "architectures[0]")
 	}
+}
+
+func TestSGLangClassifierIsNotEmbeddings(t *testing.T) {
+	for _, task := range []string{"classify", "none"} {
+		t.Run(task, func(t *testing.T) {
+			mux := http.NewServeMux()
+			mux.HandleFunc("/model_info", jsonHandler(sglangModelInfo(map[string]any{
+				"model_path":       "Qwen/Qwen3-Reranker-0.6B",
+				"is_generation":    false,
+				"reasoning_parser": nil,
+				"tool_call_parser": nil,
+				"architectures":    []string{"Qwen3ForSequenceClassification"},
+				"embedding":        map[string]any{"family": "qwen3", "task": task},
+			})))
+			srv := httptest.NewServer(mux)
+			defer srv.Close()
+
+			api, trace := detectSGLang(t, srv.URL, "alias")
+			require.Nil(t, api.Capabilities.Embeddings)
+			require.NotContains(t, api.Evidence, "capabilities.embeddings")
+			require.NotContains(t, api.Evidence, "capabilities.modalities.output")
+			require.Contains(t, trace, `/model_info.is_generation false but embedding.task "`+task+`" -> no embeddings fact`)
+		})
+	}
+
+	t.Run("embed task keeps the fact", func(t *testing.T) {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/model_info", jsonHandler(sglangModelInfo(map[string]any{
+			"is_generation": false,
+			"embedding":     map[string]any{"task": "embed"},
+		})))
+		srv := httptest.NewServer(mux)
+		defer srv.Close()
+
+		api, _ := detectSGLang(t, srv.URL, "alias")
+		require.NotNil(t, api.Capabilities.Embeddings)
+		require.True(t, *api.Capabilities.Embeddings)
+	})
+
+	t.Run("malformed embedding block does not suppress", func(t *testing.T) {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/model_info", jsonHandler(sglangModelInfo(map[string]any{
+			"is_generation": false,
+			"embedding":     map[string]any{"task": 3},
+		})))
+		srv := httptest.NewServer(mux)
+		defer srv.Close()
+
+		api, _ := detectSGLang(t, srv.URL, "alias")
+		require.NotNil(t, api.Capabilities.Embeddings)
+	})
+}
+
+func TestSGLangContextFromServedModelNameWithLoRA(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/model_info", jsonHandler(sglangModelInfo(nil)))
+	mux.HandleFunc("/v1/models", jsonHandler(map[string]any{
+		"object": "list",
+		"data": []map[string]any{
+			{"id": "qwen3-vl", "object": "model", "root": "qwen3-vl", "max_model_len": 40960},
+			{"id": "lora-a", "object": "model", "root": "/lora/a", "parent": "qwen3-vl", "max_model_len": nil},
+		},
+	}))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	api, trace := detectSGLang(t, srv.URL, "alias")
+	require.NotNil(t, api.Capabilities.Context)
+	require.Equal(t, int64(40960), *api.Capabilities.Context, "served_model_name selects the base card")
+	require.Contains(t, trace, "/v1/models.max_model_len 40960 -> context")
+}
+
+func TestSGLangIgnoresWrongTypedFacts(t *testing.T) {
+	t.Run("wrong JSON types", func(t *testing.T) {
+		mux := http.NewServeMux()
+		// A model path with no family keeps the family-default bindings (and the
+		// reasoning fact derived from them) out of the picture.
+		mux.HandleFunc("/model_info", jsonHandler(sglangModelInfo(map[string]any{
+			"model_path":              "org/plain-model",
+			"served_model_name":       "plain",
+			"reasoning_parser":        7,
+			"tool_call_parser":        "",
+			"has_image_understanding": "yes",
+			"has_audio_understanding": 1,
+			"is_generation":           "false",
+			"architectures":           []string{},
+		})))
+		mux.HandleFunc("/v1/models", jsonHandler(sglangModelsList("plain", "40960")))
+		srv := httptest.NewServer(mux)
+		defer srv.Close()
+
+		api, trace := detectSGLang(t, srv.URL, "alias")
+		caps := api.Capabilities
+		require.NotNil(t, caps)
+		require.Nil(t, caps.Reasoning)
+		require.Nil(t, caps.Tools)
+		require.Nil(t, caps.Embeddings)
+		require.Nil(t, caps.Modalities)
+		require.Nil(t, caps.Context)
+		require.Empty(t, api.ModelFamily)
+		for _, line := range trace {
+			require.NotContains(t, line, "architectures[0]")
+			require.NotContains(t, line, "max_model_len")
+		}
+		require.Equal(t, []string{"json_object", "json_schema", "grammar", "regex"}, caps.Structured)
+	})
+
+	t.Run("max_model_len at the upper bound", func(t *testing.T) {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/model_info", jsonHandler(sglangModelInfo(nil)))
+		mux.HandleFunc("/v1/models", jsonHandler(sglangModelsList("Qwen/Qwen3-VL-8B-Instruct", int64(1)<<31)))
+		srv := httptest.NewServer(mux)
+		defer srv.Close()
+
+		api, trace := detectSGLang(t, srv.URL, "alias")
+		require.Nil(t, api.Capabilities.Context)
+		require.Contains(t, trace, "/v1/models.max_model_len 2.147483648e+09 is out of range; ignored")
+	})
 }
