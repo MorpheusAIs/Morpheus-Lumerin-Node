@@ -104,9 +104,29 @@ func (h *ChatHistory) AppendChatHistory(req *OpenAICompletionRequestExtra) *Open
 func ConvertChatCompletionRequest(prompt *openai.ChatCompletionRequest) OpenAiCompletionRequest {
 	messages := make([]ChatCompletionMessage, 0)
 	for _, r := range prompt.Messages {
+		// Carry multimodal parts through to storage. Previously only Content
+		// was copied, so a vision prompt was persisted as an empty string —
+		// the message survived in history but its image (and any text sent
+		// alongside it as a part rather than as Content) was dropped.
+		var multi []ChatMessagePart
+		for _, p := range r.MultiContent {
+			part := ChatMessagePart{
+				Type: ChatMessagePartType(p.Type),
+				Text: p.Text,
+			}
+			if p.ImageURL != nil {
+				part.ImageURL = &ChatMessageImageURL{
+					URL:    p.ImageURL.URL,
+					Detail: ImageURLDetail(p.ImageURL.Detail),
+				}
+			}
+			multi = append(multi, part)
+		}
+
 		messages = append(messages, ChatCompletionMessage{
-			Content: r.Content,
-			Role:    r.Role,
+			Content:      r.Content,
+			Role:         r.Role,
+			MultiContent: multi,
 		})
 	}
 

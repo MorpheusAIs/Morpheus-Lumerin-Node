@@ -1,4 +1,4 @@
-// import './assets/main.css'
+import './ui/interface.css';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import ReactModal from 'react-modal';

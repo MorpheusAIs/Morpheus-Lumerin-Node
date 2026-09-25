@@ -852,6 +852,22 @@ definitions:
     - endpoint
     - stake
     type: object
+  structs.ErrRes:
+    properties:
+      error:
+        example: error message
+        type: string
+      progress:
+        $ref: '#/definitions/lib.GatewayProgress'
+      sessionID:
+        type: string
+    type: object
+  structs.ExistingSessionRes:
+    properties:
+      existingSessionID:
+        example: "0x1234"
+        type: string
+    type: object
   structs.InputEntry:
     properties:
       key:
@@ -904,6 +920,38 @@ definitions:
           type: string
         type: array
     type: object
+  structs.ModelPrice:
+    properties:
+      bid_count:
+        description: |-
+          BidCount counts the live bids the prices were taken from, so a client can
+          say "cheapest of 4" rather than implying a single quoted price.
+        type: integer
+      max_price_per_second_wei:
+        type: string
+      min_price_per_second_wei:
+        description: |-
+          MinPricePerSecondWei and MaxPricePerSecondWei are equal when a model has
+          exactly one live bid, and both are empty when it has none. An empty pair
+          means "no provider", which is not the same as "free", so clients must not
+          coerce it to zero.
+        type: string
+      model_id:
+        type: string
+    type: object
+  structs.ModelPricesRes:
+    properties:
+      failed_model_ids:
+        description: FailedModelIDs lists models whose bids could not be read this
+          time.
+        items:
+          type: string
+        type: array
+      prices:
+        items:
+          $ref: '#/definitions/structs.ModelPrice'
+        type: array
+    type: object
   structs.ModelRes:
     properties:
       model:
@@ -920,13 +968,6 @@ definitions:
     type: string
     x-enum-comments:
       ModelTypeUnknown: Default type for unknown models
-    x-enum-descriptions:
-    - ""
-    - ""
-    - ""
-    - ""
-    - ""
-    - Default type for unknown models
     x-enum-varnames:
     - ModelTypeLLM
     - ModelTypeSTT
@@ -969,10 +1010,57 @@ definitions:
         example: "0x1234"
         type: string
     type: object
+  structs.OpenSessionStakeEstimate:
+    properties:
+      bid_id:
+        type: string
+      direct_payment:
+        type: boolean
+      duration_seconds:
+        type: string
+      emissions_budget_wei:
+        type: string
+      explanation:
+        type: string
+      mor_supply_wei:
+        type: string
+      price_per_second_wei:
+        type: string
+      session_cost_wei:
+        type: string
+      stake_wei:
+        type: string
+      top_bid_provider:
+        type: string
+      top_bid_score:
+        type: number
+    type: object
   structs.OpenSessionWithDurationRequest:
     properties:
+      directPayment:
+        description: |-
+          DirectPayment pays the provider out of the amount escrowed for this
+          session instead of out of the emissions pool. Opening against a chosen
+          bid used to force staking, so a consumer picking their own provider had
+          no way to pay directly.
+        type: boolean
       maxStakeWei:
+        description: |-
+          MaxStakeWei caps how much MOR a gateway-managed session is allowed to
+          stake, letting a companion gateway enforce a spending ceiling on behalf
+          of the wallet it manages.
         type: integer
+      rejectExisting:
+        description: |-
+          RejectExisting asks the router to refuse this open when the wallet already
+          has a live session for the bid's model. It mirrors the field of the same
+          name on OpenSessionWithFailover: a consumer who picks their own provider
+          is choosing a route to a model, not asking for a second session, and
+          without this the by-bid route was the one way to lock a second lot of MOR
+          against a model the wallet was already paying for. Opt-in for the same
+          reason as on the by-model route, so callers that deliberately run parallel
+          sessions keep working.
+        type: boolean
       sessionDuration:
         type: integer
     type: object
@@ -988,6 +1076,13 @@ definitions:
           backend just failed a prompt (impaired provider failover).
         example: 0x1234567890abcdef1234567890abcdef12345678
         type: string
+      rejectExisting:
+        description: |-
+          RejectExisting asks the router to refuse this open when the wallet already
+          has a live session for the same model. It is opt-in so existing API and
+          mobile callers that intentionally manage multiple sessions keep their
+          current behaviour.
+        type: boolean
       sessionDuration:
         type: integer
     type: object
@@ -1023,7 +1118,6 @@ definitions:
       id:
         type: string
       score:
-        format: float64
         type: number
     type: object
   structs.ScoredBidsRes:
@@ -1070,6 +1164,15 @@ definitions:
       stake:
         type: integer
       user:
+        type: string
+    type: object
+  structs.SessionDurationBounds:
+    properties:
+      max_seconds:
+        example: "86400"
+        type: string
+      min_seconds:
+        example: "300"
         type: string
     type: object
   structs.SessionRes:
@@ -1243,6 +1346,13 @@ definitions:
       status:
         type: string
     type: object
+  walletapi.SetDerivationPathReqBody:
+    properties:
+      derivationPath:
+        type: string
+    required:
+    - derivationPath
+    type: object
   walletapi.SetupWalletMnemonicReqBody:
     properties:
       derivationPath:
@@ -1270,6 +1380,19 @@ definitions:
     properties:
       address:
         example: "0x1234"
+        type: string
+      derivationPath:
+        description: |-
+          DerivationPath is the active path for a mnemonic wallet. A bare index
+          ("0", "1") is interpreted relative to m/44'/60'/0'/0.
+        example: "0"
+        type: string
+      kind:
+        description: |-
+          Kind is how the key is stored: "mnemonic", "privateKey" or "env".
+          Clients use it to decide whether HD account switching is offered — a
+          privateKey or env wallet has no seed to derive further accounts from.
+        example: mnemonic
         type: string
     type: object
 externalDocs:
@@ -1632,6 +1755,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.OpenSessionRes'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/structs.ExistingSessionRes'
       security:
       - BasicAuth: []
       summary: Open Session by bidId in blockchain
@@ -1813,11 +1940,70 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.OpenSessionRes'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/structs.ExistingSessionRes'
       security:
       - BasicAuth: []
       summary: Open Session by ModelID in blockchain
       tags:
       - sessions
+  /blockchain/models/{id}/session/estimate:
+    get:
+      description: Returns the MOR amount an open would move and every input it was
+        derived from, for the top-scored bid or for one named bid
+      parameters:
+      - description: Model ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Session length in seconds
+        in: query
+        name: sessionDuration
+        required: true
+        type: integer
+      - description: Pay the provider from the escrowed amount instead of staking
+        in: query
+        name: directPayment
+        type: boolean
+      - description: Quote this bid instead of the top-scored one
+        in: query
+        name: bidId
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.OpenSessionStakeEstimate'
+      security:
+      - BasicAuth: []
+      summary: Estimate what opening a session costs
+      tags:
+      - sessions
+  /blockchain/models/prices:
+    get:
+      description: Get the live price range per second of compute for every registered
+        model, so a client can rank models by cost without one request per model
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.ModelPricesRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+      security:
+      - BasicAuth: []
+      summary: Get price index for every model
+      tags:
+      - models
   /blockchain/providers:
     get:
       description: Get providers list from blokchain
@@ -2092,6 +2278,22 @@ paths:
       security:
       - BasicAuth: []
       summary: Get Todays Budget
+      tags:
+      - sessions
+  /blockchain/sessions/duration:
+    get:
+      description: Returns MIN_SESSION_DURATION and getMaxSessionDuration so consumers
+        stop hardcoding them
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.SessionDurationBounds'
+      security:
+      - BasicAuth: []
+      summary: Get the session length range the contract accepts
       tags:
       - sessions
   /blockchain/sessions/provider:
@@ -2955,7 +3157,8 @@ paths:
       responses:
         "200":
           description: OK
-          schema: {}
+          schema:
+            type: object
       security:
       - BasicAuth: []
       summary: Call agent tool
@@ -3068,6 +3271,15 @@ paths:
         format: hex32
         in: header
         name: chat_id
+        type: string
+      - description: Request-local chat history mode. 'off' disables storing and forwarding
+          context for this request; 'on' and 'default' preserve the server policy.
+        enum:
+        - default
+        - "on"
+        - "off"
+        in: header
+        name: x-morpheus-history
         type: string
       - description: Prompt
         in: body
@@ -3301,6 +3513,30 @@ paths:
       security:
       - BasicAuth: []
       summary: Get Wallet
+      tags:
+      - wallet
+  /wallet/derivationPath:
+    post:
+      description: Re-derives the active key from the stored mnemonic using a new
+        derivation path. A bare index ("0", "1") is relative to m/44'/60'/0'/0. Fails
+        if the wallet was imported as a raw private key.
+      parameters:
+      - description: Derivation path or account index
+        in: body
+        name: derivationPath
+        required: true
+        schema:
+          $ref: '#/definitions/walletapi.SetDerivationPathReqBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/walletapi.WalletRes'
+      security:
+      - BasicAuth: []
+      summary: Switch HD account
       tags:
       - wallet
   /wallet/mnemonic:

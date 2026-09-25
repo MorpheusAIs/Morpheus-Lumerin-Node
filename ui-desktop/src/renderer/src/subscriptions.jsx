@@ -36,7 +36,7 @@ export const subscribeToMainProcessMessages = function (store) {
   // Subscribe to every IPC message defined above and dispatch a
   // Redux action of type { type: MSG_NAME, payload: MSG_ARG }
   ipcMessages.forEach((msgName) =>
-    window.ipcRenderer.on(msgName, (_, payload) => {
+    window.ipcRenderer.on(msgName, (payload) => {
       store.dispatch({ type: msgName, payload });
     }),
   );

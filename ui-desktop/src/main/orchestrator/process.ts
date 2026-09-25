@@ -19,6 +19,7 @@ export interface Process {
 
 export interface Pinger {
   ping(timeoutMs?: number): Promise<void>
+  setExpectedHeader?(expectedHeader?: { name: string; value: string }): void
 }
 
 export interface StateInfo {

@@ -1,27 +1,27 @@
 'use strict'
 
-const { ipcMain } = require('electron')
+import { ipcMain } from 'electron'
 const stringify = require('json-stringify-safe')
 
 import logger from '../../../logger'
+import { isTrustedRendererEvent } from '../../../rendererTrust'
 import WalletError from '../WalletError'
 
 export function getLogData(data) {
   if (!data) {
     return ''
   }
-  const logData = Object.assign({}, data)
-
-  const blackList = ['password']
-  blackList.forEach((w) => delete logData[w])
-
-  return stringify(logData)
+  return stringify(data, (key, value) =>
+    /password|private.?key|mnemonic|seed|authorization|auth.?header|token/i.test(key)
+      ? '[redacted]'
+      : value
+  )
 }
 
 export const checkIfLoggableEvent = (eventName) => eventName !== 'persist-state'
 
 export const isPromise = (p) => {
-  if (typeof p === 'object' && typeof p.then === 'function') {
+  if (p && (typeof p === 'object' || typeof p === 'function') && typeof p.then === 'function') {
     return true
   }
 
@@ -29,22 +29,28 @@ export const isPromise = (p) => {
 }
 
 export const ignoreChain = (chain, data) =>
-  chain !== 'multi' && chain !== 'none' && data.chain && chain !== data.chain
+  chain !== 'multi' && chain !== 'none' && data?.chain && chain !== data.chain
 
 export function onRendererEvent(eventName, handler, chain) {
   ipcMain.on(eventName, function (event, evProps) {
+    if (!isTrustedRendererEvent(event)) {
+      logger.warn(`Rejected ${eventName} from an untrusted renderer`)
+      return
+    }
+    if (!evProps || typeof evProps !== 'object' || Array.isArray(evProps)) {
+      logger.warn(`Rejected malformed ${eventName} IPC payload`)
+      return
+    }
     const { id, data } = evProps
+    if ((typeof id !== 'string' && typeof id !== 'number') || String(id).length > 200) {
+      logger.warn(`Rejected malformed ${eventName} IPC correlation id`)
+      return
+    }
     if (ignoreChain(chain, data)) {
       return
     }
-    const result = handler(data)
-
-    if (!isPromise(result)) {
-      logger.warn(`<-- ${eventName} result is not a promise!. ${result}`)
-      return
-    }
-
-    result
+    Promise.resolve()
+      .then(() => handler(data))
       .then(function (res) {
         if (event.sender.isDestroyed()) {
           return
@@ -55,9 +61,10 @@ export function onRendererEvent(eventName, handler, chain) {
         if (event.sender.isDestroyed()) {
           return
         }
-        const error = new WalletError(err.message)
+        const message = String(err?.message ?? 'The desktop operation failed.').slice(0, 2_000)
+        const error = new WalletError(message)
         event.sender.send(eventName, { id, data: { error } })
-        logger.warn(`<-- ${eventName}:${id} ${err.message}`)
+        logger.warn(`<-- ${eventName}:${id} ${message}`)
       })
       .catch(function (err) {
         logger.warn(`Could not send message to renderer: ${err.message}`)
