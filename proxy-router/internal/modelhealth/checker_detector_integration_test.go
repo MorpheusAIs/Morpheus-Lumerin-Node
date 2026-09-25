@@ -249,6 +249,8 @@ func TestIntegrationCheckerDetectsLlamaCppBackend(t *testing.T) {
 	require.NotNil(t, second.Api)
 	require.Equal(t, api.DeclaredAt, second.Api.DeclaredAt, "an unchanged spec keeps its DeclaredAt")
 	require.Equal(t, "llamacpp", second.Api.Stack)
+	require.NotNil(t, second.Api.Capabilities)
+	require.NotNil(t, second.Api.Capabilities.Context)
 	require.Equal(t, integrationServedCtx, *second.Api.Capabilities.Context)
 }
 
@@ -272,7 +274,9 @@ func TestIntegrationDeclaredContextWinsOverDetected(t *testing.T) {
 	require.NotNil(t, caps.ContextTrained)
 	require.Equal(t, integrationTrainedCtx, *caps.ContextTrained, "a field the block does not name keeps the backend fact")
 	require.Equal(t, "llamacpp:/v1/models.meta.n_ctx_train", api.Evidence[system.EvidenceKeyCapability("contextTrained")])
+	require.NotNil(t, caps.Modalities)
 	require.Equal(t, []string{"text", "image"}, caps.Modalities.Input)
+	require.NotNil(t, caps.Tools)
 	require.True(t, *caps.Tools)
 	require.Equal(t, 1, backend.count("GET /props"))
 }
