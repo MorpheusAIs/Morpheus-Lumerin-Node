@@ -68,6 +68,7 @@
               "consumers/install-from-source",
               "consumers/buy-bid",
               "consumers/chat",
+              "consumers/decisions",
               "consumers/troubleshooting"
             ]
           },

@@ -73,7 +73,7 @@ type Config struct {
 		AuthConfigFilePath         string        `env:"AUTH_CONFIG_FILE_PATH" flag:"auth-config-file-path" validate:"omitempty"`
 		LLMTimeout                 time.Duration `env:"LLM_TIMEOUT" flag:"llm-timeout" validate:"omitempty" desc:"timeout for PNode to LLM requests, applies to both streaming and non-streaming"`
 		CNodePNodeTimeout          time.Duration `env:"CNODE_PNODE_TIMEOUT" flag:"cnode-pnode-timeout" validate:"omitempty" desc:"per-attempt timeout for CNode waiting for PNode first response"`
-		CNodePNodeMaxRetries       int           `env:"CNODE_PNODE_MAX_RETRIES" flag:"cnode-pnode-max-retries" validate:"omitempty,gte=0" desc:"max retries for CNode to PNode read timeout (chat/embeddings)"`
+		CNodePNodeMaxRetries       int           `env:"CNODE_PNODE_MAX_RETRIES" flag:"cnode-pnode-max-retries" validate:"omitempty,gte=0" desc:"max retries for CNode to PNode read timeout (chat/embeddings/decisions)"`
 		CNodePNodeAudioMaxRetries  int           `env:"CNODE_PNODE_AUDIO_MAX_RETRIES" flag:"cnode-pnode-audio-max-retries" validate:"omitempty,gte=0" desc:"max retries for CNode to PNode read timeout (audio transcription/speech)"`
 		ModelHealthCheckDisabled   bool          `env:"MODEL_HEALTH_CHECK_DISABLED" flag:"model-health-check-disabled" desc:"disable periodic model health self-checks on provider"`
 		ModelHealthCheckInterval   time.Duration `env:"MODEL_HEALTH_CHECK_INTERVAL" flag:"model-health-check-interval" validate:"omitempty,duration" desc:"how often to probe configured models with a test prompt, result is cached between runs"`

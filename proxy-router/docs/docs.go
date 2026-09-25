@@ -1845,6 +1845,37 @@ const docTemplate = `{
                 }
             }
         },
+        "/config/models/reload": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Re-read models-config.json and swap the in-memory model table without restarting the node. New models are servable immediately and a health sweep is queued so those with a bid are probed now. A file that fails to parse leaves the running table untouched and returns 400.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Reload models config",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/system.ModelsReloadRes"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/system.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/docker/build": {
             "post": {
                 "security": [
@@ -2796,7 +2827,9 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK",
-                        "schema": {}
+                        "schema": {
+                            "type": "object"
+                        }
                     }
                 }
             }
@@ -3131,6 +3164,63 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/proxyapi.ResultResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/decisions": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Evaluate state against typed questions (TypeSafe System One / OpenRouter Decisions core). Non-streaming single JSON.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "decisions"
+                ],
+                "summary": "Submit a Decisions request",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "hex32",
+                        "description": "Session ID",
+                        "name": "session_id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "hex32",
+                        "description": "Model ID",
+                        "name": "model_id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "hex32",
+                        "description": "Chat ID",
+                        "name": "chat_id",
+                        "in": "header"
+                    },
+                    {
+                        "description": "Decisions request parameters",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.DecisionsRequestExample"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
                         }
                     }
                 }
@@ -3839,6 +3929,46 @@ const docTemplate = `{
                 }
             }
         },
+        "lib.GatewayProgress": {
+            "type": "object",
+            "properties": {
+                "completed": {
+                    "type": "boolean"
+                },
+                "http_status": {
+                    "type": "integer"
+                },
+                "journal_write_error": {
+                    "type": "string"
+                },
+                "sessionID": {
+                    "type": "string"
+                },
+                "stage": {
+                    "type": "string"
+                },
+                "transactions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/lib.GatewayTransaction"
+                    }
+                },
+                "updated_at": {
+                    "type": "integer"
+                }
+            }
+        },
+        "lib.GatewayTransaction": {
+            "type": "object",
+            "properties": {
+                "hash": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                }
+            }
+        },
         "morrpcmesssage.SessionRes": {
             "type": "object",
             "required": [
@@ -4023,6 +4153,23 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "string"
+                }
+            }
+        },
+        "proxyapi.DecisionsRequestExample": {
+            "type": "object",
+            "properties": {
+                "model": {
+                    "type": "string",
+                    "example": "jev-1.13.0"
+                },
+                "questions": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "state": {
+                    "type": "string",
+                    "example": "Ticket: invoice dispute, customer asks chargeback timeline."
                 }
             }
         },
@@ -4625,6 +4772,12 @@ const docTemplate = `{
                 "error": {
                     "type": "string",
                     "example": "error message"
+                },
+                "progress": {
+                    "$ref": "#/definitions/lib.GatewayProgress"
+                },
+                "sessionID": {
+                    "type": "string"
                 }
             }
         },
@@ -4694,7 +4847,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "modelType": {
-                    "description": "Type of the model (LLM, STT, TTS, EMBEDDING)",
+                    "description": "Type of the model (LLM, STT, TTS, EMBEDDING, DECISIONS)",
                     "allOf": [
                         {
                             "$ref": "#/definitions/structs.ModelType"
@@ -4770,6 +4923,7 @@ const docTemplate = `{
                 "STT",
                 "TTS",
                 "EMBEDDING",
+                "DECISIONS",
                 "UNKNOWN"
             ],
             "x-enum-comments": {
@@ -4780,6 +4934,7 @@ const docTemplate = `{
                 "ModelTypeSTT",
                 "ModelTypeTTS",
                 "ModelTypeEMBEDDING",
+                "ModelTypeDECISIONS",
                 "ModelTypeUnknown"
             ]
         },
@@ -4824,6 +4979,9 @@ const docTemplate = `{
         "structs.OpenSessionRes": {
             "type": "object",
             "properties": {
+                "progress": {
+                    "$ref": "#/definitions/lib.GatewayProgress"
+                },
                 "sessionID": {
                     "type": "string",
                     "example": "0x1234"
@@ -4874,6 +5032,10 @@ const docTemplate = `{
                 "directPayment": {
                     "description": "DirectPayment pays the provider out of the amount escrowed for this\nsession instead of out of the emissions pool. Opening against a chosen\nbid used to force staking, so a consumer picking their own provider had\nno way to pay directly.",
                     "type": "boolean"
+                },
+                "maxStakeWei": {
+                    "description": "MaxStakeWei caps how much MOR a gateway-managed session is allowed to\nstake, letting a companion gateway enforce a spending ceiling on behalf\nof the wallet it manages.",
+                    "type": "integer"
                 },
                 "rejectExisting": {
                     "description": "RejectExisting asks the router to refuse this open when the wallet already\nhas a live session for the bid's model. It mirrors the field of the same\nname on OpenSessionWithFailover: a consumer who picks their own provider\nis choosing a route to a model, not asking for a second session, and\nwithout this the by-bid route was the one way to lock a second lot of MOR\nagainst a model the wallet was already paying for. Opt-in for the same\nreason as on the by-model route, so callers that deliberately run parallel\nsessions keep working.",
@@ -5128,6 +5290,9 @@ const docTemplate = `{
         "structs.TxRes": {
             "type": "object",
             "properties": {
+                "progress": {
+                    "$ref": "#/definitions/lib.GatewayProgress"
+                },
                 "tx": {
                     "type": "string",
                     "example": "0x1234"
@@ -5155,7 +5320,21 @@ const docTemplate = `{
                 },
                 "config": {},
                 "derivedConfig": {},
+                "gatewayCapabilities": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "system.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
                     "type": "string"
                 }
             }
@@ -5236,6 +5415,26 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "string"
+                }
+            }
+        },
+        "system.ModelsReloadRes": {
+            "type": "object",
+            "properties": {
+                "added": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "healthSweepQueued": {
+                    "type": "boolean"
+                },
+                "removed": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },

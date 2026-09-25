@@ -1074,6 +1074,8 @@ func (p *ProxyServiceSender) processAIResponse(requestType string, aiResponse []
 		return p.handleChatCompletion(aiResponse, responses, promptTokens, accumulatedContent, accumulatedReasoning)
 	case "embeddings":
 		return p.handleEmbeddings(aiResponse, responses)
+	case "decisions":
+		return p.handleDecisions(aiResponse, responses)
 	default:
 		return p.handleMediaGeneration(aiResponse, responses)
 	}
@@ -1262,6 +1264,23 @@ func (p *ProxyServiceSender) handleEmbeddings(aiResponse []byte, responses []int
 	}
 
 	return nil, 0, false, lib.WrapError(ErrInvalidResponse, fmt.Errorf("unknown embeddings response format"))
+}
+
+// handleDecisions processes Decisions modality responses
+func (p *ProxyServiceSender) handleDecisions(aiResponse []byte, responses []interface{}) (gcs.Chunk, int, bool, error) {
+	if aiResponse == nil || len(aiResponse) == 0 {
+		return nil, 0, false, lib.WrapError(ErrInvalidResponse, fmt.Errorf("empty decisions response"))
+	}
+
+	var decisionsResp gcs.DecisionsResponse
+	if err := json.Unmarshal(aiResponse, &decisionsResp); err == nil && decisionsResp.Answers != nil {
+		chunk := gcs.NewChunkDecisions(decisionsResp)
+		responses = append(responses, decisionsResp)
+		tokens := decisionsResp.Usage.InputTokens + decisionsResp.Usage.OutputTokens
+		return chunk, tokens, true, nil
+	}
+
+	return nil, 0, false, lib.WrapError(ErrInvalidResponse, fmt.Errorf("unknown decisions response format"))
 }
 
 // checkProviderAvailability preserves the current behavior while the external
@@ -1702,5 +1721,80 @@ func (p *ProxyServiceSender) SendEmbeddings(ctx context.Context, sessionID commo
 	}
 
 	log.Infof("Successfully completed embeddings generation for session %s with TTFT: %dms, inputTokens: %d, outputTokens: %d", sessionID.Hex(), ttftMs, inputTokens, outputTokens)
+	return result, nil
+}
+
+// SendDecisions sends a Decisions modality request (embeddings-parity plumbing).
+// J7: Extra["type"] is stamped server-side as "decisions" (overwrite, never trust client).
+// J4: uses CNodePNodeMaxRetries via requestType "decisions" (non-audio).
+// J5: TEE attestation same as embeddings.
+func (p *ProxyServiceSender) SendDecisions(ctx context.Context, sessionID common.Hash, decisionsRequest *gcs.DecisionsRequest, cb gcs.CompletionCallback) (interface{}, error) {
+	requestID := lib.RequestIDFromContext(ctx)
+	if requestID == "" {
+		requestID = lib.GenerateRequestID()
+	}
+	log := p.log.With("request_id", requestID, "session_id", sessionID.Hex())
+
+	session, provider, err := p.validateSession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := p.verifyTEEAttestation(ctx, provider.Url, provider.Addr, session.IsTee()); err != nil {
+		log.Warnf("TEE attestation check failed: %s", err)
+		return nil, lib.WrapError(ErrProvider, err)
+	}
+
+	// J2: never log full state/questions at info
+	log.Infof("acquiring session semaphore for session %s (decisions)", sessionID.Hex())
+	if err := p.sessionSema.Acquire(ctx, sessionID); err != nil {
+		return nil, fmt.Errorf("request cancelled while waiting in queue: %w", err)
+	}
+	defer p.sessionSema.Release(sessionID)
+	log.Infof("acquired session semaphore for session %s (decisions)", sessionID.Hex())
+
+	prKey, err := p.privateKey.GetPrivateKey()
+	if err != nil {
+		return nil, ErrMissingPrKey
+	}
+
+	// J7: server-side overwrite of modality discriminant
+	if decisionsRequest.Extra == nil {
+		decisionsRequest.Extra = make(map[string]json.RawMessage)
+	}
+	decisionsRequest.Extra["type"] = json.RawMessage(`"decisions"`)
+
+	pubKey, err := lib.StringToHexString(provider.PubKey)
+	if err != nil {
+		return nil, lib.WrapError(ErrCreateReq, err)
+	}
+
+	message, err := p.morRPC.SessionPromptRequest(sessionID, decisionsRequest, pubKey, prKey, requestID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create decisions request: %w", err)
+	}
+
+	startTime := time.Now().Unix()
+
+	result, ttftMs, inputTokens, outputTokens, err := p.rpcRequestStreamV2(ctx, cb, provider.Url, message, pubKey, "decisions", 0)
+
+	if err != nil {
+		if !session.FailoverEnabled() {
+			return nil, lib.WrapError(ErrProvider, err)
+		}
+
+		newSessionID, failoverErr := p.handleFailover(ctx, *session, cb)
+		if failoverErr != nil {
+			return nil, failoverErr
+		}
+
+		return p.SendDecisions(ctx, newSessionID, decisionsRequest, cb)
+	}
+
+	if updateErr := p.updateSessionStats(ctx, *session, startTime, ttftMs, inputTokens, outputTokens); updateErr != nil {
+		log.Error("Failed to update session stats", updateErr)
+	}
+
+	log.Infof("Successfully completed decisions request for session %s with TTFT: %dms, inputTokens: %d, outputTokens: %d", sessionID.Hex(), ttftMs, inputTokens, outputTokens)
 	return result, nil
 }

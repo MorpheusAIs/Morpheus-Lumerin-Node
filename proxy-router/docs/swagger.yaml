@@ -289,6 +289,32 @@ definitions:
       responseAt:
         type: integer
     type: object
+  lib.GatewayProgress:
+    properties:
+      completed:
+        type: boolean
+      http_status:
+        type: integer
+      journal_write_error:
+        type: string
+      sessionID:
+        type: string
+      stage:
+        type: string
+      transactions:
+        items:
+          $ref: '#/definitions/lib.GatewayTransaction'
+        type: array
+      updated_at:
+        type: integer
+    type: object
+  lib.GatewayTransaction:
+    properties:
+      hash:
+        type: string
+      kind:
+        type: string
+    type: object
   morrpcmesssage.SessionRes:
     properties:
       approval:
@@ -414,6 +440,18 @@ definitions:
       state:
         type: string
       status:
+        type: string
+    type: object
+  proxyapi.DecisionsRequestExample:
+    properties:
+      model:
+        example: jev-1.13.0
+        type: string
+      questions:
+        additionalProperties: true
+        type: object
+      state:
+        example: 'Ticket: invoice dispute, customer asks chargeback timeline.'
         type: string
     type: object
   proxyapi.DockerBuildReq:
@@ -819,6 +857,10 @@ definitions:
       error:
         example: error message
         type: string
+      progress:
+        $ref: '#/definitions/lib.GatewayProgress'
+      sessionID:
+        type: string
     type: object
   structs.ExistingSessionRes:
     properties:
@@ -866,7 +908,7 @@ definitions:
       modelType:
         allOf:
         - $ref: '#/definitions/structs.ModelType'
-        description: Type of the model (LLM, STT, TTS, EMBEDDING)
+        description: Type of the model (LLM, STT, TTS, EMBEDDING, DECISIONS)
       name:
         type: string
       owner:
@@ -921,6 +963,7 @@ definitions:
     - STT
     - TTS
     - EMBEDDING
+    - DECISIONS
     - UNKNOWN
     type: string
     x-enum-comments:
@@ -930,6 +973,7 @@ definitions:
     - ModelTypeSTT
     - ModelTypeTTS
     - ModelTypeEMBEDDING
+    - ModelTypeDECISIONS
     - ModelTypeUnknown
   structs.ModelsRes:
     properties:
@@ -960,6 +1004,8 @@ definitions:
     type: object
   structs.OpenSessionRes:
     properties:
+      progress:
+        $ref: '#/definitions/lib.GatewayProgress'
       sessionID:
         example: "0x1234"
         type: string
@@ -998,6 +1044,12 @@ definitions:
           bid used to force staking, so a consumer picking their own provider had
           no way to pay directly.
         type: boolean
+      maxStakeWei:
+        description: |-
+          MaxStakeWei caps how much MOR a gateway-managed session is allowed to
+          stake, letting a companion gateway enforce a spending ceiling on behalf
+          of the wallet it manages.
+        type: integer
       rejectExisting:
         description: |-
           RejectExisting asks the router to refuse this open when the wallet already
@@ -1179,6 +1231,8 @@ definitions:
     type: object
   structs.TxRes:
     properties:
+      progress:
+        $ref: '#/definitions/lib.GatewayProgress'
       tx:
         example: "0x1234"
         type: string
@@ -1198,7 +1252,16 @@ definitions:
         type: string
       config: {}
       derivedConfig: {}
+      gatewayCapabilities:
+        items:
+          type: string
+        type: array
       version:
+        type: string
+    type: object
+  system.ErrorResponse:
+    properties:
+      error:
         type: string
     type: object
   system.FD:
@@ -1255,6 +1318,19 @@ definitions:
         type: boolean
       status:
         type: string
+    type: object
+  system.ModelsReloadRes:
+    properties:
+      added:
+        items:
+          type: string
+        type: array
+      healthSweepQueued:
+        type: boolean
+      removed:
+        items:
+          type: string
+        type: array
     type: object
   system.SetEthNodeURLReq:
     properties:
@@ -2478,6 +2554,28 @@ paths:
       summary: Set Eth Node URLs
       tags:
       - system
+  /config/models/reload:
+    post:
+      description: Re-read models-config.json and swap the in-memory model table without
+        restarting the node. New models are servable immediately and a health sweep
+        is queued so those with a bid are probed now. A file that fails to parse leaves
+        the running table untouched and returns 400.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/system.ModelsReloadRes'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/system.ErrorResponse'
+      security:
+      - BasicAuth: []
+      summary: Reload models config
+      tags:
+      - system
   /docker/build:
     post:
       parameters:
@@ -3059,7 +3157,8 @@ paths:
       responses:
         "200":
           description: OK
-          schema: {}
+          schema:
+            type: object
       security:
       - BasicAuth: []
       summary: Call agent tool
@@ -3280,6 +3379,44 @@ paths:
       summary: Update chat title by id
       tags:
       - chat
+  /v1/decisions:
+    post:
+      description: Evaluate state against typed questions (TypeSafe System One / OpenRouter
+        Decisions core). Non-streaming single JSON.
+      parameters:
+      - description: Session ID
+        format: hex32
+        in: header
+        name: session_id
+        type: string
+      - description: Model ID
+        format: hex32
+        in: header
+        name: model_id
+        type: string
+      - description: Chat ID
+        format: hex32
+        in: header
+        name: chat_id
+        type: string
+      - description: Decisions request parameters
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/proxyapi.DecisionsRequestExample'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+      security:
+      - BasicAuth: []
+      summary: Submit a Decisions request
+      tags:
+      - decisions
   /v1/embeddings:
     post:
       description: Generate vector embeddings for the provided input

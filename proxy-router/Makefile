@@ -39,7 +39,7 @@ test-integration:
 	go test -v ./test/...
 
 swagger:
-	swag fmt -g ./internal/handlers/httphandlers/http.go && swag init -g ./internal/handlers/httphandlers/http.go --parseInternal --parseDependency
+	swag fmt -g ./internal/handlers/httphandlers/http.go && swag init -g ./internal/handlers/httphandlers/http.go --parseInternal
 
 mocks:
 	mockery

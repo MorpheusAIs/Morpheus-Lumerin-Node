@@ -502,6 +502,10 @@ func (a *OpenAI) streamAudioResponse(ctx context.Context, body io.Reader, cb gcs
 	return nil
 }
 
+func (a *OpenAI) Decisions(ctx context.Context, prompt *gcs.DecisionsRequest, cb gcs.CompletionCallback) error {
+	return fmt.Errorf("decisions not supported")
+}
+
 func (a *OpenAI) ApiType() string {
 	return API_TYPE_OPENAI
 }

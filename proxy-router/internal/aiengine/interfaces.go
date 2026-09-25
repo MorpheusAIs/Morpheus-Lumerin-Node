@@ -11,6 +11,7 @@ type AIEngineStream interface {
 	AudioTranscription(ctx context.Context, prompt *genericchatstorage.AudioTranscriptionRequest, cb genericchatstorage.CompletionCallback) error
 	AudioSpeech(ctx context.Context, prompt *genericchatstorage.AudioSpeechRequest, cb genericchatstorage.CompletionCallback) error
 	Embeddings(ctx context.Context, prompt *genericchatstorage.EmbeddingsRequest, cb genericchatstorage.CompletionCallback) error
+	Decisions(ctx context.Context, prompt *genericchatstorage.DecisionsRequest, cb genericchatstorage.CompletionCallback) error
 	ApiType() string
 }
 

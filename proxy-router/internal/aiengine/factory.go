@@ -24,6 +24,8 @@ func ApiAdapterFactory(apiType string, modelName string, url string, apikey stri
 		return NewHyperbolicSDEngine(modelName, url, apikey, parameters, log), true
 	case API_TYPE_CLAUDEAI:
 		return NewClaudeAIEngine(modelName, url, apikey, llmTimeout, log, httpClient), true
+	case API_TYPE_DECISIONS:
+		return NewDecisionsEngine(modelName, url, apikey, llmTimeout, log, httpClient), true
 	}
 	return nil, false
 }
