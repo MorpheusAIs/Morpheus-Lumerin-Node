@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -269,4 +270,64 @@ func newHopClient(timeout time.Duration) *http.Client {
 		Control:   hopDialControl,
 	}).DialContext
 	return &http.Client{Timeout: timeout, CheckRedirect: refuseCrossHostRedirect, Transport: transport}
+}
+
+func (d *Detector) probeLiteLLM(ctx context.Context, base, modelName, apiKey string, ev *apispec.Evidence, introspect bool) bool {
+	body := d.getText(ctx, base+"/health/liveliness", apiKey)
+	if body == "" {
+		return false
+	}
+	alive := strings.Trim(body, `"`)
+	if !strings.EqualFold(alive, "I'm alive!") {
+		return false
+	}
+	ev.Stack = "litellm"
+	ev.LiteLLMSeen = true
+	tracef(ctx, "identified litellm by /health/liveliness")
+
+	if !introspect || modelName == "" {
+		return true
+	}
+	if info := d.getJSON(ctx, base+"/model_group/info?model_group="+url.QueryEscape(modelName), apiKey); info != nil {
+		group := info
+		if data, ok := info["data"].([]any); ok {
+			if len(data) == 0 {
+				group = nil
+			} else if group, ok = data[0].(map[string]any); !ok {
+				group = nil
+			}
+		}
+		if group != nil {
+			if params, ok := group["supported_openai_params"].([]any); ok {
+				// Non-nil even when empty: nil means the list could not be read.
+				supported := make([]string, 0, len(params))
+				for _, p := range params {
+					if s, ok := p.(string); ok {
+						supported = append(supported, s)
+					}
+				}
+				sort.Strings(supported)
+				ev.LiteLLMSupportedParams = supported
+				tracef(ctx, "litellm /model_group/info lists %d supported_openai_params", len(supported))
+			}
+			if reasons, ok := group["supports_reasoning"].(bool); ok && reasons {
+				ev.GatewayReasoning = true
+				tracef(ctx, "litellm /model_group/info reports supports_reasoning")
+			}
+			if efforts, ok := group["supported_reasoning_efforts"].([]any); ok {
+				for _, e := range efforts {
+					if s, ok := e.(string); ok {
+						ev.ReasoningEfforts = append(ev.ReasoningEfforts, s)
+					}
+				}
+				if len(ev.ReasoningEfforts) > 0 {
+					tracef(ctx, "litellm /model_group/info lists supported_reasoning_efforts %v", ev.ReasoningEfforts)
+				}
+			}
+		}
+	}
+	if d.opts.TwoHop {
+		d.litellmUpstream(ctx, base, modelName, apiKey, ev)
+	}
+	return true
 }
