@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -304,8 +305,53 @@ func verify(ctx context.Context, cfg config.ModelConfig, api *system.ModelApiSpe
 	apiprobe.Fold(&out.Runtime, verdicts...)
 	out.Runtime.At = now().Unix()
 	out.Trace = apispec.MergeRuntime(spec, out.Runtime)
+	nameRefutedReasons(spec, out.Runtime)
+	switch {
+	case api != nil:
+	case specEmpty(spec):
+		// No detection and no probe proved anything: the report says so
+		// rather than carrying an api block with no source (the checker
+		// publishes nil here, modelhealth.Checker.publishedApi).
+		spec = nil
+	default:
+		// Probes proved facts about a backend detection could not place;
+		// what they wrote is verify:* evidence, and the block needs one of
+		// the wire contract's source values.
+		spec.Source = system.ApiSpecSourceDetected
+	}
 	out.Api = spec
 	return out, nil
+}
+
+// nameRefutedReasons is the checker's convention for a refuted binding
+// (modelhealth.Checker.publishedApi): MergeRuntime writes the intent's own
+// name as the binding's evidence whether the verdict verified or refuted it,
+// so the entry is rewritten to name what the probe saw
+// (verify:reasoning_content_still_present@<at>) and the [unverified: ...]
+// line shows the reason. -verify prints the same api block for a verdict
+// as the checker publishes.
+func nameRefutedReasons(spec *system.ModelApiSpec, rt apispec.Runtime) {
+	for intent, verdict := range rt.Verified {
+		if verdict.Verified || verdict.Reason == "" || spec.Bindings[intent] == nil {
+			continue
+		}
+		slug := apiprobe.ReasonSlug(verdict.Reason)
+		if slug == "" {
+			continue
+		}
+		if spec.Evidence == nil {
+			spec.Evidence = map[string]string{}
+		}
+		spec.Evidence[system.EvidenceKeyBinding(intent)] = apiprobe.VerifySource(slug, verdict.At)
+	}
+}
+
+// specEmpty reports a spec MergeRuntime left with no fact in any field,
+// which is what an all-unknown verify run leaves of &ModelApiSpec{}.
+func specEmpty(spec *system.ModelApiSpec) bool {
+	return spec.Stack == "" && spec.Via == "" && spec.ModelFamily == "" &&
+		spec.Thinking == nil && spec.Capabilities == nil &&
+		len(spec.Bindings) == 0 && len(spec.Parameters) == 0 && len(spec.Evidence) == 0
 }
 
 func formatVerify(res verifyResult) string {
@@ -358,8 +404,9 @@ func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
 
-// Exit codes: 1 for an unusable config or report, 2 for a flag combination
-// the command cannot act on.
+// Exit codes: 0 for -h (flag.ExitOnError's behaviour, which scripts may
+// rely on), 1 for an unusable config or report, 2 for a flag the command
+// cannot parse or a combination it cannot act on.
 func run(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("apidetect", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -371,6 +418,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	twoHop := fs.Bool("two-hop", true, "follow a LiteLLM proxy to its upstream deployment (GET /model/info) for family/reasoning evidence; set =false to disable")
 	doVerify := fs.Bool("verify", false, "after detection send the binding verifier and capability probes (inference requests) to the one model -model selects, ignoring MODEL_API_VERIFY_BINDINGS / MODEL_API_PROBE_CAPABILITIES / MODEL_API_PROBE_HOSTED")
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
 		return 2
 	}
 

@@ -216,9 +216,20 @@ const (
 	testKey = "sk-test-secret-key"
 )
 
-// rejectKwargs makes the backend answer a request carrying
-// chat_template_kwargs with OpenAI's unrecognised-argument error.
-func fakeBackend(t *testing.T, rejectKwargs bool) *httptest.Server {
+// fakeOpts selects the backend's behaviour. rejectKwargs answers a request
+// carrying chat_template_kwargs with OpenAI's unrecognised-argument error;
+// reasoning puts reasoning_content in every answer, so the binding cannot
+// have switched it off; bare serves the chat endpoint only, so detection
+// has no engine or listing to fingerprint; chatStatus, when set, is the
+// bare status every chat request gets instead of an answer.
+type fakeOpts struct {
+	rejectKwargs bool
+	reasoning    bool
+	bare         bool
+	chatStatus   int
+}
+
+func fakeBackend(t *testing.T, o fakeOpts) *httptest.Server {
 	t.Helper()
 	writeJSON := func(w http.ResponseWriter, status int, v any) {
 		w.Header().Set("Content-Type", "application/json")
@@ -226,20 +237,22 @@ func fakeBackend(t *testing.T, rejectKwargs bool) *httptest.Server {
 		_ = json.NewEncoder(w).Encode(v)
 	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/props", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"default_generation_settings": map[string]any{"id": 0, "n_ctx": 8192},
-			"total_slots":                 1,
-			"chat_template":               testQwen3Template,
-			"build_info":                  "b11177-abcdef0",
+	if !o.bare {
+		mux.HandleFunc("/props", func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"default_generation_settings": map[string]any{"id": 0, "n_ctx": 8192},
+				"total_slots":                 1,
+				"chat_template":               testQwen3Template,
+				"build_info":                  "b11177-abcdef0",
+			})
 		})
-	})
-	mux.HandleFunc("/v1/models", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"object": "list",
-			"data":   []map[string]any{{"id": "qwen3-32b", "object": "model", "owned_by": "llamacpp"}},
+		mux.HandleFunc("/v1/models", func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"object": "list",
+				"data":   []map[string]any{{"id": "qwen3-32b", "object": "model", "owned_by": "llamacpp"}},
+			})
 		})
-	})
+	}
 	mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.NotFound(w, r)
@@ -248,16 +261,24 @@ func fakeBackend(t *testing.T, rejectKwargs bool) *httptest.Server {
 		require.Equal(t, "Bearer "+testKey, r.Header.Get("Authorization"), "the probes carry the model's key")
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
-		if _, ok := body["chat_template_kwargs"]; ok && rejectKwargs {
+		if o.chatStatus != 0 {
+			w.WriteHeader(o.chatStatus)
+			return
+		}
+		if _, ok := body["chat_template_kwargs"]; ok && o.rejectKwargs {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{
 				"message": "Unrecognized request argument supplied: chat_template_kwargs",
 				"type":    "invalid_request_error",
 			}})
 			return
 		}
+		message := map[string]any{"role": "assistant", "content": "5"}
+		if o.reasoning {
+			message["reasoning_content"] = "2 plus 3 is 5"
+		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			"id": "chatcmpl-probe", "object": "chat.completion", "model": body["model"],
-			"choices": []map[string]any{{"index": 0, "finish_reason": "length", "message": map[string]any{"role": "assistant", "content": "5"}}},
+			"choices": []map[string]any{{"index": 0, "finish_reason": "length", "message": message}},
 		})
 	})
 	srv := httptest.NewServer(mux)
@@ -289,7 +310,7 @@ func runCLI(t *testing.T, args ...string) (code int, stdout, stderr string) {
 }
 
 func TestVerifyRequiresExactlyOneModel(t *testing.T) {
-	srv := fakeBackend(t, false)
+	srv := fakeBackend(t, fakeOpts{})
 	cfg := writeConfig(t,
 		map[string]any{"modelId": "0x01", "modelName": "qwen3-32b", "apiType": "openai", "apiUrl": srv.URL + "/v1/chat/completions"},
 		map[string]any{"modelId": "0x02", "modelName": "qwen3-8b", "apiType": "openai", "apiUrl": srv.URL + "/v1/chat/completions"},
@@ -307,7 +328,7 @@ func TestVerifyRequiresExactlyOneModel(t *testing.T) {
 
 func TestVerifyVerifiedBindingText(t *testing.T) {
 	pinClock(t)
-	srv := fakeBackend(t, false)
+	srv := fakeBackend(t, fakeOpts{})
 	cfg := writeConfig(t, map[string]any{"modelId": "0x01", "modelName": "qwen3-32b", "apiType": "openai", "apiUrl": srv.URL + "/v1/chat/completions", "apiKey": testKey})
 
 	code, stdout, stderr := runCLI(t, "-config", cfg, "-verify", "-model", "qwen3-32b")
@@ -345,7 +366,7 @@ func TestVerifyVerifiedBindingText(t *testing.T) {
 
 func TestVerifyRejectedBindingJSON(t *testing.T) {
 	pinClock(t)
-	srv := fakeBackend(t, true)
+	srv := fakeBackend(t, fakeOpts{rejectKwargs: true})
 	cfg := writeConfig(t, map[string]any{"modelId": "0x01", "modelName": "qwen3-32b", "apiType": "openai", "apiUrl": srv.URL + "/v1/chat/completions", "apiKey": testKey})
 
 	code, stdout, stderr := runCLI(t, "-config", cfg, "-verify", "-model", "0x01", "-json")
@@ -392,9 +413,109 @@ func TestVerifyRejectedBindingJSON(t *testing.T) {
 	require.Contains(t, joined, "thinking.mode: controllable -> tunable after the drop", "reasoning.budget from the stack table survives the drop")
 }
 
+// A 2xx that still carries reasoning_content refutes the binding: the
+// binding line names the reason the checker publishes for the same verdict
+// (verify:<reason slug>@<at>, modelhealth.Checker.publishedApi), not the
+// intent's own name MergeRuntime wrote.
+func TestVerifyRefutedBindingNamesReason(t *testing.T) {
+	pinClock(t)
+	srv := fakeBackend(t, fakeOpts{reasoning: true})
+	cfg := writeConfig(t, map[string]any{"modelId": "0x01", "modelName": "qwen3-32b", "apiType": "openai", "apiUrl": srv.URL + "/v1/chat/completions", "apiKey": testKey})
+
+	code, stdout, stderr := runCLI(t, "-config", cfg, "-verify", "-model", "qwen3-32b")
+	require.Equal(t, 0, code, stderr)
+	require.NotContains(t, stdout+stderr, testKey)
+
+	require.Contains(t, stdout, "    thinking:    always_on\n")
+	require.Contains(t, stdout, "      reasoning.disable: template_kwarg chat_template_kwargs.enable_thinking (boolean, value=false) [unverified: verify:reasoning_content_still_present@1790330400]\n")
+	require.Contains(t, stdout, "      bindings.reasoning.disable -> verify:reasoning_content_still_present@1790330400\n")
+	result, _, found := strings.Cut(stdout, "  verify:\n")
+	require.True(t, found)
+	require.NotContains(t, result, "verify:reasoning.disable@", "the api block carries the reason, not the intent's name")
+	require.Contains(t, stdout, "      - reasoning.disable: refuted (HTTP 200): reasoning content still present\n")
+	require.Contains(t, stdout, "      - bindings.reasoning.disable verified = false (verify:reasoning.disable@1790330400): reasoning content still present\n", "the merge trace keeps MergeRuntime's wording")
+	require.Contains(t, stdout, "      - thinking.mode: controllable -> always_on (verify:reasoning_seen_with_disable@1790330400)\n")
+}
+
+// Detection finds nothing behind a bare chat endpoint: the cost warning
+// reaches stderr before the first probe, the probes still run, and their
+// verdicts make the api block (with the wire contract's source value)
+// rather than leaving the report empty.
+func TestVerifyUndetectedBackendPublishesProbeFacts(t *testing.T) {
+	pinClock(t)
+	srv := fakeBackend(t, fakeOpts{bare: true})
+	cfg := writeConfig(t, map[string]any{"modelId": "0x01", "modelName": "mystery-model", "apiType": "openai", "apiUrl": srv.URL + "/v1/chat/completions", "apiKey": testKey})
+
+	code, stdout, stderr := runCLI(t, "-config", cfg, "-verify", "-model", "mystery-model", "-json")
+	require.Equal(t, 0, code, stderr)
+	require.NotContains(t, stdout+stderr, testKey)
+	require.True(t, strings.HasPrefix(stderr, "warning: stack not identified; -verify sends up to 6 inference requests"), stderr)
+
+	var reports []struct {
+		Api            *system.ModelApiSpec `json:"api"`
+		Trace          []string             `json:"trace"`
+		VerifyRequests []probeRequest       `json:"verifyRequests"`
+		VerifyVerdicts []probeVerdict       `json:"verifyVerdicts"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(stdout), &reports))
+	require.Len(t, reports, 1)
+	r := reports[0]
+
+	require.Contains(t, strings.Join(r.Trace, "\n"), "no engine fingerprint matched")
+	require.NotNil(t, r.Api)
+	require.Equal(t, system.ApiSpecSourceDetected, r.Api.Source)
+	require.Empty(t, r.Api.Stack)
+	require.NotNil(t, r.Api.Capabilities)
+	require.NotNil(t, r.Api.Capabilities.Tools)
+	require.True(t, *r.Api.Capabilities.Tools)
+	require.Equal(t, "verify:tools@1790330400", r.Api.Evidence[system.EvidenceKeyCapability("tools")])
+	require.Equal(t, []string{"json_schema"}, r.Api.Capabilities.Structured)
+	require.Equal(t, []probeRequest{
+		{Method: "POST", Path: "/v1/chat/completions", Status: 200},
+		{Method: "POST", Path: "/v1/chat/completions", Status: 200},
+		{Method: "POST", Path: "/v1/chat/completions", Status: 200},
+	}, r.VerifyRequests, "no reasoning.disable binding, so three probes")
+	require.Len(t, r.VerifyVerdicts, 3)
+}
+
+// Detection finds nothing and every probe gets a 5xx: no fact was proven,
+// so the report says nothing was detected instead of printing an api block
+// of dashes with no source.
+func TestVerifyNothingProvenPrintsNothingDetected(t *testing.T) {
+	pinClock(t)
+	srv := fakeBackend(t, fakeOpts{bare: true, chatStatus: http.StatusBadGateway})
+	cfg := writeConfig(t, map[string]any{"modelId": "0x01", "modelName": "mystery-model", "apiType": "openai", "apiUrl": srv.URL + "/v1/chat/completions", "apiKey": testKey})
+
+	code, stdout, stderr := runCLI(t, "-config", cfg, "-verify", "-model", "mystery-model")
+	require.Equal(t, 0, code, stderr)
+	require.True(t, strings.HasPrefix(stderr, "warning: stack not identified"), stderr)
+	require.Contains(t, stdout, "  result: nothing detected\n")
+	require.NotContains(t, stdout, "stack:       -")
+	require.Contains(t, stdout, "      - POST /v1/chat/completions -> HTTP 502\n")
+	require.Contains(t, stdout, "      - tools: unknown (HTTP 502): HTTP 502\n")
+	require.Contains(t, stdout, "    merge:\n      (nothing changed)\n")
+}
+
 func TestVerifyWarnsBeforeProbingHostedStack(t *testing.T) {
 	require.Contains(t, hostedWarning(&system.ModelApiSpec{Stack: "openai"}), "hosted vendor")
 	require.Contains(t, hostedWarning(&system.ModelApiSpec{Stack: "vllm", Via: "litellm"}), "through litellm")
 	require.Contains(t, hostedWarning(nil), "not identified")
 	require.Empty(t, hostedWarning(&system.ModelApiSpec{Stack: "vllm"}))
+}
+
+func TestProbeRequestString(t *testing.T) {
+	require.Equal(t, "POST /v1/chat/completions -> HTTP 400", probeRequest{Method: "POST", Path: "/v1/chat/completions", Status: 400}.String())
+	require.Equal(t, "POST /v1/chat/completions -> no response", probeRequest{Method: "POST", Path: "/v1/chat/completions", Failed: true}.String())
+}
+
+// -h keeps flag.ExitOnError's exit 0; a flag the command does not know is
+// still a parse error.
+func TestHelpExitsZero(t *testing.T) {
+	code, _, stderr := runCLI(t, "-h")
+	require.Equal(t, 0, code)
+	require.Contains(t, stderr, "-verify")
+
+	code, _, stderr = runCLI(t, "-no-such-flag")
+	require.Equal(t, 2, code)
+	require.Contains(t, stderr, "flag provided but not defined")
 }
