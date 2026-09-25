@@ -92,17 +92,12 @@ func TestStackWebSearchBindings(t *testing.T) {
 	require.Equal(t, "boolean", citations.ParamType)
 	require.Equal(t, true, citations.Value)
 	for stack, table := range stackBindings {
-		if _, hosted := rows[stack]; hosted {
-			continue
+		if _, hosted := rows[stack]; !hosted {
+			require.Nil(t, table[system.IntentWebSearchEnable], "%s has no web-search knob", stack)
 		}
-		require.Nil(t, table[system.IntentWebSearchEnable], "%s has no web-search knob", stack)
-		require.Nil(t, table[system.IntentWebSearchCitations], "%s has no web-search knob", stack)
-	}
-	for stack, table := range stackBindings {
-		if stack == "venice" {
-			continue
+		if stack != "venice" {
+			require.Nil(t, table[system.IntentWebSearchCitations], "%s: only venice documents a citations switch", stack)
 		}
-		require.Nil(t, table[system.IntentWebSearchCitations], "only venice documents a citations switch")
 	}
 }
 
