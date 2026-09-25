@@ -65,6 +65,14 @@
       }
     },
     {
+      "modelId": "0x0000000000000000000000000000000000000000000000000000000000000007",
+      "modelName": "gemini-2.5-flash",
+      "apiType": "openai",
+      "apiStack": "gemini",
+      "apiUrl": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+      "apiKey": "FILL_ME_IN"
+    },
+    {
       "modelId": "0x00000000000000000000000000000000000000000000000000000000000000a1",
       "modelName": "jev-1.13.0",
       "apiType": "decisions",

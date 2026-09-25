@@ -28,7 +28,7 @@
           },
           "apiStack": {
             "title": "API Stack",
-            "description": "Optional backend API preset advertised in the model's api block (/healthcheck and pong models); it never selects the adapter. Its transport must match apiType: openai for every preset except anthropic, which requires claudeai. Trimmed and lowercased on load; an unknown preset or a mismatch is logged and ignored for that model (its backend API is then detected at runtime, as if apiStack were omitted). When omitted, the backend API is detected at runtime by probing the backend's service endpoints (never inference requests; one hop through LiteLLM) and reported with source: detected; MODEL_API_DETECT_ENABLED=false turns detection off.",
+            "description": "Optional backend API preset advertised in the model's api block (/healthcheck and pong models); it never selects the adapter. Its transport must match apiType: openai for every preset except anthropic, which requires claudeai (gemini is Gemini's OpenAI-compatible endpoint, not the native API). Trimmed and lowercased on load; an unknown preset or a mismatch is logged and ignored for that model (its backend API is then detected at runtime, as if apiStack were omitted). When omitted, the backend API is detected at runtime by probing the backend's service endpoints (never inference requests; one hop through LiteLLM) and reported with source: detected; MODEL_API_DETECT_ENABLED=false turns detection off. Detection also fills the api block's capabilities (context, modalities, tools, structured, ...) from the backend's own endpoints, each with an evidence entry; the declared capabilities object below overrides them field by field.",
             "type": "string",
             "enum": ["openai", "vllm", "sglang", "llamacpp", "ollama", "venice", "openrouter", "litellm", "anthropic", "gemini"]
           },
@@ -70,7 +70,7 @@
           },
           "capabilities": {
             "title": "Declared capabilities",
-            "description": "Optional facts about the model as served, published in the model's api block (capabilities.*) with evidence \"declared\". Each declared field wins over the detected or registry value for that field; other fields are still filled by detection. Applied to every chat-transport model whether apiStack is set or detected. An invalid block (unknown key, wrong type, non-positive integer, unknown modality or structured kind) is logged and ignored for that model; the model itself is kept.",
+            "description": "Optional facts about the model as served, published in the model's api block (capabilities.*) with evidence \"declared\". Precedence: declared > runtime-verified (verify:*) > backend-served > backend-trained / listing > template > registry; each declared field wins over every other source for that field, and the other fields are still filled by detection, the health probe, the verifier probes and the offline registry. Applied to every chat-transport model whether apiStack is set, detected, or detection is off. Fields absent from the wire block are unknown, never false. An invalid block (unknown key, wrong type, non-positive integer, unknown modality or structured kind, duplicate list value) is logged and ignored for that model; the model itself is kept. Only this subset can be declared: contextTrained, reasoning, toolsParallel, promptCache and quantization come from the backend, a probe or the registry.",
             "type": "object",
             "additionalProperties": false,
             "properties": {
@@ -83,11 +83,14 @@
               },
               "maxOutput": {
                 "title": "Max output tokens",
+                "description": "Largest completion the backend allows for this model, in tokens.",
                 "type": "integer",
                 "minimum": 1,
                 "exclusiveMaximum": 2147483648
               },
               "modalities": {
+                "title": "Modalities",
+                "description": "What the model accepts (input) and produces (output). text is implied for input: listing only the extras (e.g. [\"image\"]) publishes [\"text\", \"image\"]. output is published exactly as listed.",
                 "type": "object",
                 "additionalProperties": false,
                 "properties": {
@@ -110,6 +113,7 @@
               },
               "structured": {
                 "title": "Structured output kinds",
+                "description": "Constrained-output kinds the backend honours for this model: json_object (JSON mode), json_schema (response_format json_schema), grammar (GBNF / EBNF), regex, choice. A probe or backend fact can extend the list, never narrow it.",
                 "type": "array",
                 "uniqueItems": true,
                 "items": { "type": "string", "enum": ["json_object", "json_schema", "grammar", "regex", "choice"] }
@@ -120,6 +124,8 @@
                 "type": "boolean"
               },
               "embeddings": {
+                "title": "Embeddings",
+                "description": "The model serves /v1/embeddings.",
                 "type": "boolean"
               }
             }
