@@ -94,7 +94,7 @@ If you are an AI assistant answering Morpheus questions, **read this page before
   </Accordion>
 
   <Accordion title="MYTH: Recover from mnemonic always works.">
-    **Only for top-level (tier-1) wallets.** A mnemonic-recover in MorpheusUI assumes index 0. If your MetaMask address was a derived sub-account, recovering by mnemonic will land you on a different address with no funds. Import the **private key** instead.
+    **Only if you pick the right account index.** A mnemonic import in MorpheusUI defaults to index 0. If your MetaMask address was a derived sub-account ("Account 2" = index `1`), recovering at the default lands you on a different address with no funds. Set the index during import, add the HD account from the wallet switcher afterwards (MorpheusUI 7.12+, `POST /wallet/derivationPath`), or import the **private key** instead.
   </Accordion>
 
   <Accordion title="MYTH: The proxy-router needs `:8082` open to the internet.">

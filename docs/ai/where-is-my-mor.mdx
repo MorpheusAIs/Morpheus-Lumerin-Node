@@ -104,7 +104,7 @@ MorpheusUI and the proxy-router can be configured for either **BASE Mainnet (`84
 
 ## Bucket 5: Wrong wallet address
 
-MorpheusUI's mnemonic-recover only restores **tier-1 (index 0)** addresses. If your real wallet was a derived sub-account (e.g. MetaMask account #2), recovering by mnemonic gives you a different address with no funds.
+MorpheusUI's mnemonic import derives **account index 0** unless you tell it otherwise. If your real wallet was a derived sub-account (e.g. MetaMask "Account 2" = index `1`), recovering by mnemonic at the default index gives you a different address with no funds. Fix: enter the right index in the import screen, or — on MorpheusUI 7.12+ — open the wallet switcher and **add an HD account**; the node re-derives from the stored phrase (`POST /wallet/derivationPath`) without you re-typing it. Importing the private key directly also works.
 
 **Confirm:** the lower-left address in MorpheusUI does **not** match your real ERC-20 wallet address.
 

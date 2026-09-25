@@ -1,0 +1,52 @@
+---
+title: "MorpheusUI desktop app"
+description: "What the MorpheusUI desktop app adds on top of the proxy-router: chat with attachments, the Workspace, multi-wallet and HD accounts, session controls, and the security model between renderer, main process, and node."
+audience: ["consumer"]
+product: ["ui-desktop", "proxy-router"]
+last_verified: "2026-09-25"
+---
+
+MorpheusUI is the Electron desktop app bundled with a matching proxy-router. Everything it does goes through the [proxy-router HTTP API](/reference/api-endpoints) on `localhost:8082`; this page describes what the app layers on top, as of **MorpheusUI 7.12**. Install steps are under [Install](/consumers/install/macos); opening a session is on [Open a session (buy a bid)](/consumers/buy-bid).
+
+## Chat
+
+- **Long answers finish.** There is no response-size cap and no event ceiling between the node and the window any more; a reasoning model can run for minutes. A status pill names the current phase (connecting, waiting on the provider, streaming) with a seconds counter, and each answer shows its token count and cost.
+- **Reasoning is collapsible.** Models that emit a reasoning stream get a folded block above the answer.
+- **Markdown tables, code-block copy, and Copy / Edit / Retry** under every message.
+- **Attachments.** Images (`png`, `jpeg`, `webp`, `gif`, `bmp`, `svg`) are sent as OpenAI `image_url` parts — only a vision-capable provider can use them, and the app remembers per model when a provider rejected an image. Documents (`pdf`, `docx`, `xlsx`, `pptx`, plain text) are converted to text **locally in the app** and injected into the prompt, so they work with every text model; the extraction is capped (~400 k characters, 20 MB input) and a scanned PDF with no text layer is reported as empty. Nothing about attachments is proxy-router specific: what reaches the node is a normal chat-completions body.
+- **Per-chat isolation.** One chat's stored context is never prepended to another chat's prompt.
+- The app sets `PROXY_FORWARD_CHAT_CONTEXT=true` on its bundled node so it can send only the latest turn; API clients that send the full `messages[]` should leave that off (see [env reference](/reference/env-proxy-router#proxy-state--configs)).
+
+## Workspace
+
+Workspace is a **session-gated, local-first** mode for multi-step work against a folder you choose. You open a session as usual, then hand the model a task:
+
+- It maintains a **visible plan** (`set_plan` / `update_plan_step`) and highlights the step actually running; a run timer survives navigating away and back.
+- Its tools are scoped to the connected folder: list, read, search, inspect, write, `edit_file` for targeted edits instead of rewriting a whole file, copy / move / mkdir, create `docx` / `pdf` / `pptx` / `xlsx`, analyse a CSV, read an image or document. It has **no shell, no browser, no wallet or transfer tool**; the only network action is a bounded public-HTTPS page fetch that always asks first.
+- **Approvals.** Risky actions pause for your approval in the UI; a task that is cancelled or paused while an approval is pending does not run the action. Delete moves to the operating-system trash and always requires approval.
+- Requests are queued **per session**, and Workspace prompts are sent with [`x-morpheus-history: off`](/reference/api-endpoints#chat-completions) so tool traffic never lands in your chat history.
+
+## Wallets and HD accounts
+
+- **Multiple wallets** with a switcher. You can add further **HD accounts** derived from the mnemonic the node already stores (`POST /wallet/derivationPath`) without re-entering the phrase, or **import** an unrelated private key. The active identity is kept through login.
+- A mnemonic import derives **account index 0** unless you set the index. If your funded MetaMask address is "Account 2", that is index `1` — set it on import or add it from the switcher afterwards. See [Wallet shows zero balance](/consumers/troubleshooting#morpheusui-shows-zero-balance-after-recovering-my-wallet).
+- Wallets imported from a raw private key have no seed to derive from; the switcher tells you so instead of offering HD accounts.
+- **Send MOR / ETH** forms were rebuilt; erasing a wallet asks for confirmation first.
+
+## Sessions
+
+- The model list loads prices in one call (`GET /blockchain/models/prices`) and can be searched and sorted by price.
+- You can pick the **provider** (price and score shown) instead of taking the top-scored bid; the quote and the open are then made against **that** bid, not re-scored behind your back.
+- The confirmation shows the MOR that will be **locked** next to the compute cost, from `GET /blockchain/models/:id/session/estimate`. Session length limits come from the contract (`GET /blockchain/sessions/duration`).
+- Opens carry `rejectExisting`, so a double-click cannot lock stake twice; an existing live session for the model is reused. Session-open confirmation no longer rejects approvals you granted, and navigating away mid-confirmation no longer cancels the open.
+- Timer, early close, and "session ended" card are on the chat header. Unused stake returns on close; the used slice day-locks — [Where is my MOR?](/ai/where-is-my-mor).
+
+## Security model
+
+- The node's Basic-Auth credentials live in the **main process** only; the renderer never sees them and talks to the node through IPC.
+- Renderer and IPC boundaries are hardened, **DevTools are closed by default**, and the app verifies it owns the proxy-router it manages before using it (`MORPHEUS_DESKTOP_INSTANCE_TOKEN`, echoed on `GET /healthcheck` as `X-Morpheus-Instance-Token`).
+- The bundled proxy-router answers browser CORS preflights only for loopback, the app itself, and the hosted [MyProvider](/providers/full/myprovider-gui) origin; other origins need [`PROXY_CORS_ALLOWED_ORIGINS`](/reference/env-proxy-router#network-ports--urls).
+
+## Pairing with your own proxy-router
+
+The app can point at a proxy-router you run yourself instead of the bundled one — see [ui-desktop environment](/reference/env-ui-desktop#pairing-with-a-custom-proxy-router). Feature detection is by HTTP status: a node that predates a route answers `404`, and the app falls back where it can (for example, hardcoded duration bounds if `GET /blockchain/sessions/duration` is missing).
