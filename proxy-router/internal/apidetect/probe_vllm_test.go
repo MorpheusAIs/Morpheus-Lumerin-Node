@@ -11,6 +11,7 @@ import (
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,17 +20,18 @@ const vllmTestKey = "sk-vllm-operator"
 var vllmStructuredWant = []string{"json_object", "json_schema", "grammar", "regex", "choice"}
 
 // tokenizeHandler answers like vLLM's /tokenize (count + max_model_len) and
-// records the model the request named.
+// records the model the request named. It runs on the server goroutine, so
+// FailNow (require) is not allowed here; assert marks the test failed instead.
 func tokenizeHandler(t *testing.T, maxModelLen int, models *[]string) http.HandlerFunc {
 	t.Helper()
 	return func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, http.MethodPost, r.Method)
-		require.Equal(t, "application/json", r.Header.Get("Content-Type"))
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 		raw, err := io.ReadAll(r.Body)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 		var body map[string]string
-		require.NoError(t, json.Unmarshal(raw, &body))
-		require.Equal(t, "x", body["prompt"])
+		assert.NoError(t, json.Unmarshal(raw, &body))
+		assert.Equal(t, "x", body["prompt"])
 		*models = append(*models, body["model"])
 		jsonHandler(map[string]any{"count": 1, "max_model_len": maxModelLen, "tokens": []int{87}})(w, r)
 	}
