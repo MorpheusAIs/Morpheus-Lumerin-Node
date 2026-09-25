@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var updateGolden = flag.Bool("update", false, "rewrite testdata/compose_golden.json from the current composition")
+var updateGolden = flag.Bool("update", false, "rewrite testdata/compose_golden.txt from the current composition")
 
 // Every fixture carries no capability evidence: the golden file pins the api
 // block that consumers (gateway PR #359) read today, so capability work

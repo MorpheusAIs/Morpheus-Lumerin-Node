@@ -14,7 +14,6 @@ type templateFacts struct {
 
 // capsFromTemplate is the seam for the scan in family.go; until it lands the
 // template contributes nothing.
-func capsFromTemplate(tpl string) templateFacts {
-	_ = tpl
+func capsFromTemplate(_ string) templateFacts {
 	return templateFacts{}
 }
