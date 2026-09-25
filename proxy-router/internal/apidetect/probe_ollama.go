@@ -49,16 +49,10 @@ func (d *Detector) probeOllama(ctx context.Context, base, modelName, apiKey stri
 	return true
 }
 
+// Key-free first like the GETs: the local API has no auth (plan §6.A).
 func (d *Detector) ollamaShow(ctx context.Context, base, modelName, apiKey string) map[string]any {
 	body, _ := json.Marshal(map[string]string{"model": modelName, "name": modelName})
-	urlStr := base + "/api/show"
-	out, status := d.requestJSONStatus(ctx, http.MethodPost, urlStr, "", body, maxProbeBody)
-	if out != nil || apiKey == "" || (status != http.StatusUnauthorized && status != http.StatusForbidden) {
-		return out
-	}
-	tracef(ctx, "POST %s -> HTTP %d without a key; retrying with the configured key", urlStr, status)
-	out, _ = d.requestJSONStatus(ctx, http.MethodPost, urlStr, apiKey, body, maxProbeBody)
-	return out
+	return d.requestJSONKeyFree(ctx, http.MethodPost, base+"/api/show", apiKey, body)
 }
 
 func ollamaShowFacts(ctx context.Context, show map[string]any, ev *apispec.Evidence) {

@@ -49,12 +49,18 @@ func (d *Detector) getJSON(ctx context.Context, urlStr, apiKey string) map[strin
 // backend demanded one (401/403), so a bearer never reaches a path that did
 // not ask for it. Any other failure is final.
 func (d *Detector) getJSONKeyFree(ctx context.Context, urlStr, apiKey string) map[string]any {
-	out, status := d.requestJSONStatus(ctx, http.MethodGet, urlStr, "", nil, maxProbeBody)
+	return d.requestJSONKeyFree(ctx, http.MethodGet, urlStr, apiKey, nil)
+}
+
+// requestJSONKeyFree is getJSONKeyFree for any method and body (Ollama's
+// /api/show is a POST on an API that has no auth of its own).
+func (d *Detector) requestJSONKeyFree(ctx context.Context, method, urlStr, apiKey string, body []byte) map[string]any {
+	out, status := d.requestJSONStatus(ctx, method, urlStr, "", body, maxProbeBody)
 	if out != nil || apiKey == "" || (status != http.StatusUnauthorized && status != http.StatusForbidden) {
 		return out
 	}
-	tracef(ctx, "GET %s -> HTTP %d without a key; retrying with the configured key", urlStr, status)
-	out, _ = d.requestJSONStatus(ctx, http.MethodGet, urlStr, apiKey, nil, maxProbeBody)
+	tracef(ctx, "%s %s -> HTTP %d without a key; retrying with the configured key", method, urlStr, status)
+	out, _ = d.requestJSONStatus(ctx, method, urlStr, apiKey, body, maxProbeBody)
 	return out
 }
 
