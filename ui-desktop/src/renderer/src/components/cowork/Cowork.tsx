@@ -891,16 +891,24 @@ function Cowork(): JSX.Element {
   );
 
   useEffect(() => {
-    const now = Date.now();
+    // Measure expiry against sessionNow, the clock the UI actually renders
+    // with, not a fresh Date.now(). Timers and Date.now() run on different
+    // clocks, so the timeout can fire while Date.now() still reads a
+    // millisecond short of sessionEndsAt. Storing that value left the
+    // session "active", and a re-run that then saw the wall clock past the
+    // expiry scheduled nothing, so the session-ended card never appeared.
     const nextExpiry = models.reduce<number | undefined>((next, model) => {
       const endsAt = model.sessionEndsAt;
-      if (!Number.isFinite(endsAt) || !endsAt || endsAt <= now) return next;
+      if (!Number.isFinite(endsAt) || !endsAt || endsAt <= sessionNow) {
+        return next;
+      }
       return next === undefined || endsAt < next ? endsAt : next;
     }, undefined);
     if (nextExpiry === undefined) return;
     const timeout = window.setTimeout(
-      () => setSessionNow(Date.now()),
-      Math.max(0, nextExpiry - now),
+      () =>
+        setSessionNow((current) => Math.max(current, nextExpiry, Date.now())),
+      Math.max(0, nextExpiry - Date.now()),
     );
     return () => window.clearTimeout(timeout);
   }, [models, sessionNow]);
