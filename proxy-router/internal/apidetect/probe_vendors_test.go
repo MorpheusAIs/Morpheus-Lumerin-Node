@@ -2,8 +2,10 @@ package apidetect
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -20,7 +22,6 @@ func boolp(v bool) *bool    { return &v }
 
 // vendorFixture serves one metadata path and records what reached it.
 type vendorFixture struct {
-	t       *testing.T
 	path    string
 	body    any
 	hits    atomic.Int32
@@ -51,7 +52,7 @@ func (f *vendorFixture) header(name string) string {
 
 func serveVendor(t *testing.T, vendor, path string, body any) (*httptest.Server, *vendorFixture) {
 	t.Helper()
-	f := &vendorFixture{t: t, path: path, body: body}
+	f := &vendorFixture{path: path, body: body}
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)
 	mapHostToVendor(t, srv.URL, vendor)
@@ -150,6 +151,35 @@ func TestProbeAnthropicFacts(t *testing.T) {
 		Structured:        false,
 		Source:            "anthropic:/v1/models/{id}.capabilities",
 	}, ev.Anthropic)
+}
+
+// A capabilities object without the thinking leaf is not a statement about
+// thinking: the name-based claude bindings stay, the modality facts land.
+func TestProbeAnthropicWithoutThinkingLeafKeepsFallback(t *testing.T) {
+	srv, _ := serveVendor(t, "anthropic", "/v1/models/claude-sonnet-4-5", map[string]any{
+		"id": "claude-sonnet-4-5", "max_input_tokens": 200000,
+		"capabilities": map[string]any{
+			"image_input":        supported(true),
+			"structured_outputs": supported(true),
+			"effort":             map[string]any{"high": supported(true)},
+		},
+	})
+	cfg := config.ModelConfig{ModelName: "claude-sonnet-4-5", ApiType: "claudeai", ApiURL: srv.URL + "/v1/messages", ApiKey: vendorTestKey}
+
+	ctx, tr := withTrace(context.Background())
+	ev := apispec.Evidence{Stack: "anthropic", ModelName: cfg.ModelName}
+	probeAnthropic(ctx, newTestDetector(), nil, cfg, &ev)
+	require.Nil(t, ev.Anthropic)
+	require.Equal(t, []string{"image"}, ev.Caps.Modalities.Input)
+	require.Contains(t, tr.lines, "anthropic:/v1/models/{id}.capabilities has no thinking object; anthropic facts not stated")
+
+	api, _ := detectVendor(t, srv, cfg)
+	require.NotNil(t, api)
+	require.Equal(t, int64p(200000), api.Capabilities.Context)
+	require.Equal(t, []string{"image"}, api.Capabilities.Modalities.Input)
+	require.Nil(t, api.Capabilities.Structured, "structured_outputs is not published without the thinking leaf")
+	require.Equal(t, map[string]any{"type": "disabled"}, api.Bindings[system.IntentReasoningDisable].Value, "the name-based fallback still decides the bindings")
+	require.Empty(t, api.Evidence["bindings.reasoning.effort"])
 }
 
 func TestProbeGemini(t *testing.T) {
@@ -431,6 +461,103 @@ func TestVendorMisses(t *testing.T) {
 		require.NotNil(t, api)
 		require.Nil(t, api.Capabilities)
 		require.Contains(t, trace, "/v1/models has 2 entries but none matches the configured model (config drift?)")
+	})
+
+	t.Run("a lone listing entry with another id is a miss", func(t *testing.T) {
+		srv, _ := serveVendor(t, "together", "/v1/models", []map[string]any{{"id": "org/dedicated-endpoint", "context_length": 8192}})
+		api, trace := detectVendor(t, srv, config.ModelConfig{ModelName: "org/configured", ApiKey: vendorTestKey})
+		require.NotNil(t, api)
+		require.Nil(t, api.Capabilities, "another model's context_length is not a fact about the configured one")
+		require.Contains(t, trace, "/v1/models has 1 entries but none matches the configured model (config drift?)")
+	})
+
+	t.Run("listing entries are matched by id only", func(t *testing.T) {
+		srv, _ := serveVendor(t, "deepinfra", "/v1/openai/models", map[string]any{
+			"data": []map[string]any{{"id": "Qwen/Qwen3-32B", "metadata": map[string]any{"context_length": 40960}}},
+		})
+		api, _ := detectVendor(t, srv, config.ModelConfig{ModelName: "Qwen3-32B"})
+		require.NotNil(t, api)
+		require.Nil(t, api.Capabilities, "a bare suffix is not the configured id")
+	})
+
+	t.Run("wrong-type capability booleans are not facts", func(t *testing.T) {
+		srv, _ := serveVendor(t, "mistral", "/v1/models/m", map[string]any{
+			"id": "m", "max_context_length": 8192,
+			"capabilities": map[string]any{"function_calling": "yes", "reasoning": 1, "vision": "true", "audio": nil},
+		})
+		api, _ := detectVendor(t, srv, config.ModelConfig{ModelName: "m", ApiKey: vendorTestKey})
+		require.NotNil(t, api)
+		require.Equal(t, &system.ModelCapabilities{Context: int64p(8192)}, api.Capabilities)
+		require.Equal(t, map[string]string{"capabilities.context": "mistral:/v1/models/{id}.max_context_length"}, api.Evidence)
+	})
+
+	t.Run("gemini thinking false or non-bool leaves reasoning unset", func(t *testing.T) {
+		for name, thinking := range map[string]any{"false": false, "string": "yes", "number": 1} {
+			t.Run(name, func(t *testing.T) {
+				srv, _ := serveVendor(t, "gemini", "/v1beta/models/g", map[string]any{"name": "models/g", "inputTokenLimit": 4096, "thinking": thinking})
+				api, _ := detectVendor(t, srv, config.ModelConfig{ModelName: "g", ApiKey: vendorTestKey})
+				require.NotNil(t, api)
+				require.Equal(t, &system.ModelCapabilities{Context: int64p(4096)}, api.Capabilities)
+				require.Empty(t, api.Evidence["capabilities.reasoning"])
+			})
+		}
+	})
+
+	t.Run("cerebras json_mode alone is json_object from its own field", func(t *testing.T) {
+		srv, _ := serveVendor(t, "cerebras", "/public/v1/models/m", map[string]any{
+			"id": "m", "capabilities": map[string]any{"json_mode": true, "structured_outputs": false},
+		})
+		api, trace := detectVendor(t, srv, config.ModelConfig{ModelName: "m"})
+		require.NotNil(t, api)
+		require.Equal(t, &system.ModelCapabilities{Structured: []string{"json_object"}}, api.Capabilities)
+		require.Equal(t, "cerebras:/public/v1/models/{id}.capabilities.json_mode", api.Evidence["capabilities.structured"])
+		require.Contains(t, trace, "cerebras:/public/v1/models/{id}.capabilities.json_mode = [json_object] -> capabilities.structured")
+	})
+
+	t.Run("together served as an OpenAI-style object listing", func(t *testing.T) {
+		srv, _ := serveVendor(t, "together", "/v1/models", map[string]any{
+			"object": "list", "data": []map[string]any{{"id": "org/m", "context_length": 32768}},
+		})
+		api, _ := detectVendor(t, srv, config.ModelConfig{ModelName: "org/m", ApiKey: vendorTestKey})
+		require.NotNil(t, api)
+		require.Equal(t, int64p(32768), api.Capabilities.Context)
+		require.Equal(t, "together:/v1/models.context_length", api.Evidence["capabilities.context"])
+	})
+
+	t.Run("oversized body is ignored", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprintf(w, `{"context_window": 8192, "pad": "%s"}`, strings.Repeat("a", int(maxProbeBody)+1024))
+		}))
+		defer srv.Close()
+		mapHostToVendor(t, srv.URL, "groq")
+		api, trace := detectVendor(t, srv, config.ModelConfig{ModelName: "m", ApiKey: vendorTestKey})
+		require.NotNil(t, api)
+		require.Nil(t, api.Capabilities)
+		require.Contains(t, trace, fmt.Sprintf("GET %s/openai/v1/models/m -> HTTP 200, but the body exceeds the %d-byte limit; ignored", srv.URL, maxProbeBody))
+	})
+
+	t.Run("deepinfra entry without metadata is nothing", func(t *testing.T) {
+		srv, _ := serveVendor(t, "deepinfra", "/v1/openai/models", map[string]any{
+			"data": []map[string]any{{"id": "org/m", "object": "model", "context_length": 4096}},
+		})
+		api, _ := detectVendor(t, srv, config.ModelConfig{ModelName: "org/m"})
+		require.NotNil(t, api)
+		require.Nil(t, api.Capabilities, "context_length outside metadata is not the documented field")
+	})
+
+	t.Run("hf-router providers that are not objects and unknown modalities are skipped", func(t *testing.T) {
+		srv, _ := serveVendor(t, "hf-router", "/v1/models", map[string]any{
+			"data": []map[string]any{{
+				"id":           "org/m",
+				"architecture": map[string]any{"input_modalities": []string{"hologram"}, "output_modalities": []any{1, true}},
+				"providers":    []any{"a", 1, nil, map[string]any{"provider": "b", "status": "live", "context_length": 2048}},
+			}},
+		})
+		api, _ := detectVendor(t, srv, config.ModelConfig{ModelName: "org/m"})
+		require.NotNil(t, api)
+		require.Equal(t, &system.ModelCapabilities{Context: int64p(2048)}, api.Capabilities)
+		require.Equal(t, map[string]string{"capabilities.context": "hf-router:/v1/models.providers.context_length"}, api.Evidence)
 	})
 
 	t.Run("no modelName is nothing to look up", func(t *testing.T) {
