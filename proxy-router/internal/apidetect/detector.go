@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -37,6 +38,9 @@ type Options struct {
 	IgnoreHostVendors bool
 	ProbeTimeout      time.Duration
 	TwoHop            bool
+	// CacheTTL bounds how long a detection result and a registry listing are
+	// reused (MODEL_API_DETECT_TTL); <= 0 keeps cacheTTL.
+	CacheTTL time.Duration
 }
 
 func DefaultOptions() Options { return Options{TwoHop: true} }
@@ -53,8 +57,9 @@ type Detector struct {
 	opts      Options
 	ttl       time.Duration
 
-	mu    sync.Mutex
-	cache map[string]cacheEntry
+	mu       sync.Mutex
+	cache    map[string]cacheEntry
+	listings map[string]listingEntry
 }
 
 func NewDetector(log lib.ILogger, opts Options) *Detector {
@@ -62,13 +67,18 @@ func NewDetector(log lib.ILogger, opts Options) *Detector {
 	if timeout <= 0 {
 		timeout = probeTimeout
 	}
+	ttl := opts.CacheTTL
+	if ttl <= 0 {
+		ttl = cacheTTL
+	}
 	return &Detector{
 		log:       log.Named("API_DETECT"),
 		client:    &http.Client{Timeout: timeout, CheckRedirect: refuseCrossHostRedirect},
 		hopClient: newHopClient(timeout),
 		opts:      opts,
-		ttl:       cacheTTL,
+		ttl:       ttl,
 		cache:     make(map[string]cacheEntry),
+		listings:  make(map[string]listingEntry),
 	}
 }
 
@@ -93,11 +103,30 @@ func refuseCrossHostRedirect(req *http.Request, via []*http.Request) error {
 }
 
 func (d *Detector) Detect(ctx context.Context, cfg config.ModelConfig) *system.ModelApiSpec {
+	api, _ := d.DetectProbed(ctx, cfg)
+	return api
+}
+
+// WouldProbe reports whether Detect for cfg would reach the backend rather
+// than answer from the cache or the static tables; the checker paces such
+// calls.
+func (d *Detector) WouldProbe(cfg config.ModelConfig) bool {
+	if apispec.StackFor(cfg.ApiStack) != "" || (cfg.ApiURL == "" && cfg.ModelName == "") {
+		return false
+	}
+	d.mu.Lock()
+	entry, ok := d.cache[cacheKey(cfg)]
+	d.mu.Unlock()
+	return !ok || time.Since(entry.at) >= d.ttl
+}
+
+// DetectProbed is Detect that also reports whether the backend was reached.
+func (d *Detector) DetectProbed(ctx context.Context, cfg config.ModelConfig) (*system.ModelApiSpec, bool) {
 	if apispec.StackFor(cfg.ApiStack) != "" {
-		return apispec.Build(cfg)
+		return apispec.Build(cfg), false
 	}
 	if cfg.ApiURL == "" && cfg.ModelName == "" {
-		return nil
+		return nil, false
 	}
 
 	key := cacheKey(cfg)
@@ -105,7 +134,7 @@ func (d *Detector) Detect(ctx context.Context, cfg config.ModelConfig) *system.M
 	entry, ok := d.cache[key]
 	d.mu.Unlock()
 	if ok && time.Since(entry.at) < d.ttl {
-		return entry.api.Clone()
+		return entry.api.Clone(), false
 	}
 
 	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
@@ -117,7 +146,7 @@ func (d *Detector) Detect(ctx context.Context, cfg config.ModelConfig) *system.M
 	api := d.detect(ctx, cfg)
 	if ctx.Err() != nil {
 		d.log.Debugf("backend %s: detection cut short (%v); result not cached", RedactURL(cfg.ApiURL), ctx.Err())
-		return api
+		return api, true
 	}
 	if api != nil {
 		d.log.Debugf("backend %s: detected api stack=%q family=%q", RedactURL(cfg.ApiURL), api.Stack, api.ModelFamily)
@@ -125,25 +154,32 @@ func (d *Detector) Detect(ctx context.Context, cfg config.ModelConfig) *system.M
 
 	d.mu.Lock()
 	if len(d.cache) >= cacheSweepAt {
-		for k, e := range d.cache {
-			if time.Since(e.at) >= d.ttl {
-				delete(d.cache, k)
-			}
-		}
-		if len(d.cache) >= cacheSweepAt {
-			keys := make([]string, 0, len(d.cache))
-			for k := range d.cache {
-				keys = append(keys, k)
-			}
-			sort.Slice(keys, func(i, j int) bool { return d.cache[keys[i]].at.Before(d.cache[keys[j]].at) })
-			for _, k := range keys[:len(keys)-cacheSweepAt/2] {
-				delete(d.cache, k)
-			}
-		}
+		sweepCache(d.cache, cacheSweepAt, d.ttl, func(e cacheEntry) time.Time { return e.at })
 	}
 	d.cache[key] = cacheEntry{api: api, at: time.Now()}
 	d.mu.Unlock()
-	return api.Clone()
+	return api.Clone(), true
+}
+
+// sweepCache drops expired entries and, when the map is still at limit,
+// the oldest half so a burst of fresh keys cannot grow it without bound.
+func sweepCache[E any](m map[string]E, limit int, ttl time.Duration, at func(E) time.Time) {
+	for k, e := range m {
+		if time.Since(at(e)) >= ttl {
+			delete(m, k)
+		}
+	}
+	if len(m) < limit {
+		return
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool { return at(m[keys[i]]).Before(at(m[keys[j]])) })
+	for _, k := range keys[:len(keys)-limit/2] {
+		delete(m, k)
+	}
 }
 
 func (d *Detector) DetectWithTrace(ctx context.Context, cfg config.ModelConfig) (*system.ModelApiSpec, []string) {
@@ -181,7 +217,7 @@ func registerHostedProbe(stack string, probe hostedProbe) {
 }
 
 func (d *Detector) detect(ctx context.Context, cfg config.ModelConfig) *system.ModelApiSpec {
-	ev := apispec.Evidence{ModelName: cfg.ModelName, ModelFamily: cfg.ModelFamily}
+	ev := apispec.Evidence{ModelName: cfg.ModelName, ModelFamily: cfg.ModelFamily, DeclaredCaps: cfg.Capabilities}
 
 	if d.opts.IgnoreHostVendors {
 		tracef(ctx, "hostname recognition disabled; identifying purely by endpoints and listing shape")
@@ -216,20 +252,22 @@ func (d *Detector) detect(ctx context.Context, cfg config.ModelConfig) *system.M
 	}
 
 	// A stack whose transport is not cfg.ApiType cannot be what this model
-	// speaks to, so it and its vocabulary go. Not applied behind a gateway
-	// (Via set): the wire is then LiteLLM's OpenAI-compatible surface whatever
-	// the upstream's own transport. Family and always_on describe the model,
-	// not the wire, and stay.
+	// speaks to, so it, its vocabulary and the capabilities read from its
+	// endpoints go. Not applied behind a gateway (Via set): the wire is then
+	// LiteLLM's OpenAI-compatible surface whatever the upstream's own
+	// transport. Family, always_on and declared / registry capabilities
+	// describe the model, not the wire, and stay.
 	if transport, ok := config.StackTransport[api.Stack]; ok && transport != cfg.ApiType && api.Via == "" {
 		tracef(ctx, "detected stack %q speaks %q but apiType is %q — stack dropped", api.Stack, transport, cfg.ApiType)
 		api.Stack = ""
 		api.Via = ""
 		api.Bindings = nil
 		api.Parameters = nil
+		apispec.ClearDetectedCapabilities(api, nil)
 		if api.Thinking != nil && api.Thinking.Mode != system.ThinkingModeAlwaysOn {
 			api.Thinking = nil
 		}
-		if api.ModelFamily == "" && api.Thinking == nil {
+		if api.ModelFamily == "" && api.Thinking == nil && api.Capabilities == nil {
 			tracef(ctx, "nothing known about this backend: no api block")
 			return nil
 		}
@@ -238,10 +276,25 @@ func (d *Detector) detect(ctx context.Context, cfg config.ModelConfig) *system.M
 }
 
 // The key hash is part of the cache key so a rotated key re-inspects a
-// backend whose cached result may have failed auth.
+// backend whose cached result may have failed auth; the declared
+// capabilities are part of it because they are composed into the result.
 func cacheKey(cfg config.ModelConfig) string {
 	sum := sha256.Sum256([]byte(cfg.ApiKey))
-	return strings.Join([]string{cfg.ApiURL, cfg.ModelName, cfg.ApiStack, cfg.ModelFamily, hex.EncodeToString(sum[:8])}, "|")
+	return strings.Join([]string{cfg.ApiURL, cfg.ModelName, cfg.ApiStack, cfg.ModelFamily, hex.EncodeToString(sum[:8]), declaredCapsHash(cfg.Capabilities)}, "|")
+}
+
+// Empty for no block; otherwise a digest of its canonical JSON (struct field
+// order, so two equal blocks hash alike).
+func declaredCapsHash(caps *config.DeclaredCapabilities) string {
+	if caps == nil {
+		return ""
+	}
+	raw, err := json.Marshal(caps)
+	if err != nil {
+		return "?"
+	}
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:8])
 }
 
 const redactedURL = "<unparseable url>"

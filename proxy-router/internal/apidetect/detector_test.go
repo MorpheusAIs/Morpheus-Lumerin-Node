@@ -1132,3 +1132,111 @@ func TestDetectCacheBoundedUnderFreshKeyChurn(t *testing.T) {
 	require.Contains(t, d.cache, fmt.Sprintf("k%03d", seeded-cacheSweepAt/2), "the newest seeded entries survive")
 	require.Contains(t, d.cache, fmt.Sprintf("k%03d", seeded-1))
 }
+
+func i64(v int64) *int64 { return &v }
+
+func TestDetectComposesDeclaredCapabilities(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/props", jsonHandler(map[string]any{"total_slots": 1, "chat_template": qwen3Template}))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	noTools := false
+	caps := &config.DeclaredCapabilities{Context: i64(4096), Tools: &noTools}
+	api := newTestDetector().Detect(context.Background(), config.ModelConfig{ModelName: "qwen3-32b", ApiType: "openai", ApiURL: srv.URL + "/v1/chat/completions", Capabilities: caps})
+	require.NotNil(t, api)
+	require.Equal(t, "llamacpp", api.Stack, "declared capabilities do not replace detection")
+	require.Equal(t, system.ApiSpecSourceDetected, api.Source)
+	require.NotNil(t, api.Capabilities)
+	require.Equal(t, int64(4096), *api.Capabilities.Context)
+	require.False(t, *api.Capabilities.Tools)
+	require.Equal(t, "declared", api.Evidence["capabilities.context"])
+	require.Equal(t, "declared", api.Evidence["capabilities.tools"])
+}
+
+func TestDetectTransportDropKeepsDeclaredCapabilities(t *testing.T) {
+	vllm, _ := vllmServer(t, "Qwen/Qwen3-32B")
+	caps := &config.DeclaredCapabilities{Context: i64(32768)}
+
+	t.Run("family known", func(t *testing.T) {
+		api := newTestDetector().Detect(context.Background(), config.ModelConfig{ModelName: "Qwen/Qwen3-32B", ApiType: "claudeai", ApiURL: vllm.URL + "/v1/chat/completions", Capabilities: caps})
+		require.NotNil(t, api)
+		require.Equal(t, "", api.Stack)
+		require.Equal(t, "qwen3", api.ModelFamily)
+		require.Empty(t, api.Bindings)
+		require.Equal(t, int64(32768), *api.Capabilities.Context)
+		require.Equal(t, map[string]string{"capabilities.context": "declared"}, api.Evidence, "only declared evidence survives the drop")
+	})
+
+	t.Run("nothing but the declared block", func(t *testing.T) {
+		unknown, _ := vllmServer(t, "unknown-model-x")
+		cfg := config.ModelConfig{ModelName: "unknown-model-x", ApiType: "claudeai", ApiURL: unknown.URL + "/v1/chat/completions"}
+		require.Nil(t, newTestDetector().Detect(context.Background(), cfg), "nothing known without the block")
+		cfg.Capabilities = caps
+		api := newTestDetector().Detect(context.Background(), cfg)
+		require.NotNil(t, api, "a declared capability is something known")
+		require.Equal(t, "", api.Stack)
+		require.Equal(t, "", api.ModelFamily)
+		require.Nil(t, api.Thinking)
+		require.Equal(t, int64(32768), *api.Capabilities.Context)
+	})
+}
+
+func TestCacheKeyChangesWithDeclaredCapabilities(t *testing.T) {
+	base := config.ModelConfig{ApiURL: "u", ModelName: "m", ApiKey: "k1"}
+	a := cacheKey(base)
+
+	declared := base
+	declared.Capabilities = &config.DeclaredCapabilities{Context: i64(8192)}
+	b := cacheKey(declared)
+	require.NotEqual(t, a, b, "declaring a block changes the key")
+
+	same := base
+	same.Capabilities = &config.DeclaredCapabilities{Context: i64(8192)}
+	require.Equal(t, b, cacheKey(same), "equal blocks behind different pointers share the key")
+
+	changed := base
+	changed.Capabilities = &config.DeclaredCapabilities{Context: i64(16384)}
+	require.NotEqual(t, b, cacheKey(changed), "an edited value changes the key")
+	require.NotContains(t, b, "k1")
+}
+
+func TestNewDetectorCacheTTLOption(t *testing.T) {
+	require.Equal(t, cacheTTL, newTestDetector().ttl, "DefaultOptions keeps the built-in TTL")
+	require.Equal(t, cacheTTL, NewDetector(lib.NewTestLogger(), Options{CacheTTL: -time.Second}).ttl)
+	require.Equal(t, 5*time.Minute, NewDetector(lib.NewTestLogger(), Options{CacheTTL: 5 * time.Minute}).ttl)
+}
+
+func TestWouldProbeFollowsTheCache(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/props", jsonHandler(map[string]any{"total_slots": 1, "chat_template": qwen3Template}))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	d := newTestDetector()
+	cfg := config.ModelConfig{ModelName: "qwen3-32b", ApiType: "openai", ApiURL: srv.URL + "/v1/chat/completions"}
+	require.True(t, d.WouldProbe(cfg), "cold cache")
+
+	api, probed := d.DetectProbed(context.Background(), cfg)
+	require.NotNil(t, api)
+	require.True(t, probed)
+	require.False(t, d.WouldProbe(cfg), "fresh entry")
+
+	_, probed = d.DetectProbed(context.Background(), cfg)
+	require.False(t, probed, "served from the cache")
+
+	d.mu.Lock()
+	for key, e := range d.cache {
+		e.at = time.Now().Add(-d.ttl)
+		d.cache[key] = e
+	}
+	d.mu.Unlock()
+	require.True(t, d.WouldProbe(cfg), "expired entry")
+
+	declared := cfg
+	declared.ApiStack = "vllm"
+	require.False(t, d.WouldProbe(declared), "a declared stack is built, never probed")
+	_, probed = d.DetectProbed(context.Background(), declared)
+	require.False(t, probed)
+	require.False(t, d.WouldProbe(config.ModelConfig{ApiType: "openai"}), "nothing to detect")
+}
