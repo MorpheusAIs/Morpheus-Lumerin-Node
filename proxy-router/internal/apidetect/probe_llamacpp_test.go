@@ -296,3 +296,57 @@ func TestLlamaCppFtypeLabel(t *testing.T) {
 		require.True(t, facts.SetQuantization(ft.name, llamaCppSrcMetaFtype), "every GGUF type name must pass the quantization label check: %s", ft.name)
 	}
 }
+
+func TestProbeLlamaCppIgnoresWrongTypedFields(t *testing.T) {
+	cases := []struct {
+		name  string
+		nCtx  any
+		train any
+	}{
+		{"string numbers", "8192", "131072"},
+		{"fractional numbers", 8192.5, 131072.5},
+		{"object numbers", map[string]any{"value": 8192}, []any{131072}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			props := llamaCppProps(map[string]any{
+				"supports_tool_calls":          1,
+				"supports_parallel_tool_calls": "true",
+			}, map[string]any{"vision": "yes", "audio": 1, "video": map[string]any{}})
+			props["default_generation_settings"] = map[string]any{"n_ctx": c.nCtx}
+			models := llamaCppModels(llamaCppMeta(c.nCtx, c.train, nil), []string{"completion"})
+			api, trace := detectLlamaCpp(t, props, models)
+
+			caps := api.Capabilities
+			require.NotNil(t, caps)
+			require.Nil(t, caps.Context)
+			require.Nil(t, caps.ContextTrained)
+			require.Nil(t, caps.Modalities)
+			require.Nil(t, caps.Tools)
+			require.Nil(t, caps.ToolsParallel)
+			for _, field := range []string{"capabilities.context", "capabilities.contextTrained", "capabilities.modalities.input", "capabilities.tools", "capabilities.toolsParallel"} {
+				require.NotContains(t, api.Evidence[field], "llamacpp:", "%s must not be sourced from a wrong-typed value", field)
+			}
+			require.NotContains(t, trace, "n_ctx = ")
+			require.NotContains(t, trace, "n_ctx_train = ")
+			require.NotContains(t, trace, "modalities.")
+			require.NotContains(t, trace, "supports_tool_calls = ")
+			require.NotContains(t, trace, "supports_parallel_tool_calls = ")
+		})
+	}
+}
+
+func TestProbeLlamaCppQuotesRawFtypeInTrace(t *testing.T) {
+	props := llamaCppProps(nil, nil)
+	models := llamaCppModels(llamaCppMeta(nil, nil, "Q4_K - Medium\nforged trace line"), []string{"completion"})
+	api, trace := detectLlamaCpp(t, props, models)
+
+	require.Equal(t, "", api.Capabilities.Quantization)
+	require.NotContains(t, trace, "\nforged trace line")
+	require.Contains(t, trace, `meta.ftype "Q4_K - Medium\nforged trace line" has no known GGUF type name; ignored`)
+
+	models = llamaCppModels(llamaCppMeta(nil, nil, 15), []string{"completion"})
+	api, trace = detectLlamaCpp(t, props, models)
+	require.Equal(t, "Q4_K_M", api.Capabilities.Quantization)
+	require.Contains(t, trace, `meta.ftype "15": quantization Q4_K_M`)
+}
