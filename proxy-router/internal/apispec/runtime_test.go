@@ -366,7 +366,7 @@ func TestMergeRuntimeCapabilityFacts(t *testing.T) {
 		facts = CapabilityFacts{}
 		facts.SetStructured([]string{"json_schema", "bogus"}, "verify:json_schema@4")
 		facts.AddInputModality("video", "verify:video@4")
-		facts.AddOutputModality("audio", "verify:audio_out@4")
+		facts.SetOutputModalities([]string{"audio"}, "verify:audio_out@4")
 		trace = MergeRuntime(api, Runtime{CapabilityFacts: facts})
 		require.Equal(t, []string{"json_object", "json_schema", "grammar", "regex", "choice"}, api.Capabilities.Structured)
 		require.Equal(t, "vllm:/v1/models.structured", api.Evidence["capabilities.structured"])

@@ -115,8 +115,8 @@ func TestSnapshot(t *testing.T) {
 	if !regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`).MatchString(Date()) {
 		t.Fatalf("Date() = %q", Date())
 	}
-	if Size() < 1000 {
-		t.Fatalf("Size() = %d, the snapshot looks truncated", Size())
+	if len(entries) < 1000 {
+		t.Fatalf("%d entries: the snapshot looks truncated", len(entries))
 	}
 	// Invariants the generator must hold so the composer takes every field.
 	if !sort.SliceIsSorted(entries, func(i, j int) bool { return entries[i].ID < entries[j].ID }) {

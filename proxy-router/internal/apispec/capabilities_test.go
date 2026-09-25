@@ -47,8 +47,9 @@ func TestCapabilityFactsSettersValidate(t *testing.T) {
 	require.Equal(t, []string{"text", "image", "audio"}, f.Modalities.Input)
 	require.Equal(t, "add-again", f.Sources[CapFieldModalitiesInput])
 	require.False(t, f.AddInputModality("embeddings", "add"), "embeddings is an output modality only")
-	require.True(t, f.AddOutputModality("embeddings", "out"))
-	require.False(t, f.AddOutputModality("pdf", "out"))
+	require.True(t, f.SetOutputModalities([]string{"embeddings"}, "out"))
+	require.False(t, f.SetOutputModalities([]string{"pdf"}, "out"), "an input-only modality: field untouched")
+	require.Equal(t, []string{"embeddings"}, f.Modalities.Output)
 	require.True(t, f.SetOutputModalities([]string{"text"}, "out2"))
 	require.Equal(t, []string{"text"}, f.Modalities.Output)
 
@@ -217,8 +218,8 @@ func TestComposeRule3Reasoning(t *testing.T) {
 		require.Contains(t, joined(lines), "capabilities.reasoning: backend false (litellm:/model_group/info.supports_reasoning) contradicts the always_on thinking mode; left unknown")
 	})
 	t.Run("backend true", func(t *testing.T) {
-		f.SetReasoning(true, "sglang:/model_info.reasoning_parser")
 		var f CapabilityFacts
+		f.SetReasoning(true, "sglang:/model_info.reasoning_parser")
 		api := Compose(Evidence{Stack: "sglang", ModelName: "llama-3.3-70b", Caps: f})
 		require.True(t, *api.Capabilities.Reasoning)
 		require.Equal(t, "sglang:/model_info.reasoning_parser", api.Evidence["capabilities.reasoning"])
@@ -507,9 +508,9 @@ func TestComposeRule8WebSearchGatesTableBindings(t *testing.T) {
 		api, lines := ComposeWithTrace(Evidence{Stack: "venice", ModelName: "llama-3.3-70b", Registry: reg})
 		require.Nil(t, api.Bindings[system.IntentWebSearchEnable], "the registry fills after the tables merge: a snapshot never enables a knob")
 		require.True(t, *api.Capabilities.WebSearch)
-	})
 		require.Contains(t, joined(lines), "bindings: web_search.enable dropped — capabilities.webSearch true comes from the registry only, which never opens a knob")
 		require.NotContains(t, joined(lines), "is not reported true")
+	})
 	t.Run("listing-provided web_search binding is not gated", func(t *testing.T) {
 		registry := bindingSet{system.IntentWebSearchEnable: {Kind: bodyParam, Param: "plugins", ParamType: "array", Value: []any{map[string]any{"id": "web"}}}}
 		api := Compose(Evidence{Stack: "openrouter", ModelName: "x/y", RegistryBindings: registry})

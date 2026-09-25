@@ -159,9 +159,6 @@ func Date() string { return snapshotDate }
 // its own RegistryFacts.Name, which may name fewer sources.
 func Sources() string { return snapshotSources }
 
-// Size is the number of ids in the snapshot.
-func Size() int { return len(entries) }
-
 func facts(e entry, date string) *apispec.RegistryFacts {
 	f := &apispec.RegistryFacts{Name: e.Src.name(), Date: date}
 	if e.Context > 0 {

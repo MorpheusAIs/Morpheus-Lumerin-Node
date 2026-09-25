@@ -148,18 +148,6 @@ func (c *CapabilityFacts) AddInputModality(m, source string) bool {
 	return true
 }
 
-func (c *CapabilityFacts) AddOutputModality(m, source string) bool {
-	if !config.IsModalityOutput(m) {
-		return false
-	}
-	mod := c.modalities()
-	if !containsString(mod.Output, m) {
-		mod.Output = append(mod.Output, m)
-	}
-	c.record(CapFieldModalitiesOutput, source)
-	return true
-}
-
 func (c *CapabilityFacts) modalities() *system.Modalities {
 	if c.Modalities == nil {
 		c.Modalities = &system.Modalities{}
