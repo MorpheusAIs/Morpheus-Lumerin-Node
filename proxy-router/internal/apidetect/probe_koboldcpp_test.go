@@ -75,14 +75,50 @@ func TestProbeKoboldCppAudioAndMissingContext(t *testing.T) {
 }
 
 func TestProbeKoboldCppRejectsInvalidContext(t *testing.T) {
+	cases := map[string]any{
+		"zero":         0,
+		"negative":     -8192,
+		"string":       "8192",
+		"fractional":   4096.5,
+		"out of range": 1 << 31,
+		"absent":       nil,
+	}
+	for name, value := range cases {
+		t.Run(name, func(t *testing.T) {
+			body := map[string]any{}
+			if value != nil {
+				body["value"] = value
+			}
+			mux := http.NewServeMux()
+			mux.HandleFunc("/api/extra/version", jsonHandler(koboldVersion()))
+			mux.HandleFunc("/api/extra/true_max_context_length", jsonHandler(body))
+			srv := httptest.NewServer(mux)
+			defer srv.Close()
+
+			ev, _ := probeKoboldAt(t, srv.URL, "")
+			require.Nil(t, ev.Caps.Context)
+			require.NotContains(t, ev.Caps.Sources, apispec.CapFieldContext)
+		})
+	}
+}
+
+// Flags that are not booleans are not reports; only the served window remains.
+func TestProbeKoboldCppIgnoresWrongTypedFlags(t *testing.T) {
+	ver := koboldVersion()
+	ver["vision"], ver["audio"], ver["websearch"], ver["embeddings"] = "true", 1, "false", nil
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/extra/version", jsonHandler(koboldVersion()))
-	mux.HandleFunc("/api/extra/true_max_context_length", jsonHandler(map[string]any{"value": 0}))
+	mux.HandleFunc("/api/extra/version", jsonHandler(ver))
+	mux.HandleFunc("/api/extra/true_max_context_length", jsonHandler(map[string]any{"value": 8192}))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
 	ev, _ := probeKoboldAt(t, srv.URL, "")
-	require.Nil(t, ev.Caps.Context)
+	require.Equal(t, "koboldcpp", ev.Stack)
+	require.Equal(t, int64(8192), *ev.Caps.Context)
+	require.Nil(t, ev.Caps.Modalities)
+	require.Nil(t, ev.Caps.WebSearch)
+	require.Nil(t, ev.Caps.Embeddings)
+	require.Equal(t, map[string]string{apispec.CapFieldContext: "koboldcpp:/api/extra/true_max_context_length.value"}, ev.Caps.Sources)
 }
 
 func TestProbeKoboldCppSendsNoKeyToOpenGETs(t *testing.T) {

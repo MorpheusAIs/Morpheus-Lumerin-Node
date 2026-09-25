@@ -52,6 +52,9 @@ func TestProbeTGIFacts(t *testing.T) {
 func TestProbeTGIMaxOutputOnlyWhenPositive(t *testing.T) {
 	cases := map[string]map[string]any{
 		"input absent":       {},
+		"input zero":         {"max_input_tokens": 0},
+		"input negative":     {"max_input_tokens": -1},
+		"input string":       {"max_input_tokens": "4095"},
 		"input equals total": {"max_input_tokens": 4096},
 		"input above total":  {"max_input_tokens": 8192},
 		"input fractional":   {"max_input_tokens": 4095.5},
@@ -75,17 +78,33 @@ func TestProbeTGIMaxOutputOnlyWhenPositive(t *testing.T) {
 	}
 }
 
+// Without a valid window nothing is published: maxOutput has no operand.
 func TestProbeTGIWithoutTotalSetsNothing(t *testing.T) {
-	info := tgiInfo()
-	delete(info, "max_total_tokens")
-	mux := http.NewServeMux()
-	mux.HandleFunc("/info", jsonHandler(info))
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
+	cases := map[string]map[string]any{
+		"total absent":       {},
+		"total string":       {"max_total_tokens": "4096"},
+		"total fractional":   {"max_total_tokens": 4096.5},
+		"total zero":         {"max_total_tokens": 0},
+		"total negative":     {"max_total_tokens": -4096},
+		"total out of range": {"max_total_tokens": 1 << 31},
+	}
+	for name, patch := range cases {
+		t.Run(name, func(t *testing.T) {
+			info := tgiInfo()
+			delete(info, "max_total_tokens")
+			for k, v := range patch {
+				info[k] = v
+			}
+			mux := http.NewServeMux()
+			mux.HandleFunc("/info", jsonHandler(info))
+			srv := httptest.NewServer(mux)
+			defer srv.Close()
 
-	ev, _ := probeTGIAt(t, srv.URL, "")
-	require.Equal(t, "tgi", ev.Stack)
-	require.True(t, ev.Caps.Empty())
+			ev, _ := probeTGIAt(t, srv.URL, "")
+			require.Equal(t, "tgi", ev.Stack)
+			require.True(t, ev.Caps.Empty())
+		})
+	}
 }
 
 func TestProbeTGIKeyFreeFirst(t *testing.T) {
