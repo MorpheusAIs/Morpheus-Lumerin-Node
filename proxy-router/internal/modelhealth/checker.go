@@ -466,7 +466,8 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 	}
 
 	// Image adapters (prodia-*, hyperbolic-sd) and decisions have no chat API
-	// to probe; detecting them would cost ~16 requests per sweep for nothing.
+	// to probe; detecting them would cost a full engine fingerprint (a few
+	// dozen endpoint requests per TTL) for nothing.
 	// A declared capabilities block is published even when nothing detects
 	// (detection off, or a transport it does not cover).
 	var api *system.ModelApiSpec

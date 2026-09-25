@@ -198,10 +198,12 @@ func matchModelEntry(data []any, modelName string) map[string]any {
 	return matchModelEntryBy(data, modelName, "id")
 }
 
-// matchModelEntryBy is the one listing matcher: the configured name, then
-// its bare id (inline parameters stripped), each exactly (case-insensitive),
-// then a lone entry, then a "<prefix>/<name>" suffix match. field names the
-// identifier key ("id" for OpenAI-shaped listings, "key" for LM Studio v1).
+// matchModelEntryBy is the listing matcher for self-hosted engines: the
+// configured name, then its bare id (inline parameters stripped), each
+// exactly (case-insensitive), then a lone entry, then a "<prefix>/<name>"
+// suffix match. field names the identifier key ("id" for OpenAI-shaped
+// listings, "key" for LM Studio v1). Hosted listings go through vendorEntry,
+// which keeps only the exact-id rule.
 func matchModelEntryBy(data []any, modelName, field string) map[string]any {
 	var entries []map[string]any
 	for _, item := range data {

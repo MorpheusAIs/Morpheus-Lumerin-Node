@@ -188,7 +188,8 @@ type ModelApiSpec struct {
 }
 
 type ThinkingSpec struct {
-	Mode string `json:"mode"` // always_on (cannot be disabled) | controllable (reasoning.disable/enable bindings) | tunable (effort/budget bindings only)
+	// always_on: cannot be disabled (a reasoning.disable binding may remain only with verified: false, the verifier's refutation) | controllable: reasoning.disable/enable bindings | tunable: effort/budget bindings only
+	Mode string `json:"mode"`
 	// Default is "on", "off" or an effort level name; absent when unknown.
 	Default string `json:"default,omitempty"`
 }
