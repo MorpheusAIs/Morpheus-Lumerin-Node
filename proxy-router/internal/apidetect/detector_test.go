@@ -277,6 +277,7 @@ func TestDetectVeniceByShape(t *testing.T) {
 						"supportsReasoning":       true,
 						"supportsFunctionCalling": true,
 						"supportsVision":          false,
+						"supportsWebSearch":       true,
 					},
 				},
 			},
@@ -288,9 +289,17 @@ func TestDetectVeniceByShape(t *testing.T) {
 	api := detect(t, srv.URL+"/api/v1/chat/completions", "openai", "qwen3-235b")
 	require.NotNil(t, api)
 	require.Equal(t, "venice", api.Stack)
-	require.Contains(t, api.Parameters, "reasoning")
-	require.Contains(t, api.Parameters, "tools")
-	require.NotContains(t, api.Parameters, "vision")
+	require.NotNil(t, api.Capabilities)
+	require.Equal(t, true, *api.Capabilities.Tools)
+	require.Equal(t, true, *api.Capabilities.WebSearch)
+	require.Equal(t, true, *api.Capabilities.Reasoning)
+	require.Nil(t, api.Capabilities.Modalities)
+	for _, name := range []string{"reasoning", "vision", "web_search"} {
+		require.NotContains(t, api.Parameters, name, "capability names are not request parameters")
+	}
+	require.Contains(t, api.Parameters, "tools", "the venice stack table supplies the request parameter names")
+	require.Equal(t, "venice:/models.model_spec.capabilities.supportsFunctionCalling", api.Evidence["capabilities.tools"])
+	require.Equal(t, "venice:/models.model_spec.capabilities.supportsWebSearch", api.Evidence["capabilities.webSearch"])
 }
 
 func TestDetectHostedVendorSkipsProbing(t *testing.T) {
