@@ -17,9 +17,12 @@ import (
 
 var updateGolden = flag.Bool("update", false, "rewrite testdata/compose_golden.txt from the current composition")
 
-// Every fixture carries no capability evidence: the golden file pins the api
-// block that consumers (gateway PR #359) read today, so capability work
-// cannot change it byte for byte.
+// No fixture carries backend or declared capability evidence, so the golden
+// file pins the api block that consumers (gateway PR #359) read today and
+// capability work from those layers cannot change it byte for byte. The
+// template layer is inside the pin: a fixture's chat template may set a
+// thinking default (one does), and that composed output is part of what the
+// golden protects.
 func goldenFixtures() (names []string, evidence map[string]Evidence) {
 	evidence = map[string]Evidence{}
 	add := func(name string, ev Evidence) {
