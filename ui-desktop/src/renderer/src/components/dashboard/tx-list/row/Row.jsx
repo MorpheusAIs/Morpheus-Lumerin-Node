@@ -9,15 +9,14 @@ import { UnknownContractIcon } from '../../../icons/UnknownContractIcon';
 import { Field } from './Field';
 import { defaultMeta, metaComponentMap } from './RowMeta';
 import { MorpheusMarketplaceTxIcon } from '../../../icons/MorpheusMarketplaceTx';
+import ExplorerLink from '../../../common/ExplorerLink';
 
-const Container = styled.div`
+/* The row was a bare clickable div with no hint it opened anything. It is an
+   explorer link like every other one now, so it gets the shared affordance. */
+const Container = styled(ExplorerLink)`
   margin-left: 1.6rem;
   padding: 1.2rem 2.4rem 1.2rem 0;
-  display: flex;
-  gap: 1rem;
-  align-items: center;
   box-shadow: 0 -1px 0 0 ${(p) => p.theme.colors.lightShade} inset;
-  cursor: pointer;
   height: 66px;
 `;
 
@@ -45,10 +44,13 @@ const MetaComponentWrap = styled.div`
   overflow: hidden;
 `;
 
+/* Narrowed from 30% and allowed to shrink so the trailing external-link
+   affordance has somewhere to sit. */
 const DateWrap = styled.div`
   display: flex;
-  width: 30%;
-  flex-shrink: 0;
+  width: 26%;
+  flex-shrink: 1;
+  min-width: 0;
 `;
 
 /** @param {{tx: import("./tx").Tx, explorerUrl: string, walletAddress: string, morTokenAddress: string, diamondAddress: string}} props */
@@ -99,7 +101,7 @@ const Row = ({
   const MetaComponent = metaComponentMap[action] || defaultMeta;
 
   return (
-    <Container onClick={() => window.openLink(explorerUrl)}>
+    <Container variant="row" kind="transaction" url={explorerUrl}>
       <IconContainer>
         <Icon width="2em" />
       </IconContainer>

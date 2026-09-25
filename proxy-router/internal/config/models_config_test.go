@@ -85,7 +85,7 @@ type fakeConn struct{}
 
 func (fakeConn) TryConnect(context.Context, string) error { return nil }
 
-func newTestLoader(t *testing.T, content string) *ModelConfigLoader {
+func newLoaderFromContent(t *testing.T, content string) *ModelConfigLoader {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "models-config.json")
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
@@ -93,7 +93,7 @@ func newTestLoader(t *testing.T, content string) *ModelConfigLoader {
 }
 
 func TestInitV2AcceptsApiStackAndLegacyApiTypes(t *testing.T) {
-	l := newTestLoader(t, `{"models":[
+	l := newLoaderFromContent(t, `{"models":[
 		{"modelId":"0x01","modelName":"qwen3-32b","apiType":"openai","apiStack":"vllm","apiUrl":"http://h/v1/chat/completions"},
 		{"modelId":"0x02","modelName":"claude-sonnet-4-5","apiType":"claudeai","apiStack":"anthropic","apiUrl":"https://api.anthropic.com/v1/messages"},
 		{"modelId":"0x03","modelName":"sd-xl","apiType":"prodia-v2","apiUrl":"https://inference.prodia.com/v2"}]}`)
@@ -106,7 +106,7 @@ func TestInitV2AcceptsApiStackAndLegacyApiTypes(t *testing.T) {
 }
 
 func TestInitV2IgnoresBadApiStackAndKeepsEveryModel(t *testing.T) {
-	l := newTestLoader(t, `{"models":[
+	l := newLoaderFromContent(t, `{"models":[
 		{"modelId":"0x01","modelName":"ok","apiType":"openai","apiStack":"vllm","apiUrl":"http://h/v1"},
 		{"modelId":"0x02","modelName":"mismatch","apiType":"openai","apiStack":"anthropic","apiUrl":"http://h/v1"},
 		{"modelId":"0x03","modelName":"unknown","apiType":"openai","apiStack":"bogus","apiUrl":"http://h/v1"}]}`)
@@ -121,7 +121,7 @@ func TestInitV2IgnoresBadApiStackAndKeepsEveryModel(t *testing.T) {
 }
 
 func TestInitLegacyMapIgnoresUnknownApiStack(t *testing.T) {
-	l := newTestLoader(t, `{"0x01":{"modelName":"m","apiType":"openai","apiStack":"bogus","apiUrl":"http://h/v1"}}`)
+	l := newLoaderFromContent(t, `{"0x01":{"modelName":"m","apiType":"openai","apiStack":"bogus","apiUrl":"http://h/v1"}}`)
 	require.NoError(t, l.Init())
 	ids, _ := l.GetAll()
 	require.Len(t, ids, 1)
@@ -142,7 +142,7 @@ func TestValidateApiStackNormalizesWhitespaceAndCase(t *testing.T) {
 }
 
 func TestInitV2NormalizesApiStack(t *testing.T) {
-	l := newTestLoader(t, `{"models":[
+	l := newLoaderFromContent(t, `{"models":[
 		{"modelId":"0x01","modelName":"a","apiType":"openai","apiStack":" Vllm ","apiUrl":"http://h/v1"},
 		{"modelId":"0x02","modelName":"b","apiType":"openai","apiStack":" ","apiUrl":"http://h/v1"}]}`)
 	require.NoError(t, l.Init())
@@ -153,13 +153,13 @@ func TestInitV2NormalizesApiStack(t *testing.T) {
 }
 
 func TestInitLegacyMapNormalizesApiStack(t *testing.T) {
-	l := newTestLoader(t, `{"0x01":{"modelName":"m","apiType":"claudeai","apiStack":" ANTHROPIC ","apiUrl":"http://h/v1"}}`)
+	l := newLoaderFromContent(t, `{"0x01":{"modelName":"m","apiType":"claudeai","apiStack":" ANTHROPIC ","apiUrl":"http://h/v1"}}`)
 	require.NoError(t, l.Init())
 	require.Equal(t, "anthropic", l.ModelConfigFromID("0x01").ApiStack)
 }
 
 func TestInitLegacyMapAcceptsApiStack(t *testing.T) {
-	l := newTestLoader(t, `{"0x01":{"modelName":"qwen3-32b","apiType":"openai","apiStack":"sglang","apiUrl":"http://h/v1"}}`)
+	l := newLoaderFromContent(t, `{"0x01":{"modelName":"qwen3-32b","apiType":"openai","apiStack":"sglang","apiUrl":"http://h/v1"}}`)
 	require.NoError(t, l.Init())
 	require.Equal(t, "sglang", l.ModelConfigFromID("0x01").ApiStack)
 }

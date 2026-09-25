@@ -94,11 +94,14 @@ type BlockchainService struct {
 	// OpenSessionByModelId; empty means HealthPolicyPermissive.
 	sessionHealthPolicy string
 
-	supplyBudgetMu sync.Mutex
-	cachedSupply   *big.Int
-	cachedSupplyAt time.Time
-	cachedBudget   *big.Int
-	cachedBudgetAt time.Time
+	supplyBudgetMu   sync.Mutex
+	cachedSupply     *big.Int
+	cachedSupplyAt   time.Time
+	cachedBudget     *big.Int
+	cachedBudgetAt   time.Time
+	allModelsCache   modelListCache
+	modelPricesCache modelPriceIndexCache
+	sessionOpenLocks keyedLockSet
 
 	legacyTx    bool
 	privateKey  i.PrKeyProvider
@@ -241,12 +244,14 @@ func (s *BlockchainService) GetProvider(ctx context.Context, providerAddr common
 }
 
 func (s *BlockchainService) GetAllModels(ctx context.Context) ([]*structs.Model, error) {
-	ids, models, err := s.modelRegistry.GetAllModels(ctx)
-	if err != nil {
-		return nil, err
-	}
+	return s.allModelsCache.get(ctx, func(fetchCtx context.Context) ([]*structs.Model, error) {
+		ids, models, err := s.modelRegistry.GetAllModels(fetchCtx)
+		if err != nil {
+			return nil, err
+		}
 
-	return mapModels(ids, models), nil
+		return mapModels(ids, models), nil
+	})
 }
 
 func (s *BlockchainService) GetModels(ctx context.Context, offset *big.Int, limit uint8, order r.Order) ([]*structs.Model, error) {
@@ -328,10 +333,27 @@ func (s *BlockchainService) GetRatedBids(ctx context.Context, modelID common.Has
 }
 
 func (s *BlockchainService) rateBids(bidIds [][32]byte, bids []m.IBidStorageBid, pmStats []s.IStatsStorageProviderModelStats, provider []pr.IProviderStorageProvider, mStats *s.IStatsStorageModelStats, minStake *big.Int, log lib.ILogger) []structs.ScoredBid {
-	ratingInputs := make([]rating.RatingInput, len(bids))
+	// These five slices are assembled from separate on-chain reads and are only
+	// index-aligned if every read returned the same number of rows. A short
+	// provider or stats slice used to panic the whole daemon with an
+	// index-out-of-range inside this loop — an unrecoverable crash triggered by
+	// remote data we do not control. Rate only the prefix we can safely align,
+	// and say loudly when we had to truncate.
+	n := len(bids)
+	for _, l := range []int{len(bidIds), len(pmStats), len(provider)} {
+		if l < n {
+			n = l
+		}
+	}
+	if n < len(bids) {
+		log.Warnf("rateBids: inconsistent input lengths (bids=%d bidIds=%d pmStats=%d providers=%d); rating first %d",
+			len(bids), len(bidIds), len(pmStats), len(provider), n)
+	}
+
+	ratingInputs := make([]rating.RatingInput, n)
 	bidIDIndexMap := make(map[common.Hash]int)
 
-	for i := range bids {
+	for i := 0; i < n; i++ {
 		ratingInputs[i] = rating.RatingInput{
 			ScoreInput: rating.ScoreInput{
 				ProviderModel:  &pmStats[i],
@@ -375,16 +397,25 @@ func (s *BlockchainService) rateBids(bidIds [][32]byte, bids []m.IBidStorageBid,
 }
 
 func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalSig []byte, stake *big.Int, directPayment bool, agentUsername string, isTee bool) (common.Hash, error) {
+	unlock, lockErr := lib.GatewayWalletLock(ctx)
+	if lockErr != nil {
+		return common.Hash{}, lockErr
+	}
+	defer unlock()
+
 	log := s.requestLog(ctx)
 
-	var isAgent bool
-	if s.authConfig != nil {
-		var err error
-		isAgent, err = s.authConfig.IsAllowanceEnough(agentUsername, s.morTokenAddr.Hex(), stake)
-		if err != nil {
-			return common.Hash{}, lib.WrapError(ErrAgentUserAllowance, err)
-		}
+	held, holdAmount, err := s.holdAgentAllowance(agentUsername, s.morTokenAddr.Hex(), stake)
+	if err != nil {
+		return common.Hash{}, err
 	}
+	keepHold := false
+	defer func() {
+		if held && !keepHold {
+			s.releaseAgentAllowance(agentUsername, s.morTokenAddr.Hex(), holdAmount)
+		}
+	}()
+	isAgent := held
 
 	prKey, err := s.privateKey.GetPrivateKey()
 	if err != nil {
@@ -421,7 +452,15 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 			ctx,
 			approveBaseOpts,
 			func(opts *bind.TransactOpts) (*types.Transaction, error) {
-				return s.morToken.IncreaseAllowanceTx(opts, s.diamonContractAddr, stake)
+				if err := lib.GatewayAttempt(ctx, "approval"); err != nil {
+					return nil, err
+				}
+				tx, err := s.morToken.IncreaseAllowanceTx(opts, s.diamonContractAddr, stake)
+				if opts.NoSend && err != nil && tx == nil {
+					lib.GatewayBuildFailure(ctx, "approval")
+				}
+				lib.GatewayRecord(ctx, "approval", tx)
+				return tx, err
 			},
 			s.legacyTx,
 		)
@@ -467,7 +506,15 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 			ctx,
 			sessionBaseOpts,
 			func(opts *bind.TransactOpts) (*types.Transaction, error) {
-				return s.sessionRouter.OpenSessionTx(opts, approval, approvalSig, stake, directPayment)
+				if err := lib.GatewayAttempt(ctx, "open"); err != nil {
+					return nil, err
+				}
+				tx, err := s.sessionRouter.OpenSessionTx(opts, approval, approvalSig, stake, directPayment)
+				if opts.NoSend && err != nil && tx == nil {
+					lib.GatewayBuildFailure(ctx, "open")
+				}
+				lib.GatewayRecord(ctx, "open", tx)
+				return tx, err
 			},
 			s.legacyTx,
 		)
@@ -479,8 +526,20 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 		}
 	}
 	if lastOpenErr != nil {
+		if errors.Is(lastOpenErr, lib.ErrEscalationFailed) {
+			keepHold = true
+		}
 		s.handleTxError(ctx, addr, lastOpenErr)
 		return common.Hash{}, lib.WrapError(ErrSendTx, classifyOpenSessionError("open session failed", lastOpenErr))
+	}
+
+	// Broadcast succeeded. Keep the agent debit even if receipt parsing fails.
+	keepHold = true
+	if isAgent && s.authConfig != nil {
+		err = s.authConfig.AuthStorage.SetAgentTx(sessionReceipt.TxHash.Hex(), agentUsername, sessionReceipt.BlockNumber)
+		if err != nil {
+			log.Errorf("failed to set agent tx: %s", err)
+		}
 	}
 
 	// Parse session info from receipt
@@ -489,19 +548,7 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 		return common.Hash{}, lib.WrapError(ErrSendTx, fmt.Errorf("parse session receipt failed: %w", err))
 	}
 
-	if isAgent && s.authConfig != nil {
-		amountBigInt := lib.BigInt{Int: *stake}
-		err = s.authConfig.DecreaseAllowance(agentUsername, s.morTokenAddr.Hex(), amountBigInt)
-		if err != nil {
-			log.Errorf("failed to decrease allowance: %s", err)
-			return common.Hash{}, err
-		}
-		err = s.authConfig.AuthStorage.SetAgentTx(sessionReceipt.TxHash.Hex(), agentUsername, sessionReceipt.BlockNumber)
-		if err != nil {
-			log.Errorf("failed to set agent tx: %s", err)
-		}
-	}
-
+	lib.GatewaySession(ctx, sessionID)
 	// Poll until the session is visible on-chain (handles RPC propagation lag).
 	var session *sessionrepo.SessionModel
 	for attempt := 0; attempt < 10; attempt++ {
@@ -589,6 +636,7 @@ func (s *BlockchainService) CreateNewModel(ctx context.Context, modelID common.H
 	if err != nil {
 		return nil, lib.WrapError(ErrSendTx, err)
 	}
+	s.allModelsCache.invalidate()
 
 	ID, err := s.modelRegistry.GetModelId(ctx, transactOpt.From, modelID)
 	if err != nil {
@@ -631,6 +679,7 @@ func (s *BlockchainService) DeregisterModel(ctx context.Context, modelId common.
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrSendTx, err)
 	}
+	s.allModelsCache.invalidate()
 
 	return tx, nil
 }
@@ -748,6 +797,12 @@ func (s *BlockchainService) DeregisterProdiver(ctx context.Context) (common.Hash
 }
 
 func (s *BlockchainService) CloseSession(ctx context.Context, sessionID common.Hash) (common.Hash, error) {
+	unlock, lockErr := lib.GatewayWalletLock(ctx)
+	if lockErr != nil {
+		return common.Hash{}, lockErr
+	}
+	defer unlock()
+
 	prKey, err := s.privateKey.GetPrivateKey()
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrPrKey, err)
@@ -797,7 +852,15 @@ func (s *BlockchainService) CloseSession(ctx context.Context, sessionID common.H
 			ctx,
 			baseOpts,
 			func(opts *bind.TransactOpts) (*types.Transaction, error) {
-				return s.sessionRouter.CloseSessionTx(opts, reportMessage, signedReport)
+				if err := lib.GatewayAttempt(ctx, "close"); err != nil {
+					return nil, err
+				}
+				tx, err := s.sessionRouter.CloseSessionTx(opts, reportMessage, signedReport)
+				if opts.NoSend && err != nil && tx == nil {
+					lib.GatewayBuildFailure(ctx, "close")
+				}
+				lib.GatewayRecord(ctx, "close", tx)
+				return tx, err
 			},
 			s.legacyTx,
 		)
@@ -870,6 +933,12 @@ func (s *BlockchainService) GetUserStakesOnHold(ctx context.Context, iterations 
 }
 
 func (s *BlockchainService) WithdrawUserStakes(ctx context.Context, iterations uint8) (common.Hash, error) {
+	unlock, lockErr := lib.GatewayWalletLock(ctx)
+	if lockErr != nil {
+		return common.Hash{}, lockErr
+	}
+	defer unlock()
+
 	prKey, err := s.privateKey.GetPrivateKey()
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrPrKey, err)
@@ -890,14 +959,16 @@ func (s *BlockchainService) WithdrawUserStakes(ctx context.Context, iterations u
 }
 
 func (s *BlockchainService) SendETH(ctx context.Context, to common.Address, amount *big.Int, agentUsername string) (common.Hash, error) {
-	var shouldDecrease bool
-	if s.authConfig != nil {
-		var err error
-		shouldDecrease, err = s.authConfig.IsAllowanceEnough(agentUsername, "eth", amount)
-		if err != nil {
-			return common.Hash{}, lib.WrapError(ErrAgentUserAllowance, err)
-		}
+	held, holdAmount, err := s.holdAgentAllowance(agentUsername, "eth", amount)
+	if err != nil {
+		return common.Hash{}, err
 	}
+	keepHold := false
+	defer func() {
+		if held && !keepHold {
+			s.releaseAgentAllowance(agentUsername, "eth", holdAmount)
+		}
+	}()
 
 	signedTx, err := s.createSignedTransaction(ctx, &types.DynamicFeeTx{
 		To:    &to,
@@ -912,19 +983,15 @@ func (s *BlockchainService) SendETH(ctx context.Context, to common.Address, amou
 		return common.Hash{}, lib.WrapError(ErrSendTx, err)
 	}
 
+	keepHold = true
+
 	// Wait for tx to be mined with timeout
 	receipt, err := lib.WaitMinedWithTimeout(ctx, s.ethClient, signedTx, lib.DefaultTxMineTimeout)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrWaitMined, err)
 	}
 
-	if shouldDecrease && s.authConfig != nil {
-		amountBigInt := lib.BigInt{Int: *amount}
-		err = s.authConfig.DecreaseAllowance(agentUsername, "eth", amountBigInt)
-		if err != nil {
-			s.log.Errorf("failed to decrease allowance: %s", err)
-			return common.Hash{}, err
-		}
+	if held && s.authConfig != nil {
 		s.authConfig.AuthStorage.SetAgentTx(signedTx.Hash().Hex(), agentUsername, receipt.BlockNumber)
 	}
 
@@ -997,14 +1064,16 @@ func (s *BlockchainService) createSignedTransaction(ctx context.Context, txdata 
 }
 
 func (s *BlockchainService) SendMOR(ctx context.Context, to common.Address, amount *big.Int, agentUsername string) (common.Hash, error) {
-	var shouldDecrease bool
-	if s.authConfig != nil {
-		var err error
-		shouldDecrease, err = s.authConfig.IsAllowanceEnough(agentUsername, s.morTokenAddr.Hex(), amount)
-		if err != nil {
-			return common.Hash{}, lib.WrapError(ErrAgentUserAllowance, err)
-		}
+	held, holdAmount, err := s.holdAgentAllowance(agentUsername, s.morTokenAddr.Hex(), amount)
+	if err != nil {
+		return common.Hash{}, err
 	}
+	keepHold := false
+	defer func() {
+		if held && !keepHold {
+			s.releaseAgentAllowance(agentUsername, s.morTokenAddr.Hex(), holdAmount)
+		}
+	}()
 
 	prKey, err := s.privateKey.GetPrivateKey()
 	if err != nil {
@@ -1017,17 +1086,14 @@ func (s *BlockchainService) SendMOR(ctx context.Context, to common.Address, amou
 	}
 
 	tx, receipt, err := s.morToken.Transfer(transactOpt, to, amount)
+	if tx != nil {
+		keepHold = true
+	}
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrSendTx, err)
 	}
 
-	if shouldDecrease && s.authConfig != nil {
-		amountBigInt := lib.BigInt{Int: *amount}
-		err = s.authConfig.DecreaseAllowance(agentUsername, s.morTokenAddr.Hex(), amountBigInt)
-		if err != nil {
-			s.log.Errorf("failed to decrease allowance: %s", err)
-			return common.Hash{}, err
-		}
+	if held && s.authConfig != nil {
 		err = s.authConfig.AuthStorage.SetAgentTx(tx.Hash().Hex(), agentUsername, receipt.BlockNumber)
 		if err != nil {
 			s.log.Errorf("failed to set agent tx: %s", err)
@@ -1035,6 +1101,34 @@ func (s *BlockchainService) SendMOR(ctx context.Context, to common.Address, amou
 	}
 
 	return tx.Hash(), nil
+}
+
+func (s *BlockchainService) holdAgentAllowance(username string, token string, amount *big.Int) (bool, lib.BigInt, error) {
+	var holdAmount lib.BigInt
+	if s.authConfig == nil {
+		return false, holdAmount, nil
+	}
+	enough, err := s.authConfig.IsAllowanceEnough(username, token, amount)
+	if err != nil {
+		return false, holdAmount, lib.WrapError(ErrAgentUserAllowance, err)
+	}
+	if !enough {
+		return false, holdAmount, nil
+	}
+	holdAmount = lib.BigInt{Int: *new(big.Int).Set(amount)}
+	if err := s.authConfig.DecreaseAllowance(username, token, holdAmount); err != nil {
+		return false, holdAmount, lib.WrapError(ErrAgentUserAllowance, err)
+	}
+	return true, holdAmount, nil
+}
+
+func (s *BlockchainService) releaseAgentAllowance(username string, token string, amount lib.BigInt) {
+	if s.authConfig == nil {
+		return
+	}
+	if err := s.authConfig.IncreaseAllowance(username, token, amount); err != nil {
+		s.log.Errorf("failed to restore agent allowance: %s", err)
+	}
 }
 
 func (s *BlockchainService) GetAllowance(ctx context.Context, spender common.Address) (*big.Int, error) {
@@ -1266,11 +1360,16 @@ func (s *BlockchainService) GetTransactions(ctx context.Context, page uint64, li
 }
 
 // OpenSessionByBidId opens a session against a specific bid (no provider failover).
-func (s *BlockchainService) OpenSessionByBidId(ctx context.Context, bidID common.Hash, duration *big.Int, agentUsername string) (common.Hash, error) {
-	return s.openSessionByBid(ctx, bidID, duration, agentUsername)
+func (s *BlockchainService) OpenSessionByBidId(ctx context.Context, bidID common.Hash, duration *big.Int, directPayment bool, agentUsername string) (common.Hash, error) {
+	return s.openSessionByBid(ctx, bidID, duration, directPayment, agentUsername, nil)
 }
 
-func (s *BlockchainService) openSessionByBid(ctx context.Context, bidID common.Hash, duration *big.Int, agentUsername string) (common.Hash, error) {
+// beforeOpen, when set, runs after the wallet and the bid have been resolved but
+// before any transaction is prepared. It mirrors the hook on openSessionByModelID
+// and exists for the same reason: the guarded desktop flow has to decide whether
+// a session already exists while holding the wallet/model lock, and it cannot
+// know the model until the bid has been read.
+func (s *BlockchainService) openSessionByBid(ctx context.Context, bidID common.Hash, duration *big.Int, directPayment bool, agentUsername string, beforeOpen func(context.Context, common.Address, common.Hash) error) (common.Hash, error) {
 	supply, err := s.GetTokenSupply(ctx)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrTokenSupply, err)
@@ -1295,6 +1394,12 @@ func (s *BlockchainService) openSessionByBid(ctx context.Context, bidID common.H
 		return common.Hash{}, ErrOpenOwnBid
 	}
 
+	if beforeOpen != nil {
+		if err := beforeOpen(ctx, userAddr, bid.ModelAgentId); err != nil {
+			return common.Hash{}, err
+		}
+	}
+
 	isTee := false
 	if s.attestationVerifier != nil {
 		model, err := s.modelRegistry.GetModelById(ctx, bid.ModelAgentId)
@@ -1303,11 +1408,28 @@ func (s *BlockchainService) openSessionByBid(ctx context.Context, bidID common.H
 		}
 	}
 
-	hash, _, err := s.tryOpenSession(ctx, bid, duration, supply, budget, userAddr, false, false, agentUsername, isTee)
+	hash, _, err := s.tryOpenSession(ctx, bid, duration, supply, budget, userAddr, directPayment, false, agentUsername, isTee)
 	return hash, err
 }
 
 func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID common.Hash, duration *big.Int, directPayment bool, isFailoverEnabled bool, omitProvider common.Address, agentUsername string) (common.Hash, error) {
+	return s.openSessionByModelID(ctx, modelID, duration, directPayment, isFailoverEnabled, omitProvider, agentUsername, nil)
+}
+
+func (s *BlockchainService) openSessionByModelID(ctx context.Context, modelID common.Hash, duration *big.Int, directPayment bool, isFailoverEnabled bool, omitProvider common.Address, agentUsername string, beforeOpen func(context.Context, common.Address) error) (common.Hash, error) {
+	userAddr, err := s.GetMyAddress(ctx)
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrMyAddress, err)
+	}
+	if beforeOpen != nil {
+		// Guarded desktop opens check for a resumable session before provider
+		// discovery and health probes. The caller holds the wallet/model lock,
+		// so other guarded opens for this pair cannot race this decision.
+		if err := beforeOpen(ctx, userAddr); err != nil {
+			return common.Hash{}, err
+		}
+	}
+
 	supply, err := s.GetTokenSupply(ctx)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrTokenSupply, err)
@@ -1338,11 +1460,6 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 
 	if len(bids) == 0 {
 		return common.Hash{}, ErrNoBid
-	}
-
-	userAddr, err := s.GetMyAddress(ctx)
-	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrMyAddress, err)
 	}
 
 	minStake, err := s.getMinStakeCached(ctx)
@@ -1412,7 +1529,14 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 		}
 		candidates = kept
 	}
-
+	if beforeOpen != nil {
+		// Recheck at the transaction boundary as well. Legacy/API callers do not
+		// opt into the keyed guarded path and may have opened this model while
+		// provider discovery was running after the fast check above.
+		if err := beforeOpen(ctx, userAddr); err != nil {
+			return common.Hash{}, err
+		}
+	}
 	for i, bid := range candidates {
 		log.Infof("trying to open session with provider #%d %s", i, bid.Bid.Provider.String())
 		durationCopy := new(big.Int).Set(duration)
@@ -1480,28 +1604,76 @@ func (s *BlockchainService) GetAllBidsWithRating(ctx context.Context, modelAgent
 	return ids, bids, providerModelStats, providers, nil
 }
 
-// computeSessionTokenAmount returns the MOR amount transferred when opening a session
-// (mirrors tryOpenSession / OpenSession on-chain pull).
-func computeSessionTokenAmount(bid *structs.Bid, duration, supply, budget *big.Int, directPayment bool) (*big.Int, error) {
+// useGatewayStakeHeadroom is true only for GATE managed/gateway mode:
+// GATEWAY_JOURNAL_PATH set, or an explicit max-stake limit on the request ctx.
+// Unmanaged consumer opens keep the stock stake formula (no +0.01% / 300s floor).
+func useGatewayStakeHeadroom(ctx context.Context) bool {
+	if lib.GatewayManaged() {
+		return true
+	}
+	if ctx == nil {
+		return false
+	}
+	limit, _ := ctx.Value(lib.GatewayMaxStakeKey).(*big.Int)
+	return limit != nil
+}
+
+// sessionDurationHeadroomSeconds pads the amount by one second of compute.
+//
+// stakeToStipend floors when it converts the amount to a stipend, and
+// getSessionEnd floors again when it divides that stipend by the price, so an
+// amount computed to land exactly on the requested duration can come out one
+// second short. A second of headroom removes both truncations for a cost of
+// well under a tenth of a percent on any session length the UI offers.
+var sessionDurationHeadroomSeconds = big.NewInt(1)
+
+// computeSessionTokenAmount returns the MOR amount openSession pulls for a
+// session of the requested length.
+//
+// The amount does not depend on the payment method. SessionRouter.getSessionEnd
+// prices every session as stakeToStipend(amount) / pricePerSecond, whether or
+// not it is direct pay; direct pay changes only who the provider is paid by at
+// close (the user's escrowed amount rather than the emissions pool). Returning
+// price × duration for direct pay, as this did, bought roughly
+// duration × budget ÷ supply seconds — currently about a three-hundredth of
+// what was asked for — and reverted as SessionTooShort. The desktop app hid
+// that by pre-inflating the duration it sent; the inflation has been removed
+// along with this branch, so router and app now agree on one number.
+//
+// In gateway-managed mode (useGatewayStakeHeadroom), a companion gateway may
+// be capping stake via MaxStakeWei, so the amount instead comes from
+// lib.GatewaySessionStake, which enforces that cap.
+func computeSessionTokenAmount(ctx context.Context, bid *structs.Bid, duration, supply, budget *big.Int, directPayment bool) (*big.Int, error) {
 	if bid == nil || bid.PricePerSecond == nil {
 		return nil, fmt.Errorf("invalid bid")
 	}
-	sessionCost := new(big.Int).Mul(&bid.PricePerSecond.Int, duration)
-	if directPayment {
-		return new(big.Int).Set(sessionCost), nil
+	if duration == nil || duration.Sign() <= 0 {
+		return nil, fmt.Errorf("invalid session duration")
 	}
-	if supply == nil {
+	if supply == nil || supply.Sign() <= 0 {
 		return nil, fmt.Errorf("invalid token supply")
 	}
-	if budget == nil || budget.Sign() == 0 {
+	if budget == nil || budget.Sign() <= 0 {
 		return nil, fmt.Errorf("invalid emissions budget")
 	}
-	stake := new(big.Int).Div(new(big.Int).Mul(supply, sessionCost), budget)
-	return stake, nil
+	if useGatewayStakeHeadroom(ctx) {
+		return lib.GatewaySessionStake(&bid.PricePerSecond.Int, duration, supply, budget)
+	}
+	paidDuration := new(big.Int).Add(duration, sessionDurationHeadroomSeconds)
+	cost := new(big.Int).Mul(&bid.PricePerSecond.Int, paidDuration)
+	amount := new(big.Int).Mul(supply, cost)
+	// Round up: rounding down is the other way a session lands short.
+	amount.Add(amount, new(big.Int).Sub(budget, big.NewInt(1)))
+	return amount.Div(amount, budget), nil
 }
 
-// EstimateOpenSessionStake estimates MOR moved for the highest-scored bid (first open attempt).
-func (s *BlockchainService) EstimateOpenSessionStake(ctx context.Context, modelID common.Hash, duration *big.Int, directPayment bool) (*structs.OpenSessionStakeEstimate, error) {
+// EstimateOpenSessionStake reports the MOR amount an open would move, along
+// with every input it was derived from, so a caller can show the user the real
+// cost next to the amount being locked up.
+//
+// bidID selects the bid to quote. The zero hash quotes the highest-scored bid,
+// which is the one an unattended open tries first.
+func (s *BlockchainService) EstimateOpenSessionStake(ctx context.Context, modelID common.Hash, bidID common.Hash, duration *big.Int, directPayment bool) (*structs.OpenSessionStakeEstimate, error) {
 	rated, err := s.GetRatedBids(ctx, modelID)
 	if err != nil {
 		return nil, err
@@ -1509,7 +1681,22 @@ func (s *BlockchainService) EstimateOpenSessionStake(ctx context.Context, modelI
 	if len(rated) == 0 {
 		return nil, ErrNoBid
 	}
-	top := &rated[0].Bid
+
+	quoted := &rated[0]
+	if bidID != (common.Hash{}) {
+		quoted = nil
+		for i := range rated {
+			if rated[i].Bid.Id == bidID {
+				quoted = &rated[i]
+				break
+			}
+		}
+		if quoted == nil {
+			return nil, lib.WrapError(ErrBid, fmt.Errorf("bid %s is not among the rated bids for model %s", bidID.Hex(), modelID.Hex()))
+		}
+	}
+
+	bid := &quoted.Bid
 	supply, err := s.GetTokenSupply(ctx)
 	if err != nil {
 		return nil, err
@@ -1518,23 +1705,47 @@ func (s *BlockchainService) EstimateOpenSessionStake(ctx context.Context, modelI
 	if err != nil {
 		return nil, err
 	}
-	stake, err := computeSessionTokenAmount(top, duration, supply, budget, directPayment)
+	stake, err := computeSessionTokenAmount(ctx, bid, duration, supply, budget, directPayment)
 	if err != nil {
 		return nil, err
 	}
-	sessionCost := new(big.Int).Mul(&top.PricePerSecond.Int, duration)
+	sessionCost := new(big.Int).Mul(&bid.PricePerSecond.Int, duration)
+	settlement := "Staking returns the whole amount when the session closes; the provider is paid from emissions."
+	if directPayment {
+		settlement = "Direct payment pays the provider out of this amount at close and refunds the remainder."
+	}
 	return &structs.OpenSessionStakeEstimate{
 		StakeWei:           stake.String(),
 		SessionCostWei:     sessionCost.String(),
 		MorSupplyWei:       supply.String(),
 		EmissionsBudgetWei: budget.String(),
-		PricePerSecondWei:  top.PricePerSecond.String(),
+		PricePerSecondWei:  bid.PricePerSecond.String(),
 		DurationSeconds:    duration.String(),
 		DirectPayment:      directPayment,
-		TopBidProvider:     top.Provider.Hex(),
-		TopBidScore:        rated[0].Score,
-		Explanation: "MOR moved ≈ (total MOR supply × provider price_per_second × duration) ÷ today's emissions budget. " +
-			"It is not the same as price_per_second × duration in MOR. The app uses increaseAllowance on the MOR token for the diamond when your allowance is below ~3× this amount, then the diamond pulls this stake in openSession.",
+		BidID:              bid.Id.Hex(),
+		TopBidProvider:     bid.Provider.Hex(),
+		TopBidScore:        quoted.Score,
+		Explanation: "stake_wei ≈ (total MOR supply × price_per_second × duration) ÷ today's emissions budget, rounded up. " +
+			"It is not price_per_second × duration; that is session_cost_wei, the compute this session actually buys. " +
+			settlement +
+			" The app raises its MOR allowance for the diamond when the allowance is below ~3× stake_wei, then the diamond pulls it in openSession.",
+	}, nil
+}
+
+// GetSessionDurationBounds reports the shortest and longest session the
+// deployed contract accepts.
+func (s *BlockchainService) GetSessionDurationBounds(ctx context.Context) (*structs.SessionDurationBounds, error) {
+	minSeconds, err := s.sessionRouter.GetMinSessionDuration(ctx)
+	if err != nil {
+		return nil, err
+	}
+	maxSeconds, err := s.sessionRouter.GetMaxSessionDuration(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &structs.SessionDurationBounds{
+		MinSeconds: minSeconds.String(),
+		MaxSeconds: maxSeconds.String(),
 	}, nil
 }
 
@@ -1570,11 +1781,29 @@ func (s *BlockchainService) tryOpenSession(ctx context.Context, bid *structs.Bid
 		log.Infof("TEE attestation passed for provider %s", bid.Provider)
 	}
 
-	amountTransferred, err := computeSessionTokenAmount(bid, duration, supply, budget, directPayment)
+	// Refresh supply/budget only in managed/gateway mode (Alan #889 review).
+	// Unmanaged opens already fetched these once in the caller; avoid per-bid
+	// failover RPC churn.
+	if !directPayment && useGatewayStakeHeadroom(ctx) {
+		timestamp := big.NewInt(time.Now().Unix())
+		var refreshErr error
+		supply, refreshErr = s.sessionRouter.GetTotalMORSupply(ctx, timestamp)
+		if refreshErr != nil {
+			return common.Hash{}, false, fmt.Errorf("failed to parse token supply: %w", refreshErr)
+		}
+		budget, refreshErr = s.sessionRouter.GetTodaysBudget(ctx, timestamp)
+		if refreshErr != nil {
+			return common.Hash{}, false, fmt.Errorf("failed to parse token budget: %w", refreshErr)
+		}
+	}
+	amountTransferred, err := computeSessionTokenAmount(ctx, bid, duration, supply, budget, directPayment)
 	if err != nil {
 		return common.Hash{}, false, err
 	}
 
+	if err := lib.CheckGatewayStake(ctx, amountTransferred); err != nil {
+		return common.Hash{}, false, err
+	}
 	log.Infof("attempting to initiate session %s", map[string]string{
 		"provider":          bid.Provider.String(),
 		"directPayment":     strconv.FormatBool(directPayment),

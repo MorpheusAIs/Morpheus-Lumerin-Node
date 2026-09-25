@@ -9,6 +9,7 @@ package modelhealth
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -404,8 +405,8 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 		c.log.Warnf("model %s: unknown modelFamily %q — no family bindings will be advertised", lib.Short(modelID), cfg.ModelFamily)
 	}
 
-	// Image adapters (prodia-*, hyperbolic-sd) have no chat API to probe;
-	// detecting them would cost ~16 requests per sweep for nothing.
+	// Image adapters (prodia-*, hyperbolic-sd) and decisions have no chat API
+	// to probe; detecting them would cost ~16 requests per sweep for nothing.
 	var api *system.ModelApiSpec
 	if apispec.StackFor(cfg.ApiStack) != "" {
 		api = apispec.Build(cfg)
@@ -482,6 +483,8 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 		probe = c.probeLLM
 	case structs.ModelTypeEMBEDDING:
 		probe = c.probeEmbeddings
+	case structs.ModelTypeDECISIONS:
+		probe = c.probeDecisions
 	case structs.ModelTypeUnknown:
 		// A model with no recognised tag still needs a health answer. Skipping
 		// publishes no health for it at all, and consumers that filter on the
@@ -633,6 +636,40 @@ func (c *Checker) probeEmbeddings(ctx context.Context, adapter aiengine.AIEngine
 	}
 	if !gotVector {
 		return errors.New("empty embeddings response")
+	}
+	return nil
+}
+
+// probeDecisions sends a minimal valid TypeSafe Decisions request (tiny state +
+// one typed noul question). Mirrors embeddings: success = non-empty answers.
+func (c *Checker) probeDecisions(ctx context.Context, adapter aiengine.AIEngineStream, report *system.ModelHealthReport) error {
+	req := &gcs.DecisionsRequest{
+		State: json.RawMessage(`"health"`),
+		Questions: map[string]json.RawMessage{
+			"ok": json.RawMessage(`{"type":"noul","instructions":"Is the service healthy?"}`),
+		},
+	}
+
+	var gotAnswers bool
+	err := adapter.Decisions(ctx, req, func(ctx context.Context, chunk gcs.Chunk, aiEngineErr *gcs.AiEngineErrorResponse) error {
+		if aiEngineErr != nil {
+			report.HttpStatus = aiEngineErr.StatusCode
+			return nil
+		}
+		resp, ok := chunk.Data().(gcs.DecisionsResponse)
+		if !ok {
+			return nil
+		}
+		if len(resp.Answers) > 0 {
+			gotAnswers = true
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if !gotAnswers {
+		return errors.New("empty decisions response")
 	}
 	return nil
 }

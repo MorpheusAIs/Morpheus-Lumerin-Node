@@ -26,7 +26,6 @@ func TestLogWatcherPolling(t *testing.T) {
 
 func TestWatchDoesntReturnEventsTwice(t *testing.T) {
 	t.Skip("Mock setup needs updating for new Watch method implementation")
-	return
 	ethClientMock := mocks.NewEthClientMock(t)
 	event1 := types.Log{
 		BlockNumber: 2,
@@ -71,7 +70,6 @@ OUTER:
 
 func TestWatchShouldErrorAfterMaxReconnects(t *testing.T) {
 	t.Skip("Mock setup needs updating for new Watch method implementation")
-	return
 	ethClientMock := mocks.NewEthClientMock(t)
 	maxRetries := 10
 
@@ -98,7 +96,6 @@ func TestWatchShouldErrorAfterMaxReconnects(t *testing.T) {
 
 func TestShouldHandleContextCancellation(t *testing.T) {
 	t.Skip("Mock setup needs updating for new Watch method implementation")
-	return
 	ethClientMock := mocks.NewEthClientMock(t)
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -126,7 +123,6 @@ func TestShouldHandleContextCancellation(t *testing.T) {
 
 func TestShouldUnsubscribe(t *testing.T) {
 	t.Skip("Mock setup needs updating for new Watch method implementation")
-	return
 	ethClientMock := mocks.NewEthClientMock(t)
 	_ = ethClientMock.EXPECT().FilterLogs(mock.Anything, mock.Anything).Return([]types.Log{}, nil)
 

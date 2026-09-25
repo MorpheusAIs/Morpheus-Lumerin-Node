@@ -17,9 +17,18 @@ const (
 	DERIVATION_PATH_KEY = "mnemonic-derivation-path"
 )
 
+// How the active wallet's key material is stored.
+const (
+	WalletKindMnemonic   = "mnemonic"
+	WalletKindPrivateKey = "privateKey"
+	WalletKindEnv        = "env"
+)
+
 var (
-	ErrWalletNotSet = errors.New("wallet not set")
-	ErrWallet       = errors.New("cannot retrieve mnemonic or private key")
+	ErrWalletNotSet      = errors.New("wallet not set")
+	ErrWallet            = errors.New("cannot retrieve mnemonic or private key")
+	ErrNoMnemonic        = errors.New("wallet has no stored mnemonic; HD accounts require a mnemonic wallet")
+	ErrBadDerivationPath = errors.New("invalid derivation path")
 )
 
 type KeychainWallet struct {
@@ -133,6 +142,63 @@ func (w *KeychainWallet) DeleteWallet() error {
 
 	w.notifyUpdated()
 
+	return nil
+}
+
+// GetKind reports how the active wallet is stored, and — for a mnemonic
+// wallet — which derivation path is currently selected.
+//
+// The desktop app needs this to know whether HD account switching is even
+// possible: a wallet imported as a raw private key has no seed to derive
+// further accounts from.
+func (w *KeychainWallet) GetKind() (kind string, derivationPath string, err error) {
+	prKey, prKeyErr := w.getStoredPrivateKey()
+	mnem, derivation, mnemErr := w.getStoredMnemonic()
+
+	if errors.Is(prKeyErr, keychain.ErrKeyNotFound) && errors.Is(mnemErr, keychain.ErrKeyNotFound) {
+		return "", "", ErrWalletNotSet
+	}
+	if mnem != "" {
+		return WalletKindMnemonic, derivation, nil
+	}
+	if prKey != nil {
+		return WalletKindPrivateKey, "", nil
+	}
+	return "", "", ErrWallet
+}
+
+// SetDerivationPath re-derives the active key from the ALREADY STORED mnemonic.
+//
+// This exists so the desktop app can switch between HD accounts without ever
+// holding the seed phrase itself. The app discards the mnemonic after
+// onboarding (it only ever POSTs it), and re-prompting the user for it on every
+// account switch would be both hostile and a good way to train people to type
+// their seed into things.
+//
+// Errors with ErrNoMnemonic if the wallet was imported as a raw private key.
+func (w *KeychainWallet) SetDerivationPath(derivationPath string) error {
+	mnem, _, err := w.getStoredMnemonic()
+	if err != nil {
+		if errors.Is(err, keychain.ErrKeyNotFound) {
+			return ErrNoMnemonic
+		}
+		return err
+	}
+	if mnem == "" {
+		return ErrNoMnemonic
+	}
+
+	// Validate before persisting, so a bad path cannot leave the wallet
+	// pointing at something underivable.
+	if _, err := w.mnemonicToPrivateKey(mnem, derivationPath); err != nil {
+		return lib.WrapError(ErrBadDerivationPath, err)
+	}
+
+	if err := w.storage.Upsert(DERIVATION_PATH_KEY, derivationPath); err != nil {
+		return err
+	}
+
+	w.notifyUpdated()
 	return nil
 }
 

@@ -38,8 +38,8 @@
       "modelName": "inference.sd15.txt2img.v1",
       "apiType": "prodia-v2",
       "apiUrl": "https://inference.prodia.com/v2",
-      "apiKey": "FILL_ME_IN"  
-    },    
+      "apiKey": "FILL_ME_IN"
+    },
     {
       "modelId": "0x0000000000000000000000000000000000000000000000000000000000000005",
       "modelName": "gpt-4o-mini",
@@ -54,6 +54,20 @@
       "apiStack": "vllm",
       "modelFamily": "qwen3",
       "apiUrl": "http://localhost:8000/v1/chat/completions"
+    },
+    {
+      "modelId": "0x00000000000000000000000000000000000000000000000000000000000000a1",
+      "modelName": "jev-1.13.0",
+      "apiType": "decisions",
+      "apiUrl": "https://api.typesafe.ai/v1/systemone",
+      "apiKey": "FILL_ME_IN"
+    },
+    {
+      "modelId": "0x00000000000000000000000000000000000000000000000000000000000000a2",
+      "modelName": "typesafe/jev-1.13",
+      "apiType": "decisions",
+      "apiUrl": "https://openrouter.ai/api/alpha/decisions",
+      "apiKey": "FILL_ME_IN"
     }
   ]
 }

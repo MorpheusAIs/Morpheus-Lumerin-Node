@@ -49,16 +49,16 @@ type BackendAttestationStatusProvider interface {
 }
 
 type ProxyController struct {
-	service                   *ProxyServiceSender
-	aiEngine                  AIEngine
-	chatStorage               gsc.ChatStorageInterface
-	storeChatContext          bool
-	forwardChatContext        bool
-	log                       lib.ILogger
-	authConfig                system.HTTPAuthConfig
-	ipfsManager               *IpfsManager
-	dockerManager             *DockerManager
-	backendAttestationStatus  BackendAttestationStatusProvider
+	service                  *ProxyServiceSender
+	aiEngine                 AIEngine
+	chatStorage              gsc.ChatStorageInterface
+	storeChatContext         bool
+	forwardChatContext       bool
+	log                      lib.ILogger
+	authConfig               system.HTTPAuthConfig
+	ipfsManager              *IpfsManager
+	dockerManager            *DockerManager
+	backendAttestationStatus BackendAttestationStatusProvider
 }
 
 func NewProxyController(service *ProxyServiceSender, aiEngine AIEngine, chatStorage gsc.ChatStorageInterface, storeChatContext, forwardChatContext bool, authConfig system.HTTPAuthConfig, ipfsManager *IpfsManager, log lib.ILogger) *ProxyController {
@@ -100,6 +100,7 @@ func (s *ProxyController) RegisterRoutes(r interfaces.Router) {
 	r.POST("/v1/audio/transcriptions", s.authConfig.CheckAuth("audio_transcription"), s.AudioTranscription)
 	r.POST("/v1/audio/speech", s.authConfig.CheckAuth("audio_speech"), s.AudioSpeech)
 	r.POST("/v1/embeddings", s.authConfig.CheckAuth("embeddings"), s.Embeddings)
+	r.POST("/v1/decisions", s.authConfig.CheckAuth("decisions"), s.Decisions)
 
 	r.POST("/ipfs/pin", s.authConfig.CheckAuth("ipfs_pin"), s.Pin)
 	r.POST("/ipfs/unpin", s.authConfig.CheckAuth("ipfs_unpin"), s.Unpin)
@@ -183,11 +184,12 @@ func (s *ProxyController) InitiateSession(ctx *gin.Context) {
 //	@Description	Send prompt to a local or remote model based on session id in header
 //	@Tags			chat
 //	@Produce		text/event-stream
-//	@Param			session_id	header		string											false	"Session ID"	format(hex32)
-//	@Param			model_id	header		string											false	"Model ID"		format(hex32)
-//	@Param			chat_id		header		string											false	"Chat ID"		format(hex32)
-//	@Param			prompt		body		proxyapi.ChatCompletionRequestSwaggerExample	true	"Prompt"
-//	@Success		200			{object}	string
+//	@Param			session_id			header		string											false	"Session ID"																																		format(hex32)
+//	@Param			model_id			header		string											false	"Model ID"																																			format(hex32)
+//	@Param			chat_id				header		string											false	"Chat ID"																																			format(hex32)
+//	@Param			x-morpheus-history	header		string											false	"Request-local chat history mode. 'off' disables storing and forwarding context for this request; 'on' and 'default' preserve the server policy."	Enums(default,on,off)
+//	@Param			prompt				body		proxyapi.ChatCompletionRequestSwaggerExample	true	"Prompt"
+//	@Success		200					{object}	string
 //	@Security		BasicAuth
 //
 //	@Router			/v1/chat/completions [post]
@@ -198,6 +200,16 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 	)
 
 	if err := ctx.ShouldBindHeader(&head); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	storeChatContext, forwardChatContext, err := promptHistoryPolicy(
+		head.HistoryMode,
+		c.storeChatContext,
+		c.forwardChatContext,
+	)
+	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -224,7 +236,7 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 		}
 	}
 
-	adapter, err := c.aiEngine.GetAdapter(ctx, chatID.Hash, head.ModelID.Hash, head.SessionID.Hash, c.storeChatContext, c.forwardChatContext)
+	adapter, err := c.aiEngine.GetAdapter(ctx, chatID.Hash, head.ModelID.Hash, head.SessionID.Hash, storeChatContext, forwardChatContext)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -695,6 +707,14 @@ func (c *ProxyController) StreamDownloadFile(ctx *gin.Context) {
 			percentage = float64(downloaded) / float64(total) * 100
 		}
 
+		// The progress reader reports every 32 KiB. Only serialize and flush an
+		// SSE update at MiB boundaries (plus the final update), otherwise large
+		// model downloads can generate millions of events and overwhelm the
+		// desktop IPC bridge even though the file transfer itself is healthy.
+		if downloaded != total && downloaded%1048576 != 0 {
+			return nil
+		}
+
 		event := DownloadProgressEvent{
 			Status:      "downloading",
 			Downloaded:  downloaded,
@@ -719,12 +739,6 @@ func (c *ProxyController) StreamDownloadFile(ctx *gin.Context) {
 			}
 
 			ctx.Writer.Flush()
-
-			// Don't spam too many updates
-			if downloaded < total && downloaded%1048576 != 0 { // Send at least every 1MB
-				// Skip some updates for better performance
-				return nil
-			}
 
 			return nil
 		}
@@ -1787,6 +1801,103 @@ func (c *ProxyController) executeEmbeddings(ctx *gin.Context, adapter aiengine.A
 	return adapter.Embeddings(ctx, request, func(cbctx context.Context, completion gsc.Chunk, aiResponseError *gsc.AiEngineErrorResponse) error {
 		if aiResponseError != nil {
 			ctx.JSON(http.StatusBadRequest, aiResponseError)
+			return nil
+		}
+
+		responseBytes, err := json.Marshal(completion.Data())
+		if err != nil {
+			return err
+		}
+
+		_, err = ctx.Writer.Write(responseBytes)
+		if err != nil {
+			return err
+		}
+
+		ctx.Writer.Flush()
+		return nil
+	})
+}
+
+// Decisions godoc
+//
+//	@Summary		Submit a Decisions request
+//	@Description	Evaluate state against typed questions (TypeSafe System One / OpenRouter Decisions core). Non-streaming single JSON.
+//	@Tags			decisions
+//	@Produce		json
+//	@Param			session_id	header		string								false	"Session ID"	format(hex32)
+//	@Param			model_id	header		string								false	"Model ID"		format(hex32)
+//	@Param			chat_id		header		string								false	"Chat ID"		format(hex32)
+//	@Param			request		body		proxyapi.DecisionsRequestExample	true	"Decisions request parameters"
+//	@Success		200			{object}	string
+//	@Security		BasicAuth
+//	@Router			/v1/decisions [post]
+func (c *ProxyController) Decisions(ctx *gin.Context) {
+	head, params, err := c.parseDecisionsParams(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	requestID := head.RequestID
+	if requestID == "" {
+		requestID = lib.GenerateRequestID()
+	}
+	ctx.Set("request_id", requestID)
+	ctx.Request = ctx.Request.WithContext(lib.ContextWithRequestID(ctx.Request.Context(), requestID))
+	ctx.Writer.Header().Set("X-Request-Id", requestID)
+
+	chatID := head.ChatID
+	if chatID == (lib.Hash{}) {
+		var err error
+		chatID, err = lib.GetRandomHash()
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
+	adapter, err := c.aiEngine.GetAdapter(ctx, chatID.Hash, head.ModelID.Hash, head.SessionID.Hash, c.storeChatContext, c.forwardChatContext)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := c.executeDecisions(ctx, adapter, params); err != nil {
+		// J2: do not log full state/questions
+		c.log.Errorf("error sending decisions request: %s", err)
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
+func (c *ProxyController) parseDecisionsParams(ctx *gin.Context) (*PromptHead, *gsc.DecisionsRequest, error) {
+	var head PromptHead
+	if err := ctx.ShouldBindHeader(&head); err != nil {
+		return nil, nil, err
+	}
+
+	var requestBody gsc.DecisionsRequest
+	if err := ctx.ShouldBindJSON(&requestBody); err != nil {
+		return nil, nil, err
+	}
+	if err := requestBody.Validate(); err != nil {
+		return nil, nil, err
+	}
+
+	return &head, &requestBody, nil
+}
+
+func (c *ProxyController) executeDecisions(ctx *gin.Context, adapter aiengine.AIEngineStream, request *gsc.DecisionsRequest) error {
+	ctx.Writer.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_JSON)
+
+	return adapter.Decisions(ctx, request, func(cbctx context.Context, completion gsc.Chunk, aiResponseError *gsc.AiEngineErrorResponse) error {
+		if aiResponseError != nil {
+			// Prefer upstream status when present (e.g. sanitized 422)
+			status := http.StatusBadRequest
+			if aiResponseError.StatusCode >= 400 && aiResponseError.StatusCode < 600 {
+				status = aiResponseError.StatusCode
+			}
+			ctx.JSON(status, aiResponseError)
 			return nil
 		}
 

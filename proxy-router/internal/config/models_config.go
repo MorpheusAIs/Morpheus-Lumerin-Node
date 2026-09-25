@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
+	"sync"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/ethereum/go-ethereum/common"
@@ -31,6 +33,7 @@ type ConnectionChecker interface {
 
 type ModelConfigLoader struct {
 	log               lib.ILogger
+	mu                sync.RWMutex
 	modelConfigs      ModelConfigs
 	validator         Validator
 	blockchainChecker BlockchainChecker
@@ -71,7 +74,60 @@ func NewModelConfigLoader(configPath string, configContent string, validator Val
 	}
 }
 
+// Init loads the models config at startup. Reload re-reads the same file
+// later without a restart; both go through load.
 func (e *ModelConfigLoader) Init() error {
+	cfgs, err := e.load()
+	if err != nil {
+		return err
+	}
+	e.mu.Lock()
+	e.modelConfigs = cfgs
+	e.mu.Unlock()
+	return nil
+}
+
+// Reload re-reads the models config file and swaps the in-memory table for
+// the new one atomically. Readers that already fetched a config for an
+// in-flight request keep the copy they have. Returns the model IDs that were
+// added and removed relative to the previous table, sorted. On any parse or
+// validation error the previous table stays in force and the error is
+// returned, so a half-edited file can never empty a serving node.
+//
+// A new model becomes servable as soon as this returns; the health checker
+// picks it up on its next sweep (or on a triggered one), and, because the
+// checker only probes models that carry a bid, a model added here with no bid
+// costs nothing until one is posted.
+func (e *ModelConfigLoader) Reload() (added []string, removed []string, err error) {
+	cfgs, err := e.load()
+	if err != nil {
+		return nil, nil, err
+	}
+	e.mu.Lock()
+	prev := e.modelConfigs
+	e.modelConfigs = cfgs
+	e.mu.Unlock()
+
+	added, removed = []string{}, []string{}
+	for id := range cfgs {
+		if _, ok := prev[id]; !ok {
+			added = append(added, id)
+		}
+	}
+	for id := range prev {
+		if _, ok := cfgs[id]; !ok {
+			removed = append(removed, id)
+		}
+	}
+	sort.Strings(added)
+	sort.Strings(removed)
+	e.log.Infof("models config reloaded: %d models, %d added, %d removed", len(cfgs), len(added), len(removed))
+	return added, removed, nil
+}
+
+// load parses the models config file into a fresh table without touching the
+// one in use.
+func (e *ModelConfigLoader) load() (ModelConfigs, error) {
 	filePath := ConfigPathDefault
 	if e.configPath != "" {
 		filePath = e.configPath
@@ -81,10 +137,10 @@ func (e *ModelConfigLoader) Init() error {
 		if e.configContent != "" {
 			err = os.WriteFile(filePath, []byte(e.configContent), 0644)
 			if err != nil {
-				return fmt.Errorf("failed to write models config content to file: %s", err)
+				return nil, fmt.Errorf("failed to write models config content to file: %s", err)
 			}
 		} else {
-			return fmt.Errorf("models config file not found: %s", filePath)
+			return nil, fmt.Errorf("models config file not found: %s", filePath)
 		}
 	}
 
@@ -95,7 +151,7 @@ func (e *ModelConfigLoader) Init() error {
 		// TODO: load models config from persistent storage
 		// e.log.Warn("trying to load models config from persistent storage")
 
-		return err
+		return nil, err
 	}
 	e.log.Infof("models config loaded from file: %s", filePath)
 
@@ -103,20 +159,21 @@ func (e *ModelConfigLoader) Init() error {
 	var cfgMap map[string]json.RawMessage
 	err = json.Unmarshal([]byte(modelsConfig), &cfgMap)
 	if err != nil {
-		return fmt.Errorf("invalid models config format: %s", err)
+		return nil, fmt.Errorf("invalid models config format: %s", err)
 	}
 	if cfgMap["models"] != nil {
 		var modelConfigsV2 ModelConfigsV2
 		err = json.Unmarshal([]byte(modelsConfig), &modelConfigsV2)
 		if err != nil {
-			return fmt.Errorf("invalid models config V2 format: %s", err)
+			return nil, fmt.Errorf("invalid models config V2 format: %s", err)
 		}
+		cfgs := make(ModelConfigs, len(modelConfigsV2.Models))
 		for _, v := range modelConfigsV2.Models {
 			v.ApiStack = e.loadApiStack(v.ID, v.ModelConfig)
-			e.modelConfigs[v.ID] = v.ModelConfig
+			cfgs[v.ID] = v.ModelConfig
 			_ = e.Validate(context.Background(), common.HexToHash(v.ID), v.ModelConfig)
 		}
-		return nil
+		return cfgs, nil
 	}
 
 	e.log.Warnf("failed to unmarshal to new models config, trying legacy")
@@ -125,20 +182,19 @@ func (e *ModelConfigLoader) Init() error {
 	var modelConfigs ModelConfigs
 	err = json.Unmarshal([]byte(modelsConfig), &modelConfigs)
 	if err != nil {
-		return fmt.Errorf("invalid models config: %w", err)
+		return nil, fmt.Errorf("invalid models config: %w", err)
 	}
 
 	err = e.validator.Struct(modelConfigs)
 	if err != nil {
-		return fmt.Errorf("invalid models config: %w", err)
+		return nil, fmt.Errorf("invalid models config: %w", err)
 	}
 	for id, cfg := range modelConfigs {
 		cfg.ApiStack = e.loadApiStack(id, cfg)
 		modelConfigs[id] = cfg
 	}
 
-	e.modelConfigs = modelConfigs
-	return nil
+	return modelConfigs, nil
 }
 
 // An invalid apiStack degrades only that model: main.go merely warns on an
@@ -156,7 +212,9 @@ func (e *ModelConfigLoader) ModelConfigFromID(ID string) *ModelConfig {
 		return &ModelConfig{}
 	}
 
+	e.mu.RLock()
 	modelConfig := e.modelConfigs[ID]
+	e.mu.RUnlock()
 	if modelConfig.ModelName == "" {
 		e.log.Warnf("model config not found for ID: %s", ID)
 		return &ModelConfig{}
@@ -168,6 +226,8 @@ func (e *ModelConfigLoader) ModelConfigFromID(ID string) *ModelConfig {
 func (e *ModelConfigLoader) GetAll() ([]common.Hash, []ModelConfig) {
 	var modelConfigs []ModelConfig
 	var modelIDs []common.Hash
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	for ID, v := range e.modelConfigs {
 		modelConfigs = append(modelConfigs, v)
 		modelIDs = append(modelIDs, common.HexToHash(ID))

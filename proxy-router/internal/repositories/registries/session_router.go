@@ -262,7 +262,11 @@ func (g *SessionRouter) GetUserStakesOnHold(ctx context.Context, user common.Add
 }
 
 func (g *SessionRouter) WithdrawUserStakes(opts *bind.TransactOpts, user common.Address, iterations uint8) (common.Hash, error) {
+	if err := lib.GatewayAttempt(opts.Context, "withdraw"); err != nil {
+		return common.Hash{}, err
+	}
 	tx, err := g.sessionRouter.WithdrawUserStakes(opts, user, iterations)
+	lib.GatewayRecord(opts.Context, "withdraw", tx)
 	if err != nil {
 		return common.Hash{}, lib.TryConvertGethError(err)
 	}
@@ -284,6 +288,26 @@ func (g *SessionRouter) GetTodaysBudget(ctx context.Context, timestamp *big.Int)
 		return nil, lib.TryConvertGethError(err)
 	}
 	return budget, nil
+}
+
+// GetMinSessionDuration is the shortest session the contract will accept.
+// Consumers hardcoded this and drifted from the deployed value.
+func (g *SessionRouter) GetMinSessionDuration(ctx context.Context) (*big.Int, error) {
+	seconds, err := g.sessionRouter.MINSESSIONDURATION(&bind.CallOpts{Context: ctx})
+	if err != nil {
+		return nil, lib.TryConvertGethError(err)
+	}
+	return new(big.Int).SetUint64(uint64(seconds)), nil
+}
+
+// GetMaxSessionDuration is the ceiling getSessionEnd clamps to. It is owner
+// settable, so it is read rather than assumed.
+func (g *SessionRouter) GetMaxSessionDuration(ctx context.Context) (*big.Int, error) {
+	seconds, err := g.sessionRouter.GetMaxSessionDuration(&bind.CallOpts{Context: ctx})
+	if err != nil {
+		return nil, lib.TryConvertGethError(err)
+	}
+	return seconds, nil
 }
 
 func (g *SessionRouter) GetModelStats(ctx context.Context, modelID [32]byte) (*src.IStatsStorageModelStats, error) {

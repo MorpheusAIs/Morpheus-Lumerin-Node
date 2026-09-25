@@ -37,12 +37,22 @@ export function sendToMainProcess<T = any, K = unknown>(
   const deferred = new Deferred();
   let timeoutId;
 
-  function listener(_, { id: _id, data: _data, error }, unsubscribe) {
-    if (timeoutId) {
-      window.clearTimeout(timeoutId);
-    }
+  function listener({ id: _id, data: _data, error }, unsubscribe) {
+    // IMPORTANT: check the correlation id BEFORE cancelling our timeout.
+    //
+    // Every in-flight call on the same channel registers its own listener, and
+    // each listener sees *every* response on that channel. The previous version
+    // cleared the timeout first and only then compared ids — so a response
+    // belonging to request A would cancel request B's timeout and then bail
+    // out, leaving B with no timer and no resolution. B's promise hung forever.
+    // That is why rapid navigation (which fires many overlapping IPC calls)
+    // left the UI with permanently dead buttons.
     if (_id !== id) {
       return;
+    }
+
+    if (timeoutId) {
+      window.clearTimeout(timeoutId);
     }
 
     const responseError = error || (_data && _data.error);

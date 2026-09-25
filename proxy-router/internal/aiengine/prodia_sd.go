@@ -76,7 +76,7 @@ func (s *ProdiaSD) Prompt(ctx context.Context, prompt *gcs.OpenAICompletionReque
 
 	bodyStr := string(response)
 	if strings.Contains(bodyStr, "Invalid Generation Parameters") {
-		return lib.WrapError(ErrImageGenerationRequest, fmt.Errorf(bodyStr))
+		return lib.WrapError(ErrImageGenerationRequest, fmt.Errorf("%s", bodyStr))
 	}
 
 	result := ProdiaGenerationResult{}
@@ -113,6 +113,10 @@ func (s *ProdiaSD) AudioSpeech(ctx context.Context, prompt *gcs.AudioSpeechReque
 
 func (s *ProdiaSD) Embeddings(ctx context.Context, prompt *gcs.EmbeddingsRequest, cb gcs.CompletionCallback) error {
 	return fmt.Errorf("embeddings not supported")
+}
+
+func (s *ProdiaSD) Decisions(ctx context.Context, prompt *gcs.DecisionsRequest, cb gcs.CompletionCallback) error {
+	return fmt.Errorf("decisions not supported")
 }
 
 func (s *ProdiaSD) ApiType() string {

@@ -31,6 +31,11 @@ type ModelHealthReporter interface {
 	TriggerNow() bool
 }
 
+// ModelConfigReloader re-reads the models config file without a restart.
+type ModelConfigReloader interface {
+	Reload() (added []string, removed []string, err error)
+}
+
 type SystemController struct {
 	config                 *config.Config
 	wallet                 i.Wallet
@@ -43,6 +48,13 @@ type SystemController struct {
 	authConfig             HTTPAuthConfig
 	storage                StorageHealthChecker
 	modelHealth            ModelHealthReporter
+	modelConfigs           ModelConfigReloader
+}
+
+// SetModelConfigReloader enables POST /config/models/reload. Kept as a setter
+// so the constructor signature stays as it is.
+func (s *SystemController) SetModelConfigReloader(r ModelConfigReloader) {
+	s.modelConfigs = r
 }
 
 func NewSystemController(config *config.Config, wallet i.Wallet, ethRPC i.RPCEndpoints, sysConfig *SystemConfigurator, appStartTime time.Time, chainID *big.Int, log lib.ILogger, ethConnectionValidator IEthConnectionValidator, authConfig HTTPAuthConfig, storage StorageHealthChecker, modelHealth ModelHealthReporter) *SystemController {
@@ -66,6 +78,7 @@ func NewSystemController(config *config.Config, wallet i.Wallet, ethRPC i.RPCEnd
 func (s *SystemController) RegisterRoutes(r i.Router) {
 	r.GET("/healthcheck", s.HealthCheck)
 	r.POST("/healthcheck/models/refresh", s.authConfig.CheckAuth("model_health_refresh"), s.RefreshModelHealth)
+	r.POST("/config/models/reload", s.authConfig.CheckAuth("system_config"), s.ReloadModelsConfig)
 	r.GET("/config", s.authConfig.CheckAuth("system_config"), s.GetConfig)
 	r.GET("/files", s.authConfig.CheckAuth("system_config"), s.GetFiles)
 
@@ -82,6 +95,10 @@ func (s *SystemController) RegisterRoutes(r i.Router) {
 //	@Success		200	{object}	HealthCheckResponse
 //	@Router			/healthcheck [get]
 func (s *SystemController) HealthCheck(ctx *gin.Context) {
+	if processIdentity := os.Getenv("MORPHEUS_DESKTOP_INSTANCE_TOKEN"); processIdentity != "" {
+		ctx.Header("X-Morpheus-Instance-Token", processIdentity)
+	}
+
 	status := "healthy"
 	components := make(map[string]string)
 
@@ -140,6 +157,33 @@ func (s *SystemController) RefreshModelHealth(ctx *gin.Context) {
 	ctx.JSON(http.StatusAccepted, StatusRes{Status: "refresh queued"})
 }
 
+// ReloadModelsConfig godoc
+//
+//	@Summary		Reload models config
+//	@Description	Re-read models-config.json and swap the in-memory model table without restarting the node. New models are servable immediately and a health sweep is queued so those with a bid are probed now. A file that fails to parse leaves the running table untouched and returns 400.
+//	@Tags			system
+//	@Produce		json
+//	@Success		200	{object}	ModelsReloadRes
+//	@Failure		400	{object}	ErrorResponse
+//	@Security		BasicAuth
+//	@Router			/config/models/reload [post]
+func (s *SystemController) ReloadModelsConfig(ctx *gin.Context) {
+	if s.modelConfigs == nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "models config reload is not wired on this node"})
+		return
+	}
+	added, removed, err := s.modelConfigs.Reload()
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("models config not reloaded, previous table still in force: %s", err)})
+		return
+	}
+	res := ModelsReloadRes{Added: added, Removed: removed}
+	if s.modelHealth != nil {
+		res.HealthSweepQueued = s.modelHealth.TriggerNow()
+	}
+	ctx.JSON(http.StatusOK, res)
+}
+
 // GetConfig godoc
 //
 //	@Summary		Get Config
@@ -164,6 +208,11 @@ func (s *SystemController) GetConfig(ctx *gin.Context) {
 		Version: config.BuildVersion,
 		Commit:  config.Commit,
 		Config:  s.config.GetSanitized(),
+		GatewayCapabilities: []string{
+			"stake-limit-v1",
+			"operation-journal-v1",
+			"transaction-progress-v1",
+		},
 		DerivedConfig: config.DerivedConfig{
 			WalletAddress: addr,
 			ChainID:       s.chainID,

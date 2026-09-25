@@ -1,7 +1,7 @@
 import Raven from 'raven-js';
 import get from 'lodash/get';
 
-window.ipcRenderer.on('ui-ready', (ev, payload) => {
+window.ipcRenderer.on('ui-ready', (payload) => {
   const sentryDsn = get(payload, 'data.config.sentryDsn', null);
   if (sentryDsn) {
     try {

@@ -407,6 +407,7 @@ func start() error {
 	}
 
 	systemController := system.NewSystemController(&cfg, wallet, rpcClientStore, sysConfig, appStartTime, chainID, appLog, ethConnectionValidator, *authCfg, storage, modelHealthReporter)
+	systemController.SetModelConfigReloader(modelConfigLoader)
 	authController := authapi.NewAuthController(authCfg, cfg.Environment, appLog)
 
 	apiBus := apibus.NewApiBus(blockchainController, proxyController, walletController, systemController, authController)

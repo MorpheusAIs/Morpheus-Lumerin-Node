@@ -24,7 +24,7 @@
             "title": "API Type",
             "description": "Defines the type of API to be used with this model",
             "type": "string",
-            "enum": ["openai", "claudeai", "prodia-sd", "prodia-sdxl", "prodia-v2", "hyperbolic-sd"]
+            "enum": ["openai", "claudeai", "prodia-sd", "prodia-sdxl", "prodia-v2", "hyperbolic-sd", "decisions"]
           },
           "apiStack": {
             "title": "API Stack",
