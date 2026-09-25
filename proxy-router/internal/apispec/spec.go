@@ -129,19 +129,22 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 	// stated facts decide even when they yield no reasoning knob.
 	var bindingSources map[string]string
 	anthropicDecided := false
+	// ev is a copy, but ev.Caps.Sources is the caller's map: vendor-derived
+	// facts go to their own carrier so composing never writes back.
+	var anthropicCaps CapabilityFacts
 	if len(bindings) == 0 && ev.Anthropic != nil {
 		if stack != "anthropic" {
 			tracef("anthropic model facts skipped — stack is %q", stack)
 		} else {
 			anthropicDecided = true
-			bindings = anthropicBindings(ev.Anthropic)
+			bindings = anthropicBindings(ev.Anthropic, tracef)
 			bindingSources = map[string]string{}
 			for intent := range bindings {
 				bindingSources[intent] = ev.Anthropic.Source
 			}
 			tracef("bindings: from anthropic's reported capabilities (%s) -> %s", describeAnthropicFacts(ev.Anthropic), describeBindings(bindings))
 			if ev.Anthropic.Structured {
-				ev.Caps.SetStructured([]string{"json_schema"}, ev.Anthropic.Source)
+				anthropicCaps.SetStructured([]string{"json_schema"}, ev.Anthropic.Source)
 			}
 		}
 	}
@@ -214,8 +217,10 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 	// merge (web_search.* bindings are gated on capabilities.webSearch); the
 	// registry fills last, after reasoning is derived from the final bindings.
 	var caps capState
-	caps.fill(declaredLayer(ev.DeclaredCaps), layerDeclared, tracef)
+	declared := declaredLayer(ev.DeclaredCaps)
+	caps.fill(declared, layerDeclared, tracef)
 	caps.fill(factsLayer(&ev.Caps), layerBackend, tracef)
+	caps.fill(factsLayer(&anthropicCaps), layerBackend, tracef)
 	var tpl templateFacts
 	if stack != "" {
 		tpl = capsFromTemplate(ev.ChatTemplate)
@@ -335,10 +340,11 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 			tracef("thinking.default: reported value is not on|off|<level>; ignored")
 		case api.Thinking == nil:
 			tracef("thinking.default = %s ignored — thinking mode undetermined", thinkingDefault)
+		case thinkingDefaultSource == "":
+			// Same policy as a source-less capability fact: without provenance
+			// the value is not published.
+			tracef("thinking.default = %s ignored — no source", thinkingDefault)
 		default:
-			if thinkingDefaultSource == "" {
-				thinkingDefaultSource = "backend"
-			}
 			api.Thinking.Default = thinkingDefault
 			evidence[system.EvidenceKeyThinkingDefault] = thinkingDefaultSource
 			tracef("thinking.default = %s (%s)", thinkingDefault, thinkingDefaultSource)
@@ -346,12 +352,14 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 	}
 
 	// Without any capability evidence there is no capabilities block at all
-	// (the pre-capabilities wire shape); with some, reasoning is derived from
-	// the final thinking mode and bindings before the registry fills the rest.
-	if ev.DeclaredCaps != nil || !ev.Caps.Empty() || !tpl.caps.Empty() || ev.Registry != nil {
+	// (the pre-capabilities wire shape); with some (a declared value, a
+	// backend, vendor or template fact, a registry entry), reasoning is
+	// derived from the final thinking mode and bindings before the registry
+	// fills the rest.
+	if declared != nil || !ev.Caps.Empty() || anthropicDecided || !tpl.caps.Empty() || ev.Registry != nil {
 		caps.deriveReasoning(alwaysOn, api.Bindings, tracef)
 	}
-	caps.fill(registryLayer(ev.Registry), layerRegistry, tracef)
+	caps.fill(registryLayer(ev.Registry, tracef), layerRegistry, tracef)
 	caps.noteContextGap(ev.Registry, tracef)
 	var capEvidence map[string]string
 	api.Capabilities, capEvidence = caps.result()

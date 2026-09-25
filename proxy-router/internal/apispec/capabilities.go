@@ -2,7 +2,6 @@ package apispec
 
 import (
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -25,8 +24,9 @@ type capLayer struct {
 	source func(field string) string
 }
 
+// An all-nil block ({}) declares nothing and opens no gate.
 func declaredLayer(d *config.DeclaredCapabilities) *capLayer {
-	if d == nil {
+	if d == nil || d.Empty() {
 		return nil
 	}
 	caps := system.ModelCapabilities{
@@ -46,12 +46,19 @@ func factsLayer(f *CapabilityFacts) *capLayer {
 	return &capLayer{caps: f.ModelCapabilities, source: func(field string) string { return f.Sources[field] }}
 }
 
-func registryLayer(r *RegistryFacts) *capLayer {
+// Rule 3 reserves reasoning = false for a backend report: a registry false
+// (a snapshot's view of a model id) fills nothing, a registry true does.
+func registryLayer(r *RegistryFacts, tracef func(string, ...any)) *capLayer {
 	if r == nil {
 		return nil
 	}
 	src := r.Source()
-	return &capLayer{caps: r.ModelCapabilities, source: func(string) string { return src }}
+	caps := r.ModelCapabilities
+	if caps.Reasoning != nil && !*caps.Reasoning {
+		caps.Reasoning = nil
+		tracef("capabilities.reasoning: registry false ignored — only a backend may report false (%s)", src)
+	}
+	return &capLayer{caps: caps, source: func(string) string { return src }}
 }
 
 // capState is the capabilities block under construction plus the layer each
@@ -221,10 +228,10 @@ func (s *capState) deriveReasoning(alwaysOn bool, bindings map[string]*system.Pa
 	switch {
 	case alwaysOn:
 		s.caps.Reasoning = &t
-		s.set(CapFieldReasoning, "true", SourceDerivedThinkingMode, "derived", tracef)
+		s.set(CapFieldReasoning, "true", SourceDerivedThinkingMode, layerDerived, tracef)
 	case hasReasoningBindings(bindings):
 		s.caps.Reasoning = &t
-		s.set(CapFieldReasoning, "true", SourceDerivedBindings, "derived", tracef)
+		s.set(CapFieldReasoning, "true", SourceDerivedBindings, layerDerived, tracef)
 	}
 }
 
@@ -256,6 +263,7 @@ const (
 	layerBackend  = "backend"
 	layerTemplate = "template"
 	layerRegistry = "registry"
+	layerDerived  = "derived"
 )
 
 func copyCapField(dst, src *system.ModelCapabilities, field string) {
@@ -378,13 +386,8 @@ func ClearDetectedCapabilities(api *system.ModelApiSpec, keep func(source string
 	if keep == nil {
 		keep = IsDeclaredOrRegistrySource
 	}
-	keys := make([]string, 0, len(api.Evidence))
-	for k := range api.Evidence {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		if keep(api.Evidence[key]) {
+	for key, source := range api.Evidence {
+		if keep(source) {
 			continue
 		}
 		switch {
@@ -411,7 +414,7 @@ func ClearDetectedCapabilities(api *system.ModelApiSpec, keep func(source string
 // name-regex guess. Sources: https://platform.claude.com/docs/en/api/models/retrieve,
 // https://platform.claude.com/docs/en/build-with-claude/thinking,
 // https://platform.claude.com/docs/en/build-with-claude/effort
-func anthropicBindings(f *AnthropicFacts) bindingSet {
+func anthropicBindings(f *AnthropicFacts, tracef func(string, ...any)) bindingSet {
 	b := bindingSet{}
 	if f.ThinkingSupported {
 		b[system.IntentReasoningDisable] = &system.ParamBinding{Kind: system.BindingKindBodyParam, Param: "thinking", ParamType: "object", Value: map[string]any{"type": "disabled"}}
@@ -423,7 +426,7 @@ func anthropicBindings(f *AnthropicFacts) bindingSet {
 			b[system.IntentReasoningBudget] = &system.ParamBinding{Kind: system.BindingKindBodyParam, Param: "thinking.budget_tokens", ParamType: "number", Hint: "minimum 1024; must be below max_tokens"}
 		}
 	}
-	if levels := filterVocabulary(f.EffortLevels, nameRe.MatchString); levels != nil {
+	if levels := sanitizeNames(f.EffortLevels, maxReasoningEfforts, "anthropic effort levels", tracef); levels != nil {
 		b[system.IntentReasoningEffort] = &system.ParamBinding{Kind: system.BindingKindBodyParam, Param: "output_config.effort", ParamType: "enum", EnumValues: levels}
 	}
 	return b

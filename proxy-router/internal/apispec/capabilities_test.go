@@ -2,6 +2,7 @@ package apispec
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -206,8 +207,21 @@ func TestComposeRule3Reasoning(t *testing.T) {
 		api := Compose(Evidence{Stack: "vllm", ModelName: "qwen3-32b", Registry: reg})
 		require.True(t, *api.Capabilities.Reasoning)
 		require.Equal(t, SourceDerivedBindings, api.Evidence["capabilities.reasoning"])
-		plain := Compose(Evidence{Stack: "vllm", ModelName: "llama-3.3-70b", Registry: reg})
-		require.False(t, *plain.Capabilities.Reasoning, "nothing derived: the registry fills it")
+		plain, lines := ComposeWithTrace(Evidence{Stack: "vllm", ModelName: "llama-3.3-70b", Registry: reg})
+		require.Nil(t, plain.Capabilities, "nothing derived, and a registry false is not a backend report: unset")
+		require.Contains(t, joined(lines), "capabilities.reasoning: registry false ignored — only a backend may report false (registry:litellm@2026-09-25)")
+	})
+	t.Run("registry true fills", func(t *testing.T) {
+		reg := &RegistryFacts{Name: "models.dev", Date: "2026-09-25", ModelCapabilities: system.ModelCapabilities{Reasoning: bp(true)}}
+		api := Compose(Evidence{Stack: "vllm", ModelName: "llama-3.3-70b", Registry: reg})
+		require.True(t, *api.Capabilities.Reasoning)
+		require.Equal(t, "registry:models.dev@2026-09-25", api.Evidence["capabilities.reasoning"])
+	})
+	t.Run("an empty declared block opens no gate", func(t *testing.T) {
+		api := Compose(Evidence{Stack: "vllm", ModelName: "qwen3-32b", DeclaredCaps: &config.DeclaredCapabilities{}})
+		require.NotNil(t, api.Bindings[system.IntentReasoningDisable], "family bindings as before")
+		require.Nil(t, api.Capabilities, "{} is no declared fact: no block, no derived reasoning")
+		require.Nil(t, api.Evidence)
 	})
 	t.Run("no capability evidence: no block at all", func(t *testing.T) {
 		api := Compose(Evidence{Stack: "vllm", ModelName: "deepseek-r1"})
@@ -317,7 +331,9 @@ func TestComposeRule6AnthropicFacts(t *testing.T) {
 		require.Equal(t, map[string]any{"type": "enabled", "budget_tokens": 1024}, api.Bindings[system.IntentReasoningEnable].Value, "facts, not the 4.6 regex (adaptive)")
 		require.Equal(t, "thinking.budget_tokens", api.Bindings[system.IntentReasoningBudget].Param)
 		require.Nil(t, api.Bindings[system.IntentReasoningEffort])
-		require.Nil(t, api.Capabilities, "no structured_outputs, nothing else reported")
+		require.Nil(t, api.Capabilities.Structured, "no structured_outputs")
+		require.True(t, *api.Capabilities.Reasoning, "vendor facts are capability evidence: reasoning derived from the thinking bindings")
+		require.Equal(t, SourceDerivedBindings, api.Evidence["capabilities.reasoning"])
 	})
 	t.Run("thinking unsupported, efforts only", func(t *testing.T) {
 		f := &AnthropicFacts{EffortLevels: []string{"low", "medium", "high", "xhigh", "max"}, Source: src}
@@ -338,8 +354,31 @@ func TestComposeRule6AnthropicFacts(t *testing.T) {
 	})
 	t.Run("junk effort levels are dropped", func(t *testing.T) {
 		f := &AnthropicFacts{ThinkingSupported: true, ThinkingTypes: []string{"adaptive"}, EffortLevels: []string{"low", "hi gh\n", "low"}, Source: src}
-		api := Compose(Evidence{Stack: "anthropic", ModelName: "claude-opus-4-6", Anthropic: f})
+		api, lines := ComposeWithTrace(Evidence{Stack: "anthropic", ModelName: "claude-opus-4-6", Anthropic: f})
 		require.Equal(t, []string{"low"}, api.Bindings[system.IntentReasoningEffort].EnumValues)
+		require.Contains(t, joined(lines), "anthropic effort levels: 2 of 3 backend-reported entries dropped")
+	})
+	t.Run("effort levels are capped like every reported list", func(t *testing.T) {
+		levels := make([]string, 0, maxReasoningEfforts+4)
+		for i := 0; i < maxReasoningEfforts+4; i++ {
+			levels = append(levels, fmt.Sprintf("level%d", i))
+		}
+		f := &AnthropicFacts{EffortLevels: levels, Source: src}
+		api := Compose(Evidence{Stack: "anthropic", ModelName: "claude-opus-4-6", Anthropic: f})
+		require.Len(t, api.Bindings[system.IntentReasoningEffort].EnumValues, maxReasoningEfforts)
+	})
+	t.Run("structured fact does not write into the caller's facts", func(t *testing.T) {
+		var caller CapabilityFacts
+		caller.SetContext(200000, "anthropic:/v1/models/{id}.max_input_tokens")
+		f := &AnthropicFacts{ThinkingSupported: true, ThinkingTypes: []string{"adaptive"}, Structured: true, Source: src}
+		ev := Evidence{Stack: "anthropic", ModelName: "claude-opus-4-6", Anthropic: f, Caps: caller}
+		api := Compose(ev)
+		require.Equal(t, []string{"json_schema"}, api.Capabilities.Structured)
+		require.Equal(t, src, api.Evidence["capabilities.structured"])
+		require.Equal(t, map[string]string{CapFieldContext: "anthropic:/v1/models/{id}.max_input_tokens"}, caller.Sources)
+		require.Nil(t, caller.Structured)
+		again := Compose(ev)
+		require.Equal(t, api, again, "composing the same evidence twice is stable")
 	})
 	t.Run("skipped off the anthropic stack", func(t *testing.T) {
 		f := &AnthropicFacts{ThinkingSupported: true, ThinkingTypes: []string{"adaptive"}, Source: src}
@@ -368,9 +407,11 @@ func TestComposeRule7ThinkingDefault(t *testing.T) {
 		api := Compose(Evidence{Stack: "openrouter", ModelName: "x/y", GatewayReasoning: true, ThinkingDefault: "medium", ThinkingDefaultSource: "openrouter:/api/v1/models.reasoning.default_effort"})
 		require.Equal(t, "medium", api.Thinking.Default)
 	})
-	t.Run("no source falls back to backend", func(t *testing.T) {
-		api := Compose(Evidence{Stack: "ollama", ModelName: "qwen3:32b", OllamaThinking: true, ThinkingDefault: "off"})
-		require.Equal(t, "backend", api.Evidence["thinking.default"])
+	t.Run("no source: not published", func(t *testing.T) {
+		api, lines := ComposeWithTrace(Evidence{Stack: "ollama", ModelName: "qwen3:32b", OllamaThinking: true, ThinkingDefault: "off"})
+		require.Equal(t, "", api.Thinking.Default)
+		require.Nil(t, api.Evidence)
+		require.Contains(t, joined(lines), "thinking.default = off ignored — no source")
 	})
 	t.Run("junk value ignored", func(t *testing.T) {
 		api, lines := ComposeWithTrace(Evidence{Stack: "ollama", ModelName: "qwen3:32b", OllamaThinking: true, ThinkingDefault: "on\n", ThinkingDefaultSource: "s"})
@@ -486,7 +527,8 @@ func TestComposeRule10Registry(t *testing.T) {
 		require.Equal(t, int64(8192), *c.Context)
 		require.False(t, *c.Tools)
 		require.Equal(t, int64(16384), *c.MaxOutput)
-		require.False(t, *c.Reasoning)
+		require.Nil(t, c.Reasoning, "a registry false is not a backend report")
+		require.NotContains(t, api.Evidence, "capabilities.reasoning")
 		require.True(t, *c.PromptCache)
 		require.Equal(t, []string{"text", "image", "pdf"}, c.Modalities.Input)
 		require.Equal(t, "bf16", c.Quantization)
@@ -641,6 +683,10 @@ func TestComposeResultDoesNotAliasEvidence(t *testing.T) {
 	f.SetContext(8192, "vllm:/v1/models.max_model_len")
 	f.SetInputModalities([]string{"text"}, "vllm:x")
 	f.SetStructured([]string{"json_schema"}, "vllm:y")
+	sources := map[string]string{}
+	for k, v := range f.Sources {
+		sources[k] = v
+	}
 	api := Compose(Evidence{Stack: "vllm", ModelName: "llama-3.3-70b", Caps: f})
 	*api.Capabilities.Context = 1
 	api.Capabilities.Modalities.Input[0] = "mutated"
@@ -648,6 +694,7 @@ func TestComposeResultDoesNotAliasEvidence(t *testing.T) {
 	require.Equal(t, int64(8192), *f.Context)
 	require.Equal(t, []string{"text"}, f.Modalities.Input)
 	require.Equal(t, []string{"json_schema"}, f.Structured)
+	require.Equal(t, sources, f.Sources, "the caller's sources map is not written to")
 }
 
 func TestComposeUndeterminedStackStillCarriesFacts(t *testing.T) {
