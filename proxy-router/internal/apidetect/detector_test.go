@@ -1116,6 +1116,21 @@ func TestDetectDropsStackContradictingTransport(t *testing.T) {
 		require.Empty(t, api.Parameters)
 		require.Contains(t, strings.Join(lines, "\n"), `detected stack "anthropic" speaks "claudeai" but apiType is "openai" — stack dropped`)
 	})
+
+	// A declared webSearch opens the anthropic web_search.* bindings under the
+	// "declared" source; the drop takes the bindings, and their evidence must
+	// not outlive them just because the source is one the clear keeps.
+	t.Run("declared binding evidence goes with the dropped bindings", func(t *testing.T) {
+		withoutRegistry(t)
+		origin, _ := stubVendorHost(t, "anthropic")
+		declared := &config.DeclaredCapabilities{WebSearch: boolp(true)}
+		api := newTestDetector().Detect(context.Background(), config.ModelConfig{ModelName: "claude-sonnet-4-5", ApiType: "openai", ApiURL: origin + "/v1/messages", Capabilities: declared})
+		require.NotNil(t, api)
+		require.Equal(t, "", api.Stack)
+		require.Empty(t, api.Bindings)
+		require.Equal(t, true, *api.Capabilities.WebSearch)
+		require.Equal(t, map[string]string{"capabilities.webSearch": "declared"}, api.Evidence)
+	})
 }
 
 func TestDetectCacheBoundedUnderFreshKeyChurn(t *testing.T) {

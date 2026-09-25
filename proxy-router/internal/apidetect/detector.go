@@ -275,6 +275,15 @@ func (d *Detector) detect(ctx context.Context, cfg config.ModelConfig) *system.M
 		api.Via = ""
 		api.Bindings = nil
 		api.Parameters = nil
+		// Binding evidence goes with the bindings whatever its source: a
+		// web_search.* entry carries the webSearch capability's source, and a
+		// declared one would otherwise survive the clear below and name a
+		// binding that no longer exists.
+		for key := range api.Evidence {
+			if strings.HasPrefix(key, "bindings.") {
+				delete(api.Evidence, key)
+			}
+		}
 		apispec.ClearDetectedCapabilities(api, nil)
 		if api.Thinking != nil && api.Thinking.Mode != system.ThinkingModeAlwaysOn {
 			api.Thinking = nil
