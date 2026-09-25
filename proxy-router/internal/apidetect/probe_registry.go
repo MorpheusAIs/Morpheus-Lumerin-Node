@@ -2,7 +2,6 @@ package apidetect
 
 import (
 	"context"
-	"net/http"
 	"sort"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apispec"
@@ -71,7 +70,9 @@ func (d *Detector) probeRegistryShape(ctx context.Context, bases []string, model
 	// then not asserted from the listing's shape alone.
 	hosted := ev.Stack != ""
 	for _, base := range bases {
-		list := d.requestJSON(ctx, http.MethodGet, base+"/models", apiKey, nil, maxRegistryBody)
+		// The listing is shared with every other model on this host and key
+		// (listing_cache.go): read only, never edited in place.
+		list := d.cachedListing(ctx, base, apiKey)
 		if list == nil {
 			continue
 		}

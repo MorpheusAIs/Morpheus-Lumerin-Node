@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apispec"
 	"github.com/stretchr/testify/require"
 )
 
@@ -157,4 +158,27 @@ func TestCachedListingBoundedUnderFreshKeyChurn(t *testing.T) {
 	require.Len(t, d.listings, listingCacheMax/2+1, "evicted down to half the bound, then the new entry")
 	require.Contains(t, d.listings, listingKey(base, "k"))
 	require.NotContains(t, d.listings, "h000", "the oldest entries go first")
+}
+
+// Two models configured against one registry host cost one GET /models per
+// detector TTL through the probe itself, not only through cachedListing.
+func TestProbeRegistryShapeSharesTheListingBetweenModels(t *testing.T) {
+	var calls, status int32
+	srv := listingServer(t, &calls, &status)
+	d := newTestDetector()
+	bases := []string{srv.URL + "/api/v1"}
+	const key = "sk-secret-listing-key"
+
+	for i, model := range []string{"deepseek/deepseek-chat-v3.1", "qwen/qwen3-235b-a22b"} {
+		ctx, trace := withTrace(context.Background())
+		ev := apispec.Evidence{ModelName: model}
+		d.probeRegistryShape(ctx, bases, model, key, &ev)
+		require.Equal(t, "openrouter", ev.Stack, model)
+		require.EqualValues(t, 131072, *ev.Caps.Context, model)
+		require.Equal(t, true, *ev.Caps.Tools, model)
+		require.Equal(t, int32(1), atomic.LoadInt32(&calls), "one listing request after model %d", i+1)
+		joined := strings.Join(trace.lines, "\n")
+		require.Equal(t, i == 1, strings.Contains(joined, "served from the listing cache"), model)
+		require.NotContains(t, joined, key)
+	}
 }
