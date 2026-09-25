@@ -48,6 +48,9 @@ var (
 	outputModalities = map[string]bool{"text": true, "image": true, "audio": true, "embeddings": true}
 )
 
+// retryDelay separates load's attempts; a var so tests need not wait.
+var retryDelay = 2 * time.Second
+
 type entry struct {
 	ID          string
 	Context     int64
@@ -108,7 +111,7 @@ func load(path, url string) ([]byte, error) {
 	var lastErr error
 	for attempt := 1; attempt <= 3; attempt++ {
 		if attempt > 1 {
-			time.Sleep(2 * time.Second)
+			time.Sleep(retryDelay)
 		}
 		body, err := fetch(url)
 		if err == nil {

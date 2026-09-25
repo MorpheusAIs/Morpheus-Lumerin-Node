@@ -2,10 +2,16 @@ package main
 
 import (
 	"bytes"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func loadFixtures(t *testing.T) ([]byte, []byte) {
@@ -191,5 +197,76 @@ func TestRenderDeterministicAndCapped(t *testing.T) {
 
 	if _, _, err := render(entries, date, 1); err == nil {
 		t.Fatal("an impossible cap must fail, not write a truncated snapshot")
+	}
+}
+
+func TestFetch(t *testing.T) {
+	ok := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Accept") != "application/json" || r.Header.Get("User-Agent") == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.Write([]byte(`{"a":1}`))
+	}))
+	defer ok.Close()
+	body, err := fetch(ok.URL)
+	if err != nil || string(body) != `{"a":1}` {
+		t.Fatalf("fetch = %q, %v", body, err)
+	}
+
+	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "nope", http.StatusInternalServerError)
+	}))
+	defer bad.Close()
+	if _, err := fetch(bad.URL); err == nil || !strings.Contains(err.Error(), "500") {
+		t.Fatalf("non-200 must fail with the status, got %v", err)
+	}
+
+	big := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(make([]byte, maxBody+1))
+	}))
+	defer big.Close()
+	if _, err := fetch(big.URL); err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("a body over maxBody must be rejected, got %v", err)
+	}
+}
+
+func TestLoad(t *testing.T) {
+	defer func(d time.Duration) { retryDelay = d }(retryDelay)
+	retryDelay = 0
+
+	path := filepath.Join(t.TempDir(), "src.json")
+	if err := os.WriteFile(path, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if body, err := load(path, "http://127.0.0.1:1/never"); err != nil || string(body) != "{}" {
+		t.Fatalf("a file path must bypass the network: %q, %v", body, err)
+	}
+
+	var calls atomic.Int32
+	flaky := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if calls.Add(1) < 3 {
+			http.Error(w, "later", http.StatusServiceUnavailable)
+			return
+		}
+		w.Write([]byte("[]"))
+	}))
+	defer flaky.Close()
+	if body, err := load("", flaky.URL); err != nil || string(body) != "[]" || calls.Load() != 3 {
+		t.Fatalf("third attempt must succeed: %q, %v, calls=%d", body, err, calls.Load())
+	}
+
+	calls.Store(0)
+	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		http.Error(w, "down", http.StatusBadGateway)
+	}))
+	defer down.Close()
+	_, err := load("", down.URL)
+	if err == nil || calls.Load() != 3 {
+		t.Fatalf("three failures must surface the last error: %v, calls=%d", err, calls.Load())
+	}
+	if _, err := load(filepath.Join(t.TempDir(), "missing.json"), ""); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("a missing file must surface its error, got %v", err)
 	}
 }
