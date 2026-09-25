@@ -146,6 +146,7 @@ func TestOpenRouterEntryCapabilities(t *testing.T) {
 	require.Empty(t, caps.Quantization)
 
 	require.Equal(t, map[string]string{
+		"bindings.web_search.enable":     "openrouter:/models.plugins",
 		"capabilities.context":           "openrouter:/models.context_length",
 		"capabilities.maxOutput":         "openrouter:/models.top_provider.max_completion_tokens",
 		"capabilities.modalities.input":  "openrouter:/models.architecture.input_modalities",
@@ -383,6 +384,8 @@ func TestVeniceSpecCapabilities(t *testing.T) {
 	require.Equal(t, "fp8", caps.Quantization)
 
 	require.Equal(t, map[string]string{
+		"bindings.web_search.enable":    "venice:/models.model_spec.capabilities.supportsWebSearch",
+		"bindings.web_search.citations": "venice:/models.model_spec.capabilities.supportsWebSearch",
 		"capabilities.context":          "venice:/models.model_spec.availableContextTokens",
 		"capabilities.maxOutput":        "venice:/models.model_spec.maxCompletionTokens",
 		"capabilities.modalities.input": "venice:/models.model_spec.capabilities.supportsVision",
