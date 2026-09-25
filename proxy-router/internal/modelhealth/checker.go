@@ -75,6 +75,14 @@ type ApiDetector interface {
 	Detect(ctx context.Context, cfg config.ModelConfig) *system.ModelApiSpec
 }
 
+// ProbeAwareDetector is the optional side of an ApiDetector that can say
+// beforehand whether Detect will reach the backend (a cache miss) rather
+// than answer from its cache; the sweep paces those calls by probeDelay.
+// A detector without it is paced on every call.
+type ProbeAwareDetector interface {
+	WouldProbe(cfg config.ModelConfig) bool
+}
+
 // DefaultMaxConsecutiveErrors is the number of consecutive real-session
 // prompt failures after which a model is flipped to unhealthy (or degraded,
 // when the whole streak is upstream rate limiting) without waiting for the
@@ -262,6 +270,7 @@ func (c *Checker) checkAll(ctx context.Context, walletAddr common.Address) {
 	c.mu.Unlock()
 
 	probed := false
+	detectProbed := false
 	for i, modelID := range modelIDs {
 		select {
 		case <-ctx.Done():
@@ -269,20 +278,25 @@ func (c *Checker) checkAll(ctx context.Context, walletAddr common.Address) {
 		default:
 		}
 		bidID, hasBid := bidsByModel[modelID]
-		// Pace backend probes so a provider with many models doesn't burst
-		// its upstream (often a single account behind all models) and
-		// self-inflict rate-limit failures. Only probed models (those with
-		// an active bid) hit the backend, so only they are paced.
-		if hasBid && probed && !c.sleep(ctx, c.probeDelay) {
-			return
-		}
 		var cfg config.ModelConfig
 		if i < len(modelCfgs) {
 			cfg = modelCfgs[i]
 		}
+		// Pace backend probes so a provider with many models doesn't burst
+		// its upstream (often a single account behind all models) and
+		// self-inflict rate-limit failures. Only requests that reach the
+		// backend are paced: the health probe of a model with an active bid,
+		// and an API detection the detector cannot answer from its cache.
+		willDetect := c.detectionWouldProbe(cfg)
+		if ((hasBid && probed) || (willDetect && detectProbed)) && !c.sleep(ctx, c.probeDelay) {
+			return
+		}
 		c.checkModel(ctx, modelID, bidID, hasBid, cfg, reattestTee)
 		if hasBid {
 			probed = true
+		}
+		if willDetect {
+			detectProbed = true
 		}
 		seen[modelID.Hex()] = true
 	}
@@ -323,6 +337,25 @@ func (c *Checker) reportUnconfigured(ctx context.Context, modelID common.Hash, b
 	}
 
 	c.setReport(report)
+}
+
+// detectable is the checkModel branch that hands cfg to the detector: a
+// chat-transport model without a declared apiStack.
+func (c *Checker) detectable(cfg config.ModelConfig) bool {
+	return c.deps.ApiDetect != nil && apispec.StackFor(cfg.ApiStack) == "" && config.IsChatTransport(cfg.ApiType) && (cfg.ApiURL != "" || cfg.ModelName != "")
+}
+
+// detectionWouldProbe reports whether checkModel's detection of cfg will
+// reach the backend; unknown for a detector without ProbeAwareDetector,
+// which is then treated as probing.
+func (c *Checker) detectionWouldProbe(cfg config.ModelConfig) bool {
+	if !c.detectable(cfg) {
+		return false
+	}
+	if aware, ok := c.deps.ApiDetect.(ProbeAwareDetector); ok {
+		return aware.WouldProbe(cfg)
+	}
+	return true
 }
 
 // sleep blocks for d unless the context is cancelled first; it reports
@@ -407,10 +440,12 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 
 	// Image adapters (prodia-*, hyperbolic-sd) and decisions have no chat API
 	// to probe; detecting them would cost ~16 requests per sweep for nothing.
+	// A declared capabilities block is published even when nothing detects
+	// (detection off, or a transport it does not cover).
 	var api *system.ModelApiSpec
 	if apispec.StackFor(cfg.ApiStack) != "" {
 		api = apispec.Build(cfg)
-	} else if c.deps.ApiDetect != nil && config.IsChatTransport(cfg.ApiType) && (cfg.ApiURL != "" || cfg.ModelName != "") {
+	} else if c.detectable(cfg) {
 		budget := c.timeout
 		if budget <= 0 || budget > detectBudget {
 			budget = detectBudget
@@ -418,6 +453,8 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 		detectCtx, cancel := context.WithTimeout(ctx, budget)
 		api = c.deps.ApiDetect.Detect(detectCtx, cfg)
 		cancel()
+	} else if cfg.Capabilities != nil {
+		api = apispec.Build(cfg)
 	}
 	if api != nil {
 		api.DeclaredAt = time.Now().Unix()
