@@ -118,15 +118,15 @@ func TestFormatResult(t *testing.T) {
 				"    - identified vllm by /version\n",
 		},
 		{
-			name: "via gateway, empty capabilities object, verified without timestamp, unverified without evidence",
+			name: "via gateway, empty capabilities and modalities, verified without timestamp, unverified with timestamp but no evidence",
 			api: &system.ModelApiSpec{
 				Stack:        "venice",
 				Via:          "litellm",
 				Source:       system.ApiSpecSourceDetected,
-				Capabilities: &system.ModelCapabilities{},
+				Capabilities: &system.ModelCapabilities{Modalities: &system.Modalities{}},
 				Bindings: map[string]*system.ParamBinding{
 					system.IntentReasoningDisable: {Kind: system.BindingKindBodyParam, Param: "reasoning_effort", Value: "none", Verified: bp(true)},
-					system.IntentReasoningEffort:  {Kind: system.BindingKindBodyParam, Param: "reasoning_effort", Verified: bp(false)},
+					system.IntentReasoningEffort:  {Kind: system.BindingKindBodyParam, Param: "reasoning_effort", Verified: bp(false), VerifiedAt: 1790330400},
 				},
 			},
 			want: "  result:\n" +
