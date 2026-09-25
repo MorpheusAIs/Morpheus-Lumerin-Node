@@ -80,6 +80,7 @@ type Config struct {
 		ModelHealthCheckTimeout    time.Duration `env:"MODEL_HEALTH_CHECK_TIMEOUT" flag:"model-health-check-timeout" validate:"omitempty,duration" desc:"per-model health probe timeout"`
 		ModelHealthCheckProbeDelay time.Duration `env:"MODEL_HEALTH_CHECK_PROBE_DELAY" flag:"model-health-check-probe-delay" validate:"omitempty,duration" desc:"pause between per-model health probes so many-model providers don't burst their upstream and trip rate limits"`
 		ModelHealthMaxConsecErrors int           `env:"MODEL_HEALTH_MAX_CONSECUTIVE_ERRORS" flag:"model-health-max-consecutive-errors" validate:"omitempty,gte=1" desc:"consecutive session prompt failures after which a model is immediately reported unhealthy (or degraded when every failure was upstream rate limiting), without waiting for the next scheduled probe"`
+		ModelApiDetectEnabled      *lib.Bool     `env:"MODEL_API_DETECT_ENABLED" flag:"model-api-detect-enabled" desc:"auto-detect the backend API (stack, model family, reasoning knobs) of models without apiStack by probing service endpoints — never inference requests — including one hop through LiteLLM to its upstream; false disables all probing and such models advertise no api block; default true"`
 		// SessionHealthPolicy is the consumer-side strictness towards provider
 		// model health self-reports when opening a session by model ID.
 		// Single-bid opens always force permissive (healthPolicySingleBid is
@@ -205,6 +206,10 @@ func (cfg *Config) SetDefaults() {
 		val := false
 		cfg.Proxy.ForwardChatContext = &lib.Bool{Bool: &val}
 	}
+	if cfg.Proxy.ModelApiDetectEnabled.Bool == nil {
+		val := true
+		cfg.Proxy.ModelApiDetectEnabled = &lib.Bool{Bool: &val}
+	}
 	if cfg.Proxy.RatingConfigPath == "" {
 		cfg.Proxy.RatingConfigPath = "./rating-config.json"
 	}
@@ -325,6 +330,7 @@ func (cfg *Config) GetSanitized() interface{} {
 	publicCfg.Proxy.ModelHealthCheckTimeout = cfg.Proxy.ModelHealthCheckTimeout
 	publicCfg.Proxy.ModelHealthCheckProbeDelay = cfg.Proxy.ModelHealthCheckProbeDelay
 	publicCfg.Proxy.ModelHealthMaxConsecErrors = cfg.Proxy.ModelHealthMaxConsecErrors
+	publicCfg.Proxy.ModelApiDetectEnabled = cfg.Proxy.ModelApiDetectEnabled
 	publicCfg.Proxy.SessionHealthPolicy = cfg.Proxy.SessionHealthPolicy
 
 	publicCfg.System.Enable = cfg.System.Enable
