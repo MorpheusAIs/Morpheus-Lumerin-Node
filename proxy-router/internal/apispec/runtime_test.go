@@ -81,6 +81,14 @@ func TestMergeRuntimeContext(t *testing.T) {
 		require.Equal(t, before, mustJSON(t, api))
 		require.True(t, traceHas(trace, "capabilities.context: runtime value ignored — already set (vllm:/v1/models.max_model_len)"), trace)
 	})
+	t.Run("never overwrites a set context that has no evidence entry", func(t *testing.T) {
+		api := &system.ModelApiSpec{Capabilities: &system.ModelCapabilities{Context: int64p(4096)}}
+		before := mustJSON(t, api)
+		trace := MergeRuntime(api, Runtime{ContextLimit: 8192})
+		require.Equal(t, before, mustJSON(t, api))
+		require.Nil(t, api.Evidence)
+		require.Contains(t, trace, "capabilities.context: runtime value ignored — already set (no evidence entry)")
+	})
 	t.Run("rejects an out-of-range value", func(t *testing.T) {
 		api := Compose(Evidence{Stack: "vllm", ModelName: "qwen3-32b"})
 		before := mustJSON(t, api)
@@ -205,6 +213,40 @@ func TestMergeRuntimeRejectedParams(t *testing.T) {
 		require.Equal(t, system.ThinkingModeTunable, api.Thinking.Mode)
 		require.Contains(t, trace, "thinking.mode: controllable -> tunable after the drop")
 	})
+	t.Run("drops by the exact dotted param and leaves siblings", func(t *testing.T) {
+		api := vllmQwenSpec(t)
+		require.Equal(t, "thinking_token_budget", api.Bindings[system.IntentReasoningBudget].Param)
+		require.Equal(t, "top_k", api.Bindings[system.IntentSamplingTopK].Param)
+		trace := MergeRuntime(api, Runtime{RejectedParams: []string{"chat_template_kwargs.enable_thinking", "top_k"}, At: 78})
+		require.Nil(t, api.Bindings[system.IntentReasoningDisable])
+		require.Nil(t, api.Bindings[system.IntentReasoningEnable])
+		require.Nil(t, api.Bindings[system.IntentSamplingTopK])
+		require.NotNil(t, api.Bindings[system.IntentReasoningBudget])
+		require.NotNil(t, api.Bindings[system.IntentSamplingMinP])
+		require.Equal(t, "verify:rejected:chat_template_kwargs.enable_thinking@78", api.Evidence["bindings.reasoning.disable"])
+		require.Equal(t, "verify:rejected:top_k@78", api.Evidence["bindings.sampling.top_k"])
+		require.Contains(t, trace, "bindings: reasoning.enable dropped — backend rejected parameter chat_template_kwargs.enable_thinking (verify:rejected:chat_template_kwargs.enable_thinking@78)")
+		require.Equal(t, system.ThinkingModeTunable, api.Thinking.Mode)
+	})
+	t.Run("a rejected path covers its descendants only", func(t *testing.T) {
+		api := &system.ModelApiSpec{Bindings: map[string]*system.ParamBinding{
+			"a": {Kind: system.BindingKindBodyParam, Param: "extra_body.thinking"},
+			"b": {Kind: system.BindingKindBodyParam, Param: "extra_body.thinking.type"},
+			"c": {Kind: system.BindingKindBodyParam, Param: "extra_body.top_k"},
+			"d": {Kind: system.BindingKindBodyParam, Param: "extra_body_thinking"},
+		}}
+		MergeRuntime(api, Runtime{RejectedParams: []string{"extra_body.thinking"}, At: 1})
+		require.Nil(t, api.Bindings["a"])
+		require.Nil(t, api.Bindings["b"])
+		require.NotNil(t, api.Bindings["c"])
+		require.NotNil(t, api.Bindings["d"])
+		require.Equal(t, "verify:rejected:extra_body.thinking@1", api.Evidence["bindings.b"])
+
+		MergeRuntime(api, Runtime{RejectedParams: []string{"extra_body"}, At: 2})
+		require.Nil(t, api.Bindings["c"])
+		require.NotNil(t, api.Bindings["d"])
+		require.Equal(t, "verify:rejected:extra_body@2", api.Evidence["bindings.c"])
+	})
 	t.Run("removes the thinking block when no reasoning binding remains", func(t *testing.T) {
 		api := Compose(Evidence{Stack: "ollama", ModelName: "qwen3:32b", OllamaThinking: true})
 		require.Equal(t, "reasoning_effort", api.Bindings[system.IntentReasoningDisable].Param)
@@ -213,6 +255,47 @@ func TestMergeRuntimeRejectedParams(t *testing.T) {
 		require.Nil(t, api.Bindings[system.IntentReasoningEffort])
 		require.Nil(t, api.Thinking)
 		require.Contains(t, trace, "thinking: controllable dropped — no reasoning binding remains")
+	})
+	t.Run("derived reasoning goes with the last reasoning binding", func(t *testing.T) {
+		ev := Evidence{Stack: "ollama", ModelName: "qwen3:32b", OllamaThinking: true}
+		ev.Caps.SetContext(8192, "ollama:/api/show.num_ctx")
+		api := Compose(ev)
+		require.Equal(t, SourceDerivedBindings, api.Evidence["capabilities.reasoning"])
+		trace := MergeRuntime(api, Runtime{RejectedParams: []string{"reasoning_effort"}, At: 1})
+		require.Nil(t, api.Thinking)
+		require.Nil(t, api.Capabilities.Reasoning)
+		require.NotContains(t, api.Evidence, "capabilities.reasoning")
+		require.Equal(t, int64(8192), *api.Capabilities.Context)
+		require.Contains(t, trace, "capabilities.reasoning dropped — derived:bindings.reasoning names no remaining binding")
+		for key := range api.Evidence {
+			if strings.HasPrefix(key, "capabilities.") {
+				require.True(t, capFieldPresent(api.Capabilities, strings.TrimPrefix(key, "capabilities.")), key)
+			}
+		}
+	})
+	t.Run("derived reasoning alone leaves no empty capabilities block", func(t *testing.T) {
+		api := Compose(Evidence{Stack: "ollama", ModelName: "qwen3:32b", OllamaThinking: true, Registry: &RegistryFacts{Name: "models.dev", Date: "2026-09-25"}})
+		require.Equal(t, SourceDerivedBindings, api.Evidence["capabilities.reasoning"])
+		MergeRuntime(api, Runtime{RejectedParams: []string{"reasoning_effort"}, At: 1})
+		require.Nil(t, api.Capabilities)
+		require.NotContains(t, api.Evidence, "capabilities.reasoning")
+	})
+	t.Run("backend-reported reasoning survives the drop", func(t *testing.T) {
+		ev := Evidence{Stack: "ollama", ModelName: "qwen3:32b", OllamaThinking: true}
+		ev.Caps.SetReasoning(true, "ollama:/api/show.capabilities")
+		api := Compose(ev)
+		MergeRuntime(api, Runtime{RejectedParams: []string{"reasoning_effort"}, At: 1})
+		require.Nil(t, api.Thinking)
+		require.True(t, *api.Capabilities.Reasoning)
+		require.Equal(t, "ollama:/api/show.capabilities", api.Evidence["capabilities.reasoning"])
+	})
+	t.Run("reasoning seen in the same round trip re-sets reasoning after the drop", func(t *testing.T) {
+		ev := Evidence{Stack: "ollama", ModelName: "qwen3:32b", OllamaThinking: true}
+		ev.Caps.SetContext(8192, "ollama:/api/show.num_ctx")
+		api := Compose(ev)
+		MergeRuntime(api, Runtime{RejectedParams: []string{"reasoning_effort"}, ReasoningSeen: true, At: 1})
+		require.True(t, *api.Capabilities.Reasoning)
+		require.Equal(t, "health-probe:reasoning_seen", api.Evidence["capabilities.reasoning"])
 	})
 	t.Run("always_on survives a drop", func(t *testing.T) {
 		api := Compose(Evidence{Stack: "ollama", ModelName: "deepseek-r1"})
@@ -254,6 +337,43 @@ func TestMergeRuntimeCapabilityFacts(t *testing.T) {
 		require.Equal(t, "verify:json_schema@3", api.Evidence["capabilities.structured"])
 		require.Equal(t, "verify:image@3", api.Evidence["capabilities.modalities.input"])
 		require.Contains(t, trace, "capabilities.structured = json_schema (verify:json_schema@3)")
+	})
+	t.Run("list facts extend a composed list instead of replacing it", func(t *testing.T) {
+		ev := Evidence{Stack: "vllm", ModelName: "qwen3-32b"}
+		ev.Caps.SetStructured([]string{"json_object", "json_schema", "grammar", "regex", "choice"}, "vllm:/v1/models.structured")
+		ev.Caps.SetInputModalities([]string{"text", "image", "audio"}, "vllm:/v1/models.modalities")
+		api := Compose(ev)
+		before := mustJSON(t, api)
+		var facts CapabilityFacts
+		facts.SetStructured([]string{"json_schema"}, "verify:json_schema@3")
+		facts.AddInputModality("image", "verify:image@3")
+		trace := MergeRuntime(api, Runtime{CapabilityFacts: facts})
+		require.Equal(t, before, mustJSON(t, api), "a proven entry that is already listed changes nothing")
+		require.Contains(t, trace, "capabilities.structured: runtime value [json_schema] adds nothing to [json_object json_schema grammar regex choice]")
+		require.Contains(t, trace, "capabilities.modalities.input: runtime value [image] adds nothing to [text image audio]")
+
+		facts = CapabilityFacts{}
+		facts.SetStructured([]string{"json_schema", "bogus"}, "verify:json_schema@4")
+		facts.AddInputModality("video", "verify:video@4")
+		facts.AddOutputModality("audio", "verify:audio_out@4")
+		trace = MergeRuntime(api, Runtime{CapabilityFacts: facts})
+		require.Equal(t, []string{"json_object", "json_schema", "grammar", "regex", "choice"}, api.Capabilities.Structured)
+		require.Equal(t, "vllm:/v1/models.structured", api.Evidence["capabilities.structured"])
+		require.Equal(t, []string{"text", "image", "audio", "video"}, api.Capabilities.Modalities.Input)
+		require.Equal(t, "verify:video@4", api.Evidence["capabilities.modalities.input"])
+		require.Equal(t, []string{"audio"}, api.Capabilities.Modalities.Output)
+		require.Equal(t, "verify:audio_out@4", api.Evidence["capabilities.modalities.output"])
+		require.Contains(t, trace, "capabilities.modalities.input = text|image|audio|video (verify:video@4)")
+	})
+	t.Run("a single-entry composed list grows by the proven entry", func(t *testing.T) {
+		ev := Evidence{Stack: "vllm", ModelName: "qwen3-32b"}
+		ev.Caps.SetStructured([]string{"json_object"}, "vllm:/v1/models.structured")
+		api := Compose(ev)
+		var facts CapabilityFacts
+		facts.SetStructured([]string{"json_schema"}, "verify:json_schema@5")
+		MergeRuntime(api, Runtime{CapabilityFacts: facts})
+		require.Equal(t, []string{"json_object", "json_schema"}, api.Capabilities.Structured)
+		require.Equal(t, "verify:json_schema@5", api.Evidence["capabilities.structured"])
 	})
 	t.Run("facts override backend but not declared", func(t *testing.T) {
 		ev := Evidence{Stack: "vllm", ModelName: "qwen3-32b", DeclaredCaps: &config.DeclaredCapabilities{Structured: []string{"json_object"}}}

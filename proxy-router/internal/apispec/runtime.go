@@ -37,8 +37,9 @@ type Runtime struct {
 	ContextLimit  int64
 	ContextSource string
 	// RejectedParams are request parameters the backend refused
-	// (apiprobe.ParseRejectedParams); every binding whose root param is
-	// listed is dropped.
+	// (apiprobe.ParseRejectedParams), as names or dotted paths; every
+	// binding whose param is a listed name or lies under a listed path is
+	// dropped.
 	RejectedParams []string
 	// ToolsSupported is the tool-call probe's verdict; ToolsSource is its
 	// evidence entry, default "verify:tools@<at>".
@@ -184,7 +185,10 @@ func MergeRuntime(api *system.ModelApiSpec, rt Runtime) (trace []string) {
 
 // mergeRuntimeCaps copies facts' set fields into api.Capabilities through the
 // composer's validation. fillOnly names the fields that never overwrite an
-// existing value; every other field overwrites unless it is declared.
+// existing value; every other field overwrites unless it is declared. List
+// fields extend the existing list: a probe proves the entries it saw, not
+// the absence of the rest (§0, a wrong capability is worse than a missing
+// one).
 func mergeRuntimeCaps(api *system.ModelApiSpec, facts *CapabilityFacts, fillOnly map[string]bool, tracef func(string, ...any)) {
 	if facts == nil || facts.Empty() {
 		return
@@ -210,11 +214,24 @@ func mergeRuntimeCaps(api *system.ModelApiSpec, facts *CapabilityFacts, fillOnly
 		case st.layerOf[field] == layerDeclared:
 			tracef("capabilities.%s: runtime value ignored — declared (%s)", field, existing)
 			continue
-		case fillOnly[field] && st.isSet(field):
+		case fillOnly[field] && (st.isSet(field) || capFieldPresent(&st.caps, field)):
+			if existing == "" {
+				existing = "no evidence entry"
+			}
 			tracef("capabilities.%s: runtime value ignored — already set (%s)", field, existing)
 			continue
 		}
-		value, ok := st.take(field, &facts.ModelCapabilities, layerRuntime, tracef)
+		src := &facts.ModelCapabilities
+		if have, valid, isList := capList(&st.caps, field); isList && len(have) > 0 {
+			reported, _, _ := capList(src, field)
+			union := filterVocabulary(append(append([]string(nil), have...), reported...), valid)
+			if len(union) == len(have) {
+				tracef("capabilities.%s: runtime value %v adds nothing to %v", field, reported, have)
+				continue
+			}
+			src = withCapList(field, union)
+		}
+		value, ok := st.take(field, src, layerRuntime, tracef)
 		if !ok {
 			continue
 		}
@@ -234,6 +251,73 @@ func mergeRuntimeCaps(api *system.ModelApiSpec, facts *CapabilityFacts, fillOnly
 	}
 }
 
+// capFieldPresent is the value-side test of "set": a field carried by a
+// spec whose evidence map does not name it is still a set field.
+func capFieldPresent(caps *system.ModelCapabilities, field string) bool {
+	switch field {
+	case CapFieldContext:
+		return caps.Context != nil
+	case CapFieldContextTrained:
+		return caps.ContextTrained != nil
+	case CapFieldMaxOutput:
+		return caps.MaxOutput != nil
+	case CapFieldModalitiesInput:
+		return caps.Modalities != nil && caps.Modalities.Input != nil
+	case CapFieldModalitiesOutput:
+		return caps.Modalities != nil && caps.Modalities.Output != nil
+	case CapFieldTools:
+		return caps.Tools != nil
+	case CapFieldToolsParallel:
+		return caps.ToolsParallel != nil
+	case CapFieldStructured:
+		return caps.Structured != nil
+	case CapFieldReasoning:
+		return caps.Reasoning != nil
+	case CapFieldWebSearch:
+		return caps.WebSearch != nil
+	case CapFieldEmbeddings:
+		return caps.Embeddings != nil
+	case CapFieldPromptCache:
+		return caps.PromptCache != nil
+	case CapFieldQuantization:
+		return caps.Quantization != ""
+	}
+	return false
+}
+
+// capList returns a list-valued field with its vocabulary; isList is false
+// for every other field.
+func capList(caps *system.ModelCapabilities, field string) (list []string, valid func(string) bool, isList bool) {
+	switch field {
+	case CapFieldStructured:
+		return caps.Structured, config.IsStructuredKind, true
+	case CapFieldModalitiesInput:
+		if caps.Modalities != nil {
+			list = caps.Modalities.Input
+		}
+		return list, config.IsModalityInput, true
+	case CapFieldModalitiesOutput:
+		if caps.Modalities != nil {
+			list = caps.Modalities.Output
+		}
+		return list, config.IsModalityOutput, true
+	}
+	return nil, nil, false
+}
+
+func withCapList(field string, list []string) *system.ModelCapabilities {
+	var caps system.ModelCapabilities
+	switch field {
+	case CapFieldStructured:
+		caps.Structured = list
+	case CapFieldModalitiesInput:
+		caps.Modalities = &system.Modalities{Input: list}
+	case CapFieldModalitiesOutput:
+		caps.Modalities = &system.Modalities{Output: list}
+	}
+	return &caps
+}
+
 func layerFromSource(source string) string {
 	switch {
 	case source == SourceDeclared:
@@ -246,35 +330,29 @@ func layerFromSource(source string) string {
 	return layerBackend
 }
 
-// dropRejectedBindings removes every binding whose root request parameter
-// the backend refused, records why under the binding's evidence key, and
-// keeps thinking.mode consistent with the bindings that remain (the
-// composer's rule; always_on is a model fact and stays).
+// dropRejectedBindings removes every binding whose request parameter the
+// backend refused, records why under the binding's evidence key, and keeps
+// thinking.mode and the derived reasoning capability consistent with the
+// bindings that remain (the composer's rules; always_on is a model fact and
+// stays).
 func dropRejectedBindings(api *system.ModelApiSpec, rejected []string, at int64, tracef func(string, ...any)) {
 	if len(rejected) == 0 || len(api.Bindings) == 0 {
 		return
 	}
-	rejectedSet := make(map[string]bool, len(rejected))
-	for _, p := range rejected {
-		rejectedSet[p] = true
-	}
 	dropped := false
 	for _, intent := range sortedIntents(api.Bindings) {
 		b := api.Bindings[intent]
-		root := b.Param
-		if i := strings.IndexByte(root, '.'); i >= 0 {
-			root = root[:i]
-		}
-		if root == "" || !rejectedSet[root] {
+		name := rejectedParamFor(b.Param, rejected)
+		if name == "" {
 			continue
 		}
 		delete(api.Bindings, intent)
-		source := verifySource("rejected:"+root, at)
+		source := verifySource("rejected:"+name, at)
 		if api.Evidence == nil {
 			api.Evidence = map[string]string{}
 		}
 		api.Evidence[system.EvidenceKeyBinding(intent)] = source
-		tracef("bindings: %s dropped — backend rejected parameter %s (%s)", intent, root, source)
+		tracef("bindings: %s dropped — backend rejected parameter %s (%s)", intent, name, source)
 		dropped = true
 	}
 	if !dropped {
@@ -283,26 +361,59 @@ func dropRejectedBindings(api *system.ModelApiSpec, rejected []string, at int64,
 	if len(api.Bindings) == 0 {
 		api.Bindings = nil
 	}
-	if api.Thinking == nil || api.Thinking.Mode == system.ThinkingModeAlwaysOn {
+	if api.Thinking != nil && api.Thinking.Mode != system.ThinkingModeAlwaysOn {
+		mode := ""
+		switch {
+		case api.Bindings[system.IntentReasoningDisable] != nil, api.Bindings[system.IntentReasoningEnable] != nil:
+			mode = system.ThinkingModeControllable
+		case api.Bindings[system.IntentReasoningEffort] != nil || api.Bindings[system.IntentReasoningBudget] != nil:
+			mode = system.ThinkingModeTunable
+		}
+		switch {
+		case mode == "":
+			tracef("thinking: %s dropped — no reasoning binding remains", api.Thinking.Mode)
+			api.Thinking = nil
+			delete(api.Evidence, system.EvidenceKeyThinkingDefault)
+		case mode != api.Thinking.Mode:
+			tracef("thinking.mode: %s -> %s after the drop", api.Thinking.Mode, mode)
+			api.Thinking.Mode = mode
+		}
+	}
+	if api.Thinking == nil && !hasReasoningBindings(api.Bindings) {
+		dropDerivedReasoning(api, tracef)
+	}
+}
+
+// rejectedParamFor returns the rejected name that covers param: the param
+// itself or an ancestor path. A rejected extra_body covers
+// extra_body.thinking; a rejected extra_body.thinking leaves extra_body.top_k.
+func rejectedParamFor(param string, rejected []string) string {
+	if param == "" {
+		return ""
+	}
+	for _, r := range rejected {
+		if r != "" && (param == r || strings.HasPrefix(param, r+".")) {
+			return r
+		}
+	}
+	return ""
+}
+
+// The composer's rule 3 evidence (derived:*) names the bindings or mode it
+// read reasoning from; once a drop removed them the entry cites nothing and
+// goes with its value. Backend, verify and declared sources stand on their
+// own and stay.
+func dropDerivedReasoning(api *system.ModelApiSpec, tracef func(string, ...any)) {
+	key := system.EvidenceKeyCapability(CapFieldReasoning)
+	source := api.Evidence[key]
+	if api.Capabilities == nil || !strings.HasPrefix(source, "derived:") {
 		return
 	}
-	mode := ""
-	switch {
-	case api.Bindings[system.IntentReasoningDisable] != nil, api.Bindings[system.IntentReasoningEnable] != nil:
-		mode = system.ThinkingModeControllable
-	case api.Bindings[system.IntentReasoningEffort] != nil || api.Bindings[system.IntentReasoningBudget] != nil:
-		mode = system.ThinkingModeTunable
-	}
-	switch {
-	case mode == "":
-		tracef("thinking: %s dropped — no reasoning binding remains", api.Thinking.Mode)
-		api.Thinking = nil
-		if api.Evidence != nil {
-			delete(api.Evidence, system.EvidenceKeyThinkingDefault)
-		}
-	case mode != api.Thinking.Mode:
-		tracef("thinking.mode: %s -> %s after the drop", api.Thinking.Mode, mode)
-		api.Thinking.Mode = mode
+	clearCapField(api.Capabilities, CapFieldReasoning)
+	delete(api.Evidence, key)
+	tracef("capabilities.reasoning dropped — %s names no remaining binding", source)
+	if emptyCapabilities(api.Capabilities) {
+		api.Capabilities = nil
 	}
 }
 
