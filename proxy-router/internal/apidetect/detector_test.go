@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apispec"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
@@ -1102,6 +1103,14 @@ func TestDetectDropsStackContradictingTransport(t *testing.T) {
 		require.Equal(t, system.ThinkingModeAlwaysOn, api.Thinking.Mode)
 		require.Empty(t, api.Bindings)
 		require.Empty(t, api.Parameters)
+		require.NotNil(t, api.Capabilities)
+		require.True(t, *api.Capabilities.Reasoning, "derived from the mode that survives, not from the dropped stack's endpoints")
+		require.Equal(t, apispec.SourceDerivedThinkingMode, api.Evidence["capabilities.reasoning"])
+		require.Nil(t, api.Capabilities.Context, "vllm's max_model_len went with the stack")
+		require.Nil(t, api.Capabilities.Structured)
+		for key := range api.Evidence {
+			require.Equal(t, "capabilities.reasoning", key)
+		}
 	})
 
 	t.Run("openai model at a claudeai-only vendor host", func(t *testing.T) {

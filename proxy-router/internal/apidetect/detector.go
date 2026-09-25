@@ -284,10 +284,15 @@ func (d *Detector) detect(ctx context.Context, cfg config.ModelConfig) *system.M
 				delete(api.Evidence, key)
 			}
 		}
-		apispec.ClearDetectedCapabilities(api, nil)
 		if api.Thinking != nil && api.Thinking.Mode != system.ThinkingModeAlwaysOn {
 			api.Thinking = nil
 		}
+		// capabilities.reasoning derived from a surviving always_on mode is
+		// that mode's fact, not the dropped stack's.
+		alwaysOn := api.Thinking != nil
+		apispec.ClearDetectedCapabilities(api, func(source string) bool {
+			return apispec.IsDeclaredOrRegistrySource(source) || (alwaysOn && source == apispec.SourceDerivedThinkingMode)
+		})
 		if api.ModelFamily == "" && api.Thinking == nil && api.Capabilities == nil {
 			tracef(ctx, "nothing known about this backend: no api block")
 			return nil
