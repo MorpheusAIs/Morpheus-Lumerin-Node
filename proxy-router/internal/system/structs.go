@@ -321,15 +321,32 @@ func (b *ParamBinding) Clone() *ParamBinding {
 	if b.EnumValues != nil {
 		c.EnumValues = append([]string(nil), b.EnumValues...)
 	}
-	if m, ok := b.Value.(map[string]any); ok {
-		mc := make(map[string]any, len(m))
-		for k, v := range m {
-			mc[k] = v
-		}
-		c.Value = mc
-	}
+	c.Value = cloneValue(b.Value)
 	c.Verified = cloneBool(b.Verified)
 	return &c
+}
+
+// cloneValue copies the JSON-shaped containers a binding value may hold
+// (objects and arrays, nested) so a clone never aliases the preset table it
+// came from: the openrouter web_search.enable value is [{"id": "web"}], and
+// a consumer editing its copy must not edit the table. Scalars are returned
+// as they are.
+func cloneValue(v any) any {
+	switch t := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(t))
+		for k, item := range t {
+			out[k] = cloneValue(item)
+		}
+		return out
+	case []any:
+		out := make([]any, len(t))
+		for i, item := range t {
+			out[i] = cloneValue(item)
+		}
+		return out
+	}
+	return v
 }
 
 type StatusRes struct {

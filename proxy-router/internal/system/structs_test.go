@@ -215,3 +215,38 @@ func TestModelApiSpecCloneDeepCopiesCapabilitiesAndEvidence(t *testing.T) {
 	require.Equal(t, &ModelCapabilities{}, empty)
 	require.Nil(t, (&ModelApiSpec{Stack: "vllm"}).Clone().Evidence, "nil stays nil, not an empty map")
 }
+
+// A binding value is JSON-shaped and may nest; the clone owns every level,
+// so a consumer editing its copy leaves the package's preset table alone.
+func TestParamBindingCloneDeepCopiesValue(t *testing.T) {
+	table := map[string]*ParamBinding{
+		"array of objects": {Kind: BindingKindBodyParam, Param: "plugins", ParamType: "array", Value: []any{map[string]any{"id": "web", "opts": []any{"a"}}}},
+		"nested object":    {Kind: BindingKindBodyParam, Param: "thinking", ParamType: "object", Value: map[string]any{"type": "enabled", "limits": map[string]any{"budget": 1024}, "tags": []any{"x"}}},
+		"scalar":           {Kind: BindingKindBodyParam, Param: "reasoning_effort", ParamType: "string", Value: "high", EnumValues: []string{"low", "high"}},
+	}
+	snapshot, err := json.Marshal(table)
+	require.NoError(t, err)
+
+	c := table["array of objects"].Clone()
+	require.Equal(t, table["array of objects"], c)
+	c.Value.([]any)[0].(map[string]any)["id"] = "mutated"
+	c.Value.([]any)[0].(map[string]any)["opts"].([]any)[0] = "mutated"
+	c.Value = append(c.Value.([]any), "extra")
+
+	c = table["nested object"].Clone()
+	c.Value.(map[string]any)["limits"].(map[string]any)["budget"] = 0
+	c.Value.(map[string]any)["tags"].([]any)[0] = "mutated"
+	delete(c.Value.(map[string]any), "type")
+
+	c = table["scalar"].Clone()
+	c.Value = "mutated"
+	c.EnumValues[0] = "mutated"
+
+	after, err := json.Marshal(table)
+	require.NoError(t, err)
+	require.JSONEq(t, string(snapshot), string(after), "the table is untouched")
+
+	var nilBinding *ParamBinding
+	require.Nil(t, nilBinding.Clone())
+	require.Nil(t, (&ParamBinding{Kind: BindingKindBodyParam}).Clone().Value, "nil stays nil")
+}
