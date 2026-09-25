@@ -32,29 +32,31 @@ func TestLookupOrder(t *testing.T) {
 		name       string
 		candidates []string
 		want       string
+		pos        int
 	}{
-		{"exact", []string{"gpt-4o"}, "gpt-4o"},
-		{"case-insensitive", []string{"GPT-4o"}, "gpt-4o"},
-		{"parameter segment stripped", []string{"gpt-4o:temp=0"}, "gpt-4o"},
-		{"served id with provider prefix", []string{"openai/gpt-4o"}, "gpt-4o"},
-		{"gateway prefix on an org id", []string{"together_ai/meta-llama/llama-3-70b"}, "meta-llama/llama-3-70b"},
-		{"bare name finds the unique org id", []string{"llama-3-70b"}, "meta-llama/llama-3-70b"},
-		{"exact beats a unique tail", []string{"qwen3-235b-a22b"}, "qwen3-235b-a22b"},
-		{"org id exact", []string{"qwen/qwen3-235b-a22b"}, "qwen/qwen3-235b-a22b"},
-		{"every candidate is tried exactly before any tail", []string{"org/gpt-4o", "meta-llama/llama-3-70b"}, "meta-llama/llama-3-70b"},
-		{"first candidate wins the exact pass", []string{"o1-pro", "gpt-4o"}, "o1-pro"},
-		{"blank candidates skipped", []string{"", "  ", "gpt-4o"}, "gpt-4o"},
-		{"ambiguous tail", []string{"dup"}, ""},
-		{"ambiguous tail behind a prefix", []string{"x/dup"}, ""},
-		{"no fuzzy", []string{"gpt-4o-mini", "gpt4o"}, ""},
-		{"trailing slash", []string{"gpt-4o/"}, ""},
-		{"nothing", nil, ""},
+		{"exact", []string{"gpt-4o"}, "gpt-4o", 0},
+		{"case-insensitive", []string{"GPT-4o"}, "gpt-4o", 0},
+		{"parameter segment stripped", []string{"gpt-4o:temp=0"}, "gpt-4o", 0},
+		{"served id with provider prefix", []string{"openai/gpt-4o"}, "gpt-4o", 0},
+		{"gateway prefix on an org id", []string{"together_ai/meta-llama/llama-3-70b"}, "meta-llama/llama-3-70b", 0},
+		{"bare name finds the unique org id", []string{"llama-3-70b"}, "meta-llama/llama-3-70b", 0},
+		{"exact beats a unique tail", []string{"qwen3-235b-a22b"}, "qwen3-235b-a22b", 0},
+		{"org id exact", []string{"qwen/qwen3-235b-a22b"}, "qwen/qwen3-235b-a22b", 0},
+		{"every candidate is tried exactly before any tail", []string{"org/gpt-4o", "meta-llama/llama-3-70b"}, "meta-llama/llama-3-70b", 1},
+		{"first candidate wins the exact pass", []string{"o1-pro", "gpt-4o"}, "o1-pro", 0},
+		{"blank candidates skipped", []string{"", "  ", "gpt-4o"}, "gpt-4o", 2},
+		{"the tail pass reports the original position", []string{"", "org/gpt-4o"}, "gpt-4o", 1},
+		{"ambiguous tail", []string{"dup"}, "", -1},
+		{"ambiguous tail behind a prefix", []string{"x/dup"}, "", -1},
+		{"no fuzzy", []string{"gpt-4o-mini", "gpt4o"}, "", -1},
+		{"trailing slash", []string{"gpt-4o/"}, "", -1},
+		{"nothing", nil, "", -1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			e, ok := ix.lookup(tc.candidates)
-			if ok != (tc.want != "") || e.ID != tc.want {
-				t.Fatalf("lookup(%v) = (%q, %v), want %q", tc.candidates, e.ID, ok, tc.want)
+			e, pos, ok := ix.lookup(tc.candidates)
+			if ok != (tc.want != "") || e.ID != tc.want || pos != tc.pos {
+				t.Fatalf("lookup(%v) = (%q, %d, %v), want (%q, %d)", tc.candidates, e.ID, pos, ok, tc.want, tc.pos)
 			}
 		})
 	}
@@ -64,7 +66,7 @@ func TestFacts(t *testing.T) {
 	ix := fixtureIndex(t)
 	tr := true
 	get := func(id string) *apispec.RegistryFacts {
-		e, ok := ix.lookup([]string{id})
+		e, _, ok := ix.lookup([]string{id})
 		if !ok {
 			t.Fatalf("%s missing from the fixture", id)
 		}

@@ -368,6 +368,7 @@ func TestOpenRouterEntryVariants(t *testing.T) {
 }
 
 func TestVeniceSpecCapabilities(t *testing.T) {
+	withoutRegistry(t)
 	api, trace := detectListing(t, "venice", veniceSpecEntry("qwen3-235b", nil))
 
 	caps := api.Capabilities
@@ -496,6 +497,7 @@ func TestVeniceSpecVariants(t *testing.T) {
 	})
 
 	t.Run("supportsReasoning alone identifies the stack without a capabilities block", func(t *testing.T) {
+		withoutRegistry(t)
 		api, _ := detectListing(t, "venice", veniceEntry("qwen3-235b", true))
 		require.Nil(t, api.Capabilities, "no fact was read, so the pre-capabilities wire shape stands")
 		require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
@@ -503,6 +505,7 @@ func TestVeniceSpecVariants(t *testing.T) {
 }
 
 func TestRegistryEvidenceSourcesNameTheirStack(t *testing.T) {
+	withoutRegistry(t)
 	for _, vendor := range []string{"openrouter", "venice"} {
 		t.Run(vendor, func(t *testing.T) {
 			var api *system.ModelApiSpec

@@ -156,6 +156,7 @@ func TestProbeAnthropicFacts(t *testing.T) {
 // A capabilities object without the thinking leaf is not a statement about
 // thinking: the name-based claude bindings stay, the modality facts land.
 func TestProbeAnthropicWithoutThinkingLeafKeepsFallback(t *testing.T) {
+	withoutRegistry(t)
 	srv, _ := serveVendor(t, "anthropic", "/v1/models/claude-sonnet-4-5", map[string]any{
 		"id": "claude-sonnet-4-5", "max_input_tokens": 200000,
 		"capabilities": map[string]any{
@@ -303,6 +304,7 @@ var cerebrasModelFixture = map[string]any{
 }
 
 func TestProbeCerebras(t *testing.T) {
+	withoutRegistry(t)
 	srv, fx := serveVendor(t, "cerebras", "/public/v1/models/llama-3.3-70b", cerebrasModelFixture)
 	api, trace := detectVendor(t, srv, config.ModelConfig{ModelName: "llama-3.3-70b", ApiKey: vendorTestKey})
 
@@ -383,6 +385,7 @@ func TestProbeDeepInfra(t *testing.T) {
 }
 
 func TestProbeHFRouter(t *testing.T) {
+	withoutRegistry(t)
 	// https://huggingface.co/docs/inference-providers/index — live shape of
 	// GET https://router.huggingface.co/v1/models.
 	srv, fx := serveVendor(t, "hf-router", "/v1/models", map[string]any{
@@ -472,6 +475,7 @@ func TestVendorMisses(t *testing.T) {
 	})
 
 	t.Run("listing entries are matched by id only", func(t *testing.T) {
+		withoutRegistry(t)
 		srv, _ := serveVendor(t, "deepinfra", "/v1/openai/models", map[string]any{
 			"data": []map[string]any{{"id": "Qwen/Qwen3-32B", "metadata": map[string]any{"context_length": 40960}}},
 		})

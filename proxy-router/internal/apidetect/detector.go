@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apispec"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apispec/registry"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
@@ -29,8 +30,12 @@ const (
 	cacheSweepAt  = 256
 )
 
-// Variable so tests can map an httptest host to a vendor.
-var stackFromHost = apispec.StackFromHost
+// Variables so tests can map an httptest host to a vendor and keep a
+// vendor-probe fixture free of the offline registry's facts.
+var (
+	stackFromHost = apispec.StackFromHost
+	registryMatch = registry.Match
+)
 
 type Options struct {
 	// Diagnostics only. Not applied to the LiteLLM second hop, where
@@ -224,6 +229,9 @@ func (d *Detector) detect(ctx context.Context, cfg config.ModelConfig) *system.M
 	} else {
 		ev.Stack = stackFromHost(cfg.ApiURL)
 	}
+	// Captured before probing: a stack a probe fingerprints later is a
+	// self-hosted engine, which the registry does not describe.
+	hostRecognised := ev.Stack != ""
 	bases := baseCandidates(cfg.ApiURL)
 
 	if ev.Stack == "" {
@@ -241,6 +249,10 @@ func (d *Detector) detect(ctx context.Context, cfg config.ModelConfig) *system.M
 		probe(ctx, d, bases, cfg, &ev)
 	} else {
 		tracef(ctx, "host recognized as hosted vendor %q by hostname; no probing needed", ev.Stack)
+	}
+
+	if ev.Registry == nil && (hostRecognised || ev.Stack == "openai") {
+		lookupRegistry(ctx, cfg.ModelName, &ev)
 	}
 
 	api, lines := apispec.ComposeWithTrace(ev)
@@ -274,6 +286,26 @@ func (d *Detector) detect(ctx context.Context, cfg config.ModelConfig) *system.M
 	}
 	return api
 }
+
+// The offline registry (contract §3 rule 10, §6) describes hosted vendors'
+// catalogues, so it is consulted for a hostname-recognised vendor and the
+// openai stack only; a self-hosted engine serves whatever window and
+// quantisation it was started with, and the snapshot would be a guess. The
+// composer lets the entry fill only fields nothing else set. The trace names
+// which candidate matched, never the id: a configured name may be anything.
+func lookupRegistry(ctx context.Context, modelName string, ev *apispec.Evidence) {
+	kinds := []string{"served model id", "bare model name", "configured model name"}
+	facts, pos, ok := registryMatch(ev.ServedModelID, bareModelID(modelName), modelName)
+	if !ok {
+		tracef(ctx, "registry: %s@%s has no entry for the served id, bare name or configured name", registryName, registry.Date())
+		return
+	}
+	ev.Registry = facts
+	tracef(ctx, "registry: %s@%s matched %q", facts.Name, facts.Date, kinds[pos])
+}
+
+// The snapshot's sources, for the trace line when nothing matched.
+const registryName = "models.dev+litellm"
 
 // The key hash is part of the cache key so a rotated key re-inspects a
 // backend whose cached result may have failed auth; the declared

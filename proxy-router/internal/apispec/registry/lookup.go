@@ -71,35 +71,40 @@ func newIndex(entries []entry) *index {
 }
 
 // lookup tries every candidate exactly before any suffix match, so a served
-// id's exact hit beats a configured name's tail guess.
-func (ix *index) lookup(candidates []string) (entry, bool) {
-	keys := make([]string, 0, len(candidates))
-	for _, c := range candidates {
+// id's exact hit beats a configured name's tail guess. The int is the
+// position in candidates of the one that matched.
+func (ix *index) lookup(candidates []string) (entry, int, bool) {
+	type key struct {
+		k   string
+		pos int
+	}
+	keys := make([]key, 0, len(candidates))
+	for pos, c := range candidates {
 		if k := normalizeCandidate(c); k != "" {
-			keys = append(keys, k)
+			keys = append(keys, key{k, pos})
 		}
 	}
 	for _, k := range keys {
-		if i, ok := ix.exact[k]; ok {
-			return ix.entries[i], true
+		if i, ok := ix.exact[k.k]; ok {
+			return ix.entries[i], k.pos, true
 		}
 	}
 	for _, k := range keys {
-		tail := k
-		if j := strings.LastIndexByte(k, '/'); j >= 0 {
-			if j == len(k)-1 {
+		tail := k.k
+		if j := strings.LastIndexByte(k.k, '/'); j >= 0 {
+			if j == len(k.k)-1 {
 				continue
 			}
-			tail = k[j+1:]
+			tail = k.k[j+1:]
 			if i, ok := ix.exact[tail]; ok {
-				return ix.entries[i], true
+				return ix.entries[i], k.pos, true
 			}
 		}
 		if hits := ix.tails[tail]; len(hits) == 1 {
-			return ix.entries[hits[0]], true
+			return ix.entries[hits[0]], k.pos, true
 		}
 	}
-	return entry{}, false
+	return entry{}, -1, false
 }
 
 // normalizeCandidate applies the generator's id rules that need no provider
@@ -136,11 +141,19 @@ func snapshot() *index {
 // unique match on the segment after the last "/". No fuzzy matching. The
 // result is a fresh copy the caller may keep.
 func Lookup(candidates ...string) (*apispec.RegistryFacts, bool) {
-	e, ok := snapshot().lookup(candidates)
+	f, _, ok := Match(candidates...)
+	return f, ok
+}
+
+// Match is Lookup that also reports which candidate matched, as its position
+// in candidates, so a caller can trace "matched the served id" without
+// echoing the id.
+func Match(candidates ...string) (*apispec.RegistryFacts, int, bool) {
+	e, pos, ok := snapshot().lookup(candidates)
 	if !ok {
-		return nil, false
+		return nil, -1, false
 	}
-	return facts(e, snapshotDate), true
+	return facts(e, snapshotDate), pos, true
 }
 
 // Date is the snapshot's generation date, YYYY-MM-DD.
