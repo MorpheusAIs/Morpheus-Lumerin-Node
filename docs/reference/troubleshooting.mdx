@@ -3,7 +3,7 @@ title: "Troubleshooting"
 description: "Common failure modes for the proxy-router and MorpheusUI, with diagnostics and fixes."
 audience: ["consumer", "prosumer", "provider-full", "provider-resale", "developer"]
 product: ["proxy-router", "ui-desktop"]
-last_verified: "v7.0.0"
+last_verified: "2026-09-22"
 source: "docs/99-troubleshooting.md"
 ---
 
@@ -20,6 +20,14 @@ INFO  TCP   tcp server is listening: 0.0.0.0:3333
 ```
 
 You can also confirm via `http://localhost:8082/swagger/index.html` (or whatever URL is set in your `.env`).
+
+A line like this during boot is **not** a failure:
+
+```
+WARN  balance read failed, retrying (1/5) in 2s: 429 Too Many Requests …
+```
+
+The startup wallet-balance read is retried up to five times with doubling back-off (2 s → 16 s, about 30 s total) before the node gives up. It fires when the RPC endpoint throttles the boot burst — the model pre-flight issues one call per configured model against the same endpoint moments earlier. On earlier releases that first `429` exited the process and, under `Restart=always`, looped. If you see it on every start, your `ETH_NODE_ADDRESS` is the public fallback or a free tier: [set a real endpoint](/reference/env-proxy-router#blockchain).
 
 ---
 

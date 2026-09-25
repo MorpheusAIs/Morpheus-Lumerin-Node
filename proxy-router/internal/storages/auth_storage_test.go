@@ -2,10 +2,92 @@ package storages
 
 import (
 	"math/big"
+	"sync"
 	"testing"
 
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/stretchr/testify/require"
 )
+
+func TestDecreaseAllowanceRejectsWhenBalanceIsTooSmall(t *testing.T) {
+	authStorage := agentAllowanceFixture(t, "100")
+
+	err := authStorage.DecreaseAllowance("testuser", "eth", bigInt("100"))
+	require.NoError(t, err)
+
+	err = authStorage.DecreaseAllowance("testuser", "eth", bigInt("1"))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not enough allowance")
+
+	user, err := authStorage.GetAgentUser("testuser")
+	require.NoError(t, err)
+	eth := user.Allowances["eth"]
+	require.Equal(t, "0", eth.String())
+}
+
+func TestDecreaseAllowanceIsAtomicAcrossOverlappingDebits(t *testing.T) {
+	authStorage := agentAllowanceFixture(t, "10")
+
+	var (
+		wg        sync.WaitGroup
+		mu        sync.Mutex
+		successes int
+	)
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err := authStorage.DecreaseAllowance("testuser", "eth", bigInt("1"))
+			if err == nil {
+				mu.Lock()
+				successes++
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+
+	require.Equal(t, 10, successes)
+	user, err := authStorage.GetAgentUser("testuser")
+	require.NoError(t, err)
+	eth := user.Allowances["eth"]
+	require.Equal(t, "0", eth.String())
+}
+
+func TestIncreaseAllowanceRestoresAHeldDebit(t *testing.T) {
+	authStorage := agentAllowanceFixture(t, "5")
+
+	require.NoError(t, authStorage.DecreaseAllowance("testuser", "eth", bigInt("5")))
+	require.NoError(t, authStorage.IncreaseAllowance("testuser", "eth", bigInt("5")))
+
+	user, err := authStorage.GetAgentUser("testuser")
+	require.NoError(t, err)
+	eth := user.Allowances["eth"]
+	require.Equal(t, "5", eth.String())
+}
+
+func agentAllowanceFixture(t *testing.T, amount string) *AuthStorage {
+	t.Helper()
+	db := NewTestStorage()
+	authStorage := NewAuthStorage(db)
+	err := authStorage.AddAuthRequest(&AgentUser{
+		Username: "testuser",
+		Allowances: map[string]lib.BigInt{
+			"eth": bigInt(amount),
+		},
+		IsConfirmed: true,
+	})
+	require.NoError(t, err)
+	return authStorage
+}
+
+func bigInt(value string) lib.BigInt {
+	n, ok := new(big.Int).SetString(value, 10)
+	if !ok {
+		panic("invalid fixture amount")
+	}
+	return lib.BigInt{Int: *n}
+}
 
 func TestGetAgentTxOrder(t *testing.T) {
 	authStorage := agentTxsFixture(t)

@@ -65,6 +65,7 @@ type QueryProvider struct {
 
 type OpenSessionWithDurationRequest struct {
 	SessionDuration *lib.BigInt `json:"sessionDuration" swaggertype:"integer"`
+	MaxStakeWei     *lib.BigInt `json:"maxStakeWei" binding:"omitempty" swaggertype:"integer"`
 }
 
 type OpenSessionWithFailover struct {

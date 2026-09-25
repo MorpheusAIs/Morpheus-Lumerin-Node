@@ -1,0 +1,155 @@
+---
+title: "Companion gateway mode"
+description: "Optional proxy-router features for a gateway that manages sessions on your behalf: stake caps, a durable operation journal with progress reporting, a process-local wallet lock, and capability discovery."
+audience: ["prosumer", "developer"]
+product: ["proxy-router"]
+last_verified: "2026-09-22"
+---
+
+A **companion gateway** is a service that sits in front of your consumer proxy-router (C-Node) and opens, reuses, and closes sessions so the clients behind it never see a `session_id`. [Uplink](https://github.com/absgrafx/Morpheus-Uplink) is one such gateway; the hosted API at [api.mor.org](https://api.mor.org) is another (different product, same shape). The proxy-router exposes a small set of **opt-in** features for that companion. Every one of them is inert until you switch it on.
+
+<Note>
+**Stock nodes are unaffected.** With no `GATEWAY_*` environment variable, no `X-Gateway-Operation` header, and no `maxStakeWei` field, the proxy-router behaves exactly as before: stock stake calculation, no journal, no wallet lock, native session-expiry cleanup, and response bodies unchanged. Only `GET /config` gains a `GatewayCapabilities` array.
+</Note>
+
+## Capability discovery
+
+`GET /config` (permission `system_config`) now returns a `GatewayCapabilities` array a companion can feature-detect against instead of parsing version strings:
+
+```json
+{
+  "Version": "…",
+  "GatewayCapabilities": ["stake-limit-v1", "operation-journal-v1", "transaction-progress-v1"],
+  "…": "…"
+}
+```
+
+| Capability | Meaning |
+|------------|---------|
+| `stake-limit-v1` | `maxStakeWei` is honoured on `POST /blockchain/bids/{id}/session` |
+| `operation-journal-v1` | `X-Gateway-Operation` + `GATEWAY_JOURNAL_PATH` are supported |
+| `transaction-progress-v1` | Open / close / withdraw responses carry a `progress` object when an operation was journaled |
+
+## Stake cap on open-by-bid (`maxStakeWei`)
+
+`POST /blockchain/bids/{id}/session` accepts an optional `maxStakeWei` alongside `sessionDuration`. If the stake the node computes for that duration exceeds the cap, the open is rejected **before** any approval or open transaction is built — nothing is broadcast.
+
+```bash
+curl -u 'admin:yourpassword' \
+  -X POST 'http://localhost:8082/blockchain/bids/0x<bidId>/session' \
+  -H 'Content-Type: application/json' \
+  -d '{"sessionDuration": 3600, "maxStakeWei": "250000000000000000000"}'
+```
+
+Sending `maxStakeWei` also switches **that open** onto the gateway stake formula (see below). Leave it out and the stock formula applies.
+
+### Gateway stake formula
+
+When managed mode is on (`GATEWAY_JOURNAL_PATH` set) **or** the request carries `maxStakeWei`, the node:
+
+- refreshes total MOR supply and today's emissions budget immediately before computing the stake, so a quote is not stale by the time approval + open have mined;
+- rounds the stake **up** with one basis point (0.01%) of headroom, so the contract's round-down of stipend and duration cannot deliver fewer seconds than requested;
+- rejects `sessionDuration` below the contract minimum of 300 seconds up front instead of letting the open revert.
+
+Unmanaged opens keep the historical `supply × price × duration / budget` calculation unchanged. The headroom is small but non-zero, so a companion that quotes users a stake figure should apply the same rounding (`ceil(supply × price × duration × 10001 / (budget × 10000))`) rather than a bare multiplication, or set `maxStakeWei` a little above its own estimate.
+
+## Operation journal (`X-Gateway-Operation`)
+
+The problem this solves: a gateway sends "open session", the HTTP connection drops, and the gateway has no idea whether the approval or open transaction was broadcast. Retrying blindly can open a second session and lock stake twice.
+
+With the journal enabled, the gateway attaches an idempotency key and the node records every stage durably before acting on it.
+
+### Enable
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `GATEWAY_JOURNAL_PATH` | *(unset — disabled)* | Directory for per-operation JSON journals. Setting it turns on **managed mode**: journal, wallet lock, gateway stake formula. Create it on persistent storage; it is created `0700` if missing. |
+| `GATEWAY_OWN_CLEANUP` | *(unset)* | Set to `1` **only** when a live companion owns expired-session cleanup. See the warning below. |
+
+### Use
+
+Send `X-Gateway-Operation: <32 lowercase hex chars>` on:
+
+- `POST /blockchain/bids/{id}/session`
+- `POST /blockchain/sessions/{id}/close`
+- `POST /blockchain/stakes/withdraw`
+
+Rules:
+
+- Any journal problem — `GATEWAY_JOURNAL_PATH` unset, malformed ID, directory not writable, or an ID that **already has a journal file** — answers **`409 {"error":"operation exists or journal unavailable"}`** and performs **no** chain action. The duplicate check survives node restarts because it is the file itself. Generate a fresh ID per logical operation; a repeated ID is your signal to read the existing journal, never a retry.
+- Without the header, the same endpoints behave exactly as before and their bodies contain no `progress` field.
+
+### Progress in responses
+
+When an operation was journaled, success **and** error bodies on those three endpoints include a `progress` object:
+
+```json
+{
+  "sessionID": "0x…",
+  "progress": {
+    "stage": "submitted_open",
+    "completed": false,
+    "http_status": 0,
+    "sessionID": "0x…",
+    "transactions": [
+      {"kind": "approval", "hash": "0x…"},
+      {"kind": "open", "hash": "0x…"}
+    ],
+    "updated_at": 1790101508
+  }
+}
+```
+
+| Field | Meaning |
+|-------|---------|
+| `stage` | `not_submitted` → `submitting_<kind>` → `submitted_<kind>`; or `needs_reconcile` (below). `kind` is `approval`, `open`, `close`, or `withdraw`. |
+| `transactions` | Every transaction hash the node produced for this operation, in order. Present even when the HTTP call ultimately failed. |
+| `sessionID` | Filled once the open receipt is parsed. |
+| `completed` / `http_status` | **Always pre-completion in the HTTP body** (`false` / `0`). They are finalised in the journal file after the response is written. Read the file under `GATEWAY_JOURNAL_PATH/<id>.json` for the final state. |
+| `journal_write_error` | Set when the node could not persist after a hash was already known. |
+
+### `needs_reconcile`
+
+If the node recorded a transaction hash and then **failed to write the journal** (disk gone, permissions), it does not pretend the open failed. `stage` becomes `needs_reconcile`, `journal_write_error` carries the cause, and the hashes stay in the response. The companion must treat this as "chain may have advanced" and reconcile from the hashes — not retry.
+
+Conversely, a build failure **before** any hash of that kind exists resets the stage to `not_submitted`; a build failure **after** a hash exists does not, so an ambiguous broadcast can never authorise a second session under the same operation.
+
+The journal contains stage, status, session ID, and transaction hashes only — never key material or prompt content.
+
+## Wallet lock (managed mode)
+
+While `GATEWAY_JOURNAL_PATH` is set, `OpenSession`, `CloseSession`, and `WithdrawUserStakes` are serialised through a **process-local** lock so two concurrent gateway calls cannot race the same nonce. A call that is still waiting when its request context is cancelled returns the context error and never touches the chain.
+
+<Warning>
+The lock is per process. **Running more than one wallet-bearing proxy-router replica against the same wallet in managed mode is unsupported.** Run a single replica, or accept that cross-replica nonce collisions are your problem.
+</Warning>
+
+## Who closes expired sessions? (`GATEWAY_OWN_CLEANUP`)
+
+By default the proxy-router runs its own expiry loop that closes sessions past `endsAt` — and it **keeps doing so in managed mode**. Setting `GATEWAY_JOURNAL_PATH` alone does not hand cleanup to the companion; both may close, which is safe (a second close simply fails).
+
+Set `GATEWAY_OWN_CLEANUP=1` only when the companion **actually reconciles and closes** expired sessions itself. The node then rehydrates its session list from chain at boot and **suspends** the native loop.
+
+<Warning>
+With `GATEWAY_OWN_CLEANUP=1` and no live companion, expired sessions are never auto-closed. Stake stays in the Inference Contract until something calls `closeSession`. Do not set this in a compose file "just in case".
+</Warning>
+
+## Mode summary
+
+| | Stock (nothing set) | `GATEWAY_JOURNAL_PATH` set | `…` + `GATEWAY_OWN_CLEANUP=1` |
+|---|---|---|---|
+| Stake formula | stock | gateway (headroom, 300s floor) | gateway |
+| Supply / budget refresh per open | no | yes | yes |
+| Wallet lock | no | process-local | process-local |
+| `X-Gateway-Operation` accepted | no (error) | yes | yes |
+| `progress` in bodies | never | when header sent | when header sent |
+| Native expiry loop | runs | runs | **suspended** |
+
+`maxStakeWei` on a request enables the gateway stake formula for that open in any of the three columns.
+
+## Related
+
+- [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover) — what the stake and day-lock actually are.
+- [API endpoints](/reference/api-endpoints) — the open / close / withdraw calls this page decorates.
+- [Env: proxy-router](/reference/env-proxy-router#gateway-managed-mode-optional) — the two variables in the full table.
+- [API auth](/reference/api-auth#agent-spending-allowances) — per-agent allowances, which are independent of this mechanism.

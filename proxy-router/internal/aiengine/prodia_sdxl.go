@@ -115,6 +115,10 @@ func (s *ProdiaSDXL) Embeddings(ctx context.Context, prompt *gcs.EmbeddingsReque
 	return fmt.Errorf("embeddings not supported")
 }
 
+func (s *ProdiaSDXL) Decisions(ctx context.Context, prompt *gcs.DecisionsRequest, cb gcs.CompletionCallback) error {
+	return fmt.Errorf("decisions not supported")
+}
+
 func (s *ProdiaSDXL) ApiType() string {
 	return API_TYPE_PRODIA_SDXL
 }

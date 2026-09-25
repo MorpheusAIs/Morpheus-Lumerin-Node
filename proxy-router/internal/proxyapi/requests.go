@@ -215,3 +215,9 @@ type CallAgentToolReq struct {
 	ToolName string                 `json:"toolName" validate:"required"`
 	Input    map[string]interface{} `json:"input" validate:"required"`
 }
+
+type DecisionsRequestExample struct {
+	Model     string                 `json:"model" example:"jev-1.13.0"`
+	State     string                 `json:"state" example:"Ticket: invoice dispute, customer asks chargeback timeline."`
+	Questions map[string]interface{} `json:"questions"`
+}

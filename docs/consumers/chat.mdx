@@ -69,6 +69,10 @@ curl -X POST 'http://localhost:8082/v1/embeddings' \
   -d '{"input": "The quick brown fox jumped over the lazy dog", "encoding_format": "float"}'
 ```
 
+## Decisions
+
+Structured decision / System One models use a separate route — see [Decisions](/consumers/decisions) (`POST /v1/decisions`). Do not send Decisions bodies to `/v1/chat/completions`.
+
 ## Closing a session early
 
 Always close manually if you are finished well before the session timer expires. Unused stake returns to your wallet on close; the used stipend day-locks until the next UTC day (`withdrawUserStakes`). See [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover).

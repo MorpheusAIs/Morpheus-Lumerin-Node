@@ -17,9 +17,32 @@ func IsTeeModel(tags []string) bool {
 	return false
 }
 
+func isDecisionTag(tag string) bool {
+	switch tag {
+	case "decision", "decisions", "typesafe", "systemone", "system-one":
+		return true
+	default:
+		return false
+	}
+}
+
+// DetectModelType classifies a model from its tags.
+// Decision-class tags (decision/decisions/typesafe/systemone/system-one) take
+// precedence over LLM when both are present — required for catalog rows like
+// jev-1.13-ts that carry both LLM and Decision tags.
 func DetectModelType(tags []string) structs.ModelType {
+	normalized := make([]string, 0, len(tags))
 	for _, raw := range tags {
-		tag := strings.ToLower(raw)
+		normalized = append(normalized, strings.ToLower(raw))
+	}
+
+	for _, tag := range normalized {
+		if isDecisionTag(tag) {
+			return structs.ModelTypeDECISIONS
+		}
+	}
+
+	for _, tag := range normalized {
 		switch tag {
 		case "stt", "transcribe", "s2t", "speech", "speech-to-text", "speech2text":
 			return structs.ModelTypeSTT
