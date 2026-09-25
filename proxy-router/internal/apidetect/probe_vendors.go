@@ -137,15 +137,31 @@ func (d *Detector) vendorList(ctx context.Context, urlStr string, headers map[st
 	return nil
 }
 
+// A hosted listing is keyed by id: a lone entry whose id is not the
+// configured model describes a different model (a key scoped to one
+// dedicated endpoint, a filtered listing), so matchModelEntry's
+// single-entry rule for self-hosted engines does not apply here.
 func vendorEntry(ctx context.Context, list []any, endpoint, modelName string) map[string]any {
 	if list == nil {
 		return nil
 	}
-	entry := matchModelEntry(list, modelName)
-	if entry == nil {
-		tracef(ctx, "%s has %d entries but none matches the configured model (config drift?)", endpoint, len(list))
+	names := []string{modelName}
+	if bare := bareModelID(modelName); bare != modelName {
+		names = append(names, bare)
 	}
-	return entry
+	for _, name := range names {
+		for _, item := range list {
+			m, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			if id, ok := m["id"].(string); ok && strings.EqualFold(id, name) {
+				return m
+			}
+		}
+	}
+	tracef(ctx, "%s has %d entries but none matches the configured model (config drift?)", endpoint, len(list))
+	return nil
 }
 
 func objectAt(m map[string]any, key string) map[string]any {
@@ -239,14 +255,20 @@ func probeAnthropic(ctx context.Context, d *Detector, _ []string, cfg config.Mod
 		traceFact(ctx, anthropicModelSource+".capabilities.pdf_input", true, apispec.CapFieldModalitiesInput+" pdf")
 	}
 
+	// Composition treats present facts as decisive, so a capabilities object
+	// without the thinking leaf must stay "not stated" rather than become
+	// "thinking unsupported" and silence the name-based fallback.
+	thinking := objectAt(caps, "thinking")
+	if thinking == nil {
+		tracef(ctx, "%s.capabilities has no thinking object; anthropic facts not stated", anthropicModelSource)
+		return
+	}
 	facts := &apispec.AnthropicFacts{Source: anthropicModelSource + ".capabilities", Structured: supportedAt(caps, "structured_outputs")}
-	if thinking := objectAt(caps, "thinking"); thinking != nil {
-		facts.ThinkingSupported, _ = boolAt(thinking, "supported")
-		types := objectAt(thinking, "types")
-		for _, kind := range []string{"adaptive", "enabled"} {
-			if supportedAt(types, kind) {
-				facts.ThinkingTypes = append(facts.ThinkingTypes, kind)
-			}
+	facts.ThinkingSupported, _ = boolAt(thinking, "supported")
+	types := objectAt(thinking, "types")
+	for _, kind := range []string{"adaptive", "enabled"} {
+		if supportedAt(types, kind) {
+			facts.ThinkingTypes = append(facts.ThinkingTypes, kind)
 		}
 	}
 	effort := objectAt(caps, "effort")
