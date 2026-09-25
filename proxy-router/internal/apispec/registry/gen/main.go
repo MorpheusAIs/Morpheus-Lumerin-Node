@@ -31,6 +31,10 @@ const (
 	maxBody = 16 << 20
 	// maxSource caps the generated Go file (spec §6: ≤ 1.5 MB of source).
 	maxSource = 1_500_000
+	// maxPrefixDepth bounds nested provider prefixes: LiteLLM keys stack an
+	// aggregator over the vendor ("openrouter/openai/gpt-4o"); three covers
+	// every shape in the sources and keeps a pathological key finite.
+	maxPrefixDepth = 3
 
 	srcModelsDev = "srcModelsDev"
 	srcLiteLLM   = "srcLiteLLM"
@@ -56,9 +60,9 @@ type entry struct {
 	Attachment  *bool
 	In, Out     []string
 	Src         string
-	// prefix is the provider prefix normalize stripped from the source id;
-	// vendor is the provider that listed it. Both drive conflict resolution
-	// only.
+	// prefix is the innermost provider prefix normalize stripped from the
+	// source id (the vendor an aggregator's key names); vendor is the
+	// provider that listed it. Both drive conflict resolution only.
 	prefix string
 	vendor string
 }
@@ -142,10 +146,11 @@ func fetch(url string) ([]byte, error) {
 	return body, nil
 }
 
-// models.dev: {"<provider>": {"id", "models": {"<id>": {...}}}}.
+// models.dev: {"<provider>": {"id", "models": {"<id>": {...}}}}. Models
+// stay raw so one malformed row is skipped rather than failing the file.
 type mdProvider struct {
-	ID     string             `json:"id"`
-	Models map[string]mdModel `json:"models"`
+	ID     string                     `json:"id"`
+	Models map[string]json.RawMessage `json:"models"`
 }
 
 type mdModel struct {
@@ -182,9 +187,27 @@ type llModel struct {
 }
 
 func merge(modelsDev, liteLLM []byte) ([]entry, error) {
-	var providers map[string]mdProvider
-	if err := json.Unmarshal(modelsDev, &providers); err != nil {
+	var rawProviders map[string]json.RawMessage
+	if err := json.Unmarshal(modelsDev, &rawProviders); err != nil {
 		return nil, fmt.Errorf("models.dev: %w", err)
+	}
+	providers := map[string]map[string]mdModel{}
+	for pid, msg := range rawProviders {
+		var p mdProvider
+		if err := json.Unmarshal(msg, &p); err != nil {
+			log.Printf("models.dev: provider %q skipped: %v", pid, err)
+			continue
+		}
+		models := map[string]mdModel{}
+		for mid, raw := range p.Models {
+			var m mdModel
+			if err := json.Unmarshal(raw, &m); err != nil {
+				log.Printf("models.dev: %s/%s skipped: %v", pid, mid, err)
+				continue
+			}
+			models[mid] = m
+		}
+		providers[pid] = models
 	}
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(liteLLM, &raw); err != nil {
@@ -204,7 +227,7 @@ func merge(modelsDev, liteLLM []byte) ([]entry, error) {
 	}
 
 	prefixes := map[string]bool{}
-	for id := range providers {
+	for id := range rawProviders {
 		prefixes[canonicalProvider(id)] = true
 	}
 	for _, m := range ll {
@@ -215,13 +238,13 @@ func merge(modelsDev, liteLLM []byte) ([]entry, error) {
 
 	byID := map[string][]entry{}
 	for _, pid := range sortedKeys(providers) {
-		p := providers[pid]
-		for _, mid := range sortedKeys(p.Models) {
+		models := providers[pid]
+		for _, mid := range sortedKeys(models) {
 			id, prefix := normalize(mid, prefixes)
 			if id == "" {
 				continue
 			}
-			byID[id] = append(byID[id], fromModelsDev(id, pid, prefix, p.Models[mid]))
+			byID[id] = append(byID[id], fromModelsDev(id, pid, prefix, models[mid]))
 		}
 	}
 	llByID := map[string][]entry{}
@@ -258,15 +281,21 @@ func canonicalProvider(id string) string {
 	return strings.ReplaceAll(strings.ToLower(id), "_", "-")
 }
 
-// normalize lowercases, strips one leading "<provider>/" when the prefix is
-// a known provider id (a Hugging Face org like "meta-llama/" stays) and drops
-// any ":" segment carrying "=" (a parameter; Ollama-style ":q4" and
-// OpenRouter ":free" are tags and stay). The second result is the stripped
-// prefix, canonical, or "".
+// normalize lowercases, strips leading "<provider>/" segments while each is a
+// known provider id, up to maxPrefixDepth (a Hugging Face org like
+// "mistralai/" stays), and drops any ":" segment carrying "=" (a parameter;
+// Ollama-style ":q4" and OpenRouter ":free" are tags and stay). The second
+// result is the innermost stripped prefix, canonical, or "": for
+// "openrouter/openai/gpt-4o" that is "openai", the vendor of record, not the
+// aggregator, so resolve counts the right vote.
 func normalize(id string, prefixes map[string]bool) (string, string) {
 	id = strings.ToLower(strings.TrimSpace(id))
 	prefix := ""
-	if i := strings.IndexByte(id, '/'); i > 0 && prefixes[canonicalProvider(id[:i])] {
+	for depth := 0; depth < maxPrefixDepth; depth++ {
+		i := strings.IndexByte(id, '/')
+		if i <= 0 || !prefixes[canonicalProvider(id[:i])] {
+			break
+		}
 		prefix = canonicalProvider(id[:i])
 		id = id[i+1:]
 	}

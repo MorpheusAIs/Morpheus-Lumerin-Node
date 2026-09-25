@@ -33,6 +33,8 @@ func TestMerge(t *testing.T) {
 		ids = append(ids, e.ID)
 		byID[e.ID] = e
 	}
+	// "openrouter/openai/gpt-4o" folds into gpt-4o, never "openai/gpt-4o";
+	// the malformed models.dev rows are skipped, not fatal.
 	wantIDs := []string{
 		"accounts/fireworks/models/llama-v3p1-8b-instruct",
 		"bar:free",
@@ -52,8 +54,10 @@ func TestMerge(t *testing.T) {
 		id   string
 		want entry
 	}{
-		// The vendor of record (openai, named by openrouter's prefix) beats
-		// azure's own listing; LiteLLM adds only web search and caching.
+		// The vendor of record (openai, named by openrouter's prefix in both
+		// sources) beats azure's own listing and openrouter's nested LiteLLM
+		// key; LiteLLM adds only web search and caching, not openrouter's
+		// reasoning flag or limits.
 		{"gpt-4o", entry{ID: "gpt-4o", Context: 128000, Output: 16384, ToolCall: &tr, Structured: &tr, Attachment: &tr,
 			WebSearch: &tr, PromptCache: &tr, In: []string{"text", "image", "pdf"}, Out: []string{"text"}, Src: srcBoth}},
 		// models.dev's context wins over LiteLLM's; the missing output is filled.
@@ -94,7 +98,7 @@ func describe(e entry) string {
 }
 
 func TestNormalize(t *testing.T) {
-	prefixes := map[string]bool{"openai": true, "fireworks-ai": true, "together-ai": true}
+	prefixes := map[string]bool{"openai": true, "anthropic": true, "openrouter": true, "fireworks-ai": true, "together-ai": true}
 	cases := []struct {
 		in, id, prefix string
 	}{
@@ -102,6 +106,10 @@ func TestNormalize(t *testing.T) {
 		{"openai/gpt-4o", "gpt-4o", "openai"},
 		{"fireworks_ai/accounts/fireworks/models/x", "accounts/fireworks/models/x", "fireworks-ai"},
 		{"meta-llama/Llama-3-70b", "meta-llama/llama-3-70b", ""},
+		{"openrouter/anthropic/claude-sonnet-4-5", "claude-sonnet-4-5", "anthropic"},
+		{"together_ai/meta-llama/Llama-3-70b", "meta-llama/llama-3-70b", "together-ai"},
+		{"openrouter/openai/anthropic/openai/x", "openai/x", "anthropic"},
+		{"openai/", "", ""},
 		{"llama3:8b-q4_K_M", "llama3:8b-q4_k_m", ""},
 		{"deepseek/deepseek-r1:free", "deepseek/deepseek-r1:free", ""},
 		{"claude:thinking=high:free", "claude:free", ""},

@@ -75,7 +75,15 @@
         "tool_call": false,
         "modalities": {"input": ["text"], "output": ["text"]},
         "limit": {"context": 4294967296, "output": 1.5}
+      },
+      "broken-row": {
+        "id": "broken-row",
+        "limit": {"context": "lots"}
       }
     }
+  },
+  "broken-provider": {
+    "id": "broken-provider",
+    "models": "not an object"
   }
 }

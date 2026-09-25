@@ -155,6 +155,24 @@ func TestSnapshot(t *testing.T) {
 	if f, ok := Lookup("claude-sonnet-4-5"); !ok || f.Reasoning == nil || !*f.Reasoning || f.Tools == nil || !*f.Tools {
 		t.Fatalf("claude-sonnet-4-5 must carry reasoning and tools: %+v", f)
 	}
+
+	// The generator folds "<provider>/<x>" into "<x>" at any nesting depth, so
+	// a served id carrying the vendor (what OpenRouter and other gateways emit)
+	// reaches the vendor-of-record row rather than a residual aggregator row.
+	for _, e := range entries {
+		for _, vendor := range []string{"openai/", "anthropic/", "google/", "deepseek/", "xai/", "mistral/"} {
+			if strings.HasPrefix(e.ID, vendor) {
+				t.Fatalf("%s: a provider prefix survived normalisation", e.ID)
+			}
+		}
+	}
+	for served, bare := range map[string]string{"anthropic/claude-sonnet-4-5": "claude-sonnet-4-5", "openai/gpt-4o": "gpt-4o"} {
+		got, ok := Lookup(served)
+		want, _ := Lookup(bare)
+		if !ok || got.Context == nil || !reflect.DeepEqual(got, want) {
+			t.Fatalf("Lookup(%q) = %+v, want the %q row %+v", served, got, bare, want)
+		}
+	}
 	if _, ok := Lookup("no-such-model-xyz"); ok {
 		t.Fatal("unknown id found")
 	}

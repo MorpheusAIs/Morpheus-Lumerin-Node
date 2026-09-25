@@ -14,6 +14,14 @@
     "supports_prompt_caching": true,
     "supports_web_search": true
   },
+  "openrouter/openai/gpt-4o": {
+    "litellm_provider": "openrouter",
+    "mode": "chat",
+    "max_input_tokens": 64000,
+    "max_output_tokens": 8000,
+    "supports_function_calling": true,
+    "supports_reasoning": true
+  },
   "azure/gpt-4o": {
     "litellm_provider": "azure",
     "mode": "chat",
