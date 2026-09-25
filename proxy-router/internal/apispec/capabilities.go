@@ -250,6 +250,25 @@ func (s *capState) noteContextGap(registry *RegistryFacts, tracef func(string, .
 	}
 }
 
+// A chat-transport model accepts text: a producer's vision or audio flag
+// names the extra modality, not the whole set, so a non-empty input list
+// without "text" gets it prepended under that producer's own evidence
+// (contract amendment b). The output list stays as reported: nothing says
+// an image model also answers in text.
+func (s *capState) implyTextInput(tracef func(string, ...any)) {
+	m := s.caps.Modalities
+	if m == nil || len(m.Input) == 0 {
+		return
+	}
+	for _, v := range m.Input {
+		if v == "text" {
+			return
+		}
+	}
+	m.Input = append([]string{"text"}, m.Input...)
+	tracef("capabilities.modalities.input: text prepended — a chat model accepts text (%s)", s.evidence[system.EvidenceKeyCapability(CapFieldModalitiesInput)])
+}
+
 func (s *capState) result() (*system.ModelCapabilities, map[string]string) {
 	if len(s.evidence) == 0 {
 		return nil, nil

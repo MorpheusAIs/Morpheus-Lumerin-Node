@@ -146,7 +146,7 @@ func TestComposeTemplateFacts(t *testing.T) {
 	require.NotNil(t, api.Capabilities)
 	require.True(t, *api.Capabilities.Tools)
 	require.Equal(t, "template:chat_template.tools", api.Evidence[system.EvidenceKeyCapability(CapFieldTools)])
-	require.Equal(t, []string{"image"}, api.Capabilities.Modalities.Input)
+	require.Equal(t, []string{"text", "image"}, api.Capabilities.Modalities.Input)
 	require.Equal(t, "template:chat_template.image_token", api.Evidence[system.EvidenceKeyCapability(CapFieldModalitiesInput)])
 	require.True(t, *api.Capabilities.Reasoning)
 	require.Equal(t, SourceDerivedBindings, api.Evidence[system.EvidenceKeyCapability(CapFieldReasoning)])

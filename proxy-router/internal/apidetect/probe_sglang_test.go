@@ -84,7 +84,7 @@ func TestSGLangModelInfoFacts(t *testing.T) {
 	require.True(t, *caps.Tools)
 	require.Equal(t, "sglang:/model_info.tool_call_parser", api.Evidence["capabilities.tools"])
 	require.NotNil(t, caps.Modalities)
-	require.Equal(t, []string{"image"}, caps.Modalities.Input)
+	require.Equal(t, []string{"text", "image"}, caps.Modalities.Input)
 	require.Equal(t, "sglang:/model_info.has_image_understanding", api.Evidence["capabilities.modalities.input"])
 	require.Empty(t, caps.Modalities.Output)
 	require.Nil(t, caps.Embeddings, "a generation model reports no embeddings fact")
@@ -112,7 +112,7 @@ func TestSGLangDeprecatedAliasFallback(t *testing.T) {
 
 	api, trace := detectSGLang(t, srv.URL, "alias")
 	require.Contains(t, trace, `identified sglang by /get_model_info; served model path "Qwen/Qwen3-VL-8B-Instruct"`)
-	require.Equal(t, []string{"image", "audio"}, api.Capabilities.Modalities.Input)
+	require.Equal(t, []string{"text", "image", "audio"}, api.Capabilities.Modalities.Input)
 	require.Equal(t, "sglang:/get_model_info.has_audio_understanding", api.Evidence["capabilities.modalities.input"],
 		"evidence names the endpoint that answered")
 	require.Nil(t, api.Capabilities.Context, "no /v1/models answer leaves context unset")

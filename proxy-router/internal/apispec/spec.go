@@ -361,6 +361,7 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 	}
 	caps.fill(registryLayer(ev.Registry, tracef), layerRegistry, tracef)
 	caps.noteContextGap(ev.Registry, tracef)
+	caps.implyTextInput(tracef)
 	var capEvidence map[string]string
 	api.Capabilities, capEvidence = caps.result()
 	for k, v := range capEvidence {

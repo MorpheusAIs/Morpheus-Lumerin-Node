@@ -433,6 +433,26 @@ func withVeniceWebSearchBinding(t *testing.T) {
 	require.Equal(t, "venice_parameters.enable_web_search", stackBindings["venice"][system.IntentWebSearchEnable].Param, "the gate is exercised against the documented venice row")
 }
 
+// The openrouter web_search.enable value is [{"id": "web"}]: a composed spec
+// owns its copy at every level, so a consumer editing it (or Clone of it)
+// never edits the package table (contract amendment c).
+func TestComposeWebSearchBindingValueDoesNotAliasTheTable(t *testing.T) {
+	table := stackBindings["openrouter"][system.IntentWebSearchEnable]
+	require.Equal(t, []any{map[string]any{"id": "web"}}, table.Value, "the documented openrouter row")
+
+	var f CapabilityFacts
+	f.SetWebSearch(true, "openrouter:/models.plugins")
+	api := Compose(Evidence{Stack: "openrouter", ModelName: "vendor/model", Caps: f})
+	got := api.Bindings[system.IntentWebSearchEnable]
+	require.Equal(t, table.Value, got.Value)
+	got.Value.([]any)[0].(map[string]any)["id"] = "mutated"
+	got.Clone().Value.([]any)[0].(map[string]any)["id"] = "mutated again"
+	require.Equal(t, []any{map[string]any{"id": "web"}}, table.Value)
+
+	again := Compose(Evidence{Stack: "openrouter", ModelName: "vendor/model", Caps: f})
+	require.Equal(t, []any{map[string]any{"id": "web"}}, again.Bindings[system.IntentWebSearchEnable].Value)
+}
+
 func TestComposeRule8WebSearchGatesTableBindings(t *testing.T) {
 	withVeniceWebSearchBinding(t)
 	t.Run("reported true", func(t *testing.T) {
@@ -551,7 +571,7 @@ func TestComposeRule10Registry(t *testing.T) {
 		require.Nil(t, api.Capabilities.Context)
 		require.Nil(t, api.Capabilities.MaxOutput)
 		require.Nil(t, api.Capabilities.Structured)
-		require.Equal(t, []string{"image"}, api.Capabilities.Modalities.Input)
+		require.Equal(t, []string{"text", "image"}, api.Capabilities.Modalities.Input)
 		require.Equal(t, "", api.Capabilities.Quantization)
 		tr := joined(lines)
 		require.Contains(t, tr, "capabilities.context: registry value 0 out of (0, 2147483648); ignored")
@@ -700,4 +720,41 @@ func TestComposeUndeterminedStackStillCarriesFacts(t *testing.T) {
 	require.Equal(t, "", api.Stack)
 	require.Equal(t, int64(8192), *api.Capabilities.Context)
 	require.Nil(t, Compose(Evidence{ModelName: "unknown-model-x"}))
+}
+
+// Amendment b: a chat model accepts text, so an input list a producer built
+// from its extra-modality flags gains "text" in front under the producer's
+// evidence; an output list is left as reported.
+func TestComposeImpliesTextInput(t *testing.T) {
+	t.Run("lmstudio vision", func(t *testing.T) {
+		var f CapabilityFacts
+		require.True(t, f.SetInputModalities([]string{"image"}, "lmstudio:/api/v1/models.capabilities.vision"))
+		api, lines := ComposeWithTrace(Evidence{Stack: "lmstudio", ModelName: "gemma-4-26b", Caps: f})
+		require.Equal(t, []string{"text", "image"}, api.Capabilities.Modalities.Input)
+		require.Equal(t, "lmstudio:/api/v1/models.capabilities.vision", api.Evidence["capabilities.modalities.input"])
+		require.Contains(t, lines, "capabilities.modalities.input: text prepended — a chat model accepts text (lmstudio:/api/v1/models.capabilities.vision)")
+	})
+	t.Run("text already listed", func(t *testing.T) {
+		var f CapabilityFacts
+		require.True(t, f.SetInputModalities([]string{"image", "text"}, "x:/m"))
+		api, lines := ComposeWithTrace(Evidence{Stack: "vllm", ModelName: "m", Caps: f})
+		require.Equal(t, []string{"image", "text"}, api.Capabilities.Modalities.Input, "order kept, nothing added")
+		for _, l := range lines {
+			require.NotContains(t, l, "text prepended")
+		}
+	})
+	t.Run("declared input", func(t *testing.T) {
+		declared := &config.DeclaredCapabilities{Modalities: &config.DeclaredModalities{Input: []string{"pdf"}, Output: []string{"image"}}}
+		api, _ := ComposeWithTrace(Evidence{Stack: "openai", ModelName: "m", Declared: true, DeclaredCaps: declared})
+		require.Equal(t, []string{"text", "pdf"}, api.Capabilities.Modalities.Input)
+		require.Equal(t, []string{"image"}, api.Capabilities.Modalities.Output, "output stays as reported")
+		require.Equal(t, SourceDeclared, api.Evidence["capabilities.modalities.input"])
+	})
+	t.Run("output alone adds no input", func(t *testing.T) {
+		var f CapabilityFacts
+		require.True(t, f.SetOutputModalities([]string{"image"}, "x:/m"))
+		api, _ := ComposeWithTrace(Evidence{Stack: "vllm", ModelName: "m", Caps: f})
+		require.Nil(t, api.Capabilities.Modalities.Input)
+		require.Equal(t, []string{"image"}, api.Capabilities.Modalities.Output)
+	})
 }

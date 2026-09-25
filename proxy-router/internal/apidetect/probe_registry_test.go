@@ -375,7 +375,7 @@ func TestVeniceSpecCapabilities(t *testing.T) {
 	require.NotNil(t, caps)
 	require.EqualValues(t, 131072, *caps.Context)
 	require.EqualValues(t, 16384, *caps.MaxOutput)
-	require.Equal(t, []string{"image"}, caps.Modalities.Input)
+	require.Equal(t, []string{"text", "image"}, caps.Modalities.Input)
 	require.Nil(t, caps.Modalities.Output)
 	require.Equal(t, true, *caps.Tools)
 	require.Nil(t, caps.ToolsParallel)
@@ -493,7 +493,7 @@ func TestVeniceSpecVariants(t *testing.T) {
 
 	t.Run("video and audio inputs", func(t *testing.T) {
 		api, _ := detectListing(t, "venice", veniceSpecEntry("omni", map[string]any{"supportsVideoInput": true, "supportsAudioInput": true}))
-		require.Equal(t, []string{"image", "video", "audio"}, api.Capabilities.Modalities.Input)
+		require.Equal(t, []string{"text", "image", "video", "audio"}, api.Capabilities.Modalities.Input)
 	})
 
 	t.Run("supportsReasoning alone identifies the stack without a capabilities block", func(t *testing.T) {

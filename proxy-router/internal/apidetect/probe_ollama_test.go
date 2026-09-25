@@ -120,7 +120,7 @@ func TestProbeOllamaShowDocsSample(t *testing.T) {
 	require.Nil(t, caps.ContextTrained)
 	require.Equal(t, "ollama:/api/show.model_info.llama.context_length", api.Evidence["capabilities.context"])
 	require.NotNil(t, caps.Modalities)
-	require.Equal(t, []string{"image"}, caps.Modalities.Input)
+	require.Equal(t, []string{"text", "image"}, caps.Modalities.Input)
 	require.Equal(t, "ollama:/api/show.capabilities", api.Evidence["capabilities.modalities.input"])
 	require.Equal(t, "Q4_0", caps.Quantization)
 	require.Equal(t, "ollama:/api/show.details.quantization_level", api.Evidence["capabilities.quantization"])
@@ -428,7 +428,7 @@ func TestProbeOllamaCapabilityList(t *testing.T) {
 		{
 			name: "vision and audio", capabilities: []string{"completion", "vision", "audio", "vision"},
 			check: func(t *testing.T, caps *system.ModelCapabilities) {
-				require.Equal(t, []string{"image", "audio"}, caps.Modalities.Input)
+				require.Equal(t, []string{"text", "image", "audio"}, caps.Modalities.Input)
 				require.Nil(t, caps.Tools)
 			},
 		},

@@ -124,7 +124,7 @@ func TestProbeLlamaCppPropsFacts(t *testing.T) {
 	require.Equal(t, "llamacpp:/v1/models.meta.n_ctx_train", api.Evidence["capabilities.contextTrained"])
 
 	require.NotNil(t, caps.Modalities)
-	require.Equal(t, []string{"image", "audio"}, caps.Modalities.Input, "video false is not listed; multimodal adds nothing when /props gave modalities")
+	require.Equal(t, []string{"text", "image", "audio"}, caps.Modalities.Input, "video false is not listed; multimodal adds nothing when /props gave modalities")
 	require.Equal(t, "llamacpp:/props.modalities.audio", api.Evidence["capabilities.modalities.input"])
 
 	require.NotNil(t, caps.Tools)
@@ -179,7 +179,7 @@ func TestProbeLlamaCppEmptyCapsAndNoModalities(t *testing.T) {
 	require.Nil(t, caps.Tools)
 	require.Nil(t, caps.ToolsParallel)
 	require.NotNil(t, caps.Modalities)
-	require.Equal(t, []string{"image"}, caps.Modalities.Input, "multimodal fills in only when /props listed no modalities")
+	require.Equal(t, []string{"text", "image"}, caps.Modalities.Input, "multimodal fills in only when /props listed no modalities")
 	require.Equal(t, "llamacpp:/v1/models.models.capabilities", api.Evidence["capabilities.modalities.input"])
 	require.Contains(t, trace, "multimodal")
 	require.Equal(t, "", caps.Quantization)
