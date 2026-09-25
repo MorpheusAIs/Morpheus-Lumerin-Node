@@ -2,6 +2,7 @@ package apidetect
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apispec"
@@ -148,10 +149,10 @@ func (d *Detector) llamaCppMetaFacts(ctx context.Context, meta map[string]any, e
 	if raw, present := meta["ftype"]; present {
 		if label, ok := llamaCppFtypeLabel(raw); ok {
 			if ev.Caps.SetQuantization(label, llamaCppSrcMetaFtype) {
-				tracef(ctx, "/v1/models meta.ftype %v: quantization %s", raw, label)
+				tracef(ctx, "/v1/models meta.ftype %q: quantization %s", fmt.Sprint(raw), label)
 			}
 		} else {
-			tracef(ctx, "/v1/models meta.ftype %v has no known GGUF type name; ignored", raw)
+			tracef(ctx, "/v1/models meta.ftype %q has no known GGUF type name; ignored", fmt.Sprint(raw))
 		}
 	}
 }
