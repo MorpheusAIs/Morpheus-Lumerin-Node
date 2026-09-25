@@ -9,6 +9,8 @@ package modelhealth
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,6 +26,7 @@ import (
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apiprobe"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apispec"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/attestation"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi"
@@ -153,9 +156,12 @@ type Checker struct {
 	// model, including whether the whole streak was upstream rate limiting.
 	failures map[string]failureStreak
 	// runtime holds the evidence the health probe's own response established
-	// per model (design contract §5, harvest); merged onto the detection
-	// result after every probe.
+	// per model (design contract §5, harvest) and what the verifier
+	// established; merged onto the detection result after every probe.
 	runtime *runtimeStore
+	// sleepFn paces backend requests; nil means a timer. Tests observe the
+	// pacing through it.
+	sleepFn func(ctx context.Context, d time.Duration) bool
 
 	// triggerCh carries manual re-check requests into the Run loop; buffered
 	// at 1 so triggers queue at most one extra sweep and can never overlap.
@@ -182,9 +188,19 @@ type Deps struct {
 	ApiDetect ApiDetector
 	// ApiDetectTTL is MODEL_API_DETECT_TTL, the TTL the detector caches by;
 	// runtime evidence harvested from the health probe is re-merged for the
-	// same span after a probe stops producing it. <= 0 means
-	// DefaultRuntimeTTL.
+	// same span after a probe stops producing it, and the verifier runs once
+	// per span. <= 0 means DefaultRuntimeTTL.
 	ApiDetectTTL time.Duration
+	// VerifyBindings is MODEL_API_VERIFY_BINDINGS: after a healthy LLM
+	// probe, once per TTL, resend the probe with the reasoning.disable
+	// binding applied and with a dummy tool (design contract §5, verifier).
+	VerifyBindings bool
+	// ProbeCapabilities is MODEL_API_PROBE_CAPABILITIES: the json_schema,
+	// image and vLLM render probes on the same schedule.
+	ProbeCapabilities bool
+	// ProbeHosted is MODEL_API_PROBE_HOSTED: let those requests reach hosted
+	// vendors and gateways, which bill per request.
+	ProbeHosted bool
 }
 
 func NewChecker(deps Deps, interval, timeout, probeDelay time.Duration, maxConsecutiveErrors int, log lib.ILogger) *Checker {
@@ -368,6 +384,9 @@ func (c *Checker) detectionWouldProbe(cfg config.ModelConfig) bool {
 // sleep blocks for d unless the context is cancelled first; it reports
 // whether the full delay elapsed.
 func (c *Checker) sleep(ctx context.Context, d time.Duration) bool {
+	if c.sleepFn != nil {
+		return c.sleepFn(ctx, d)
+	}
 	if d <= 0 {
 		return true
 	}
@@ -615,6 +634,154 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 	// A passing probe is direct evidence the backend works again, so the
 	// consecutive session-failure streak (if any) is over.
 	c.resetFailures(modelID)
+
+	// The inference-traffic probes follow a healthy chat probe only: they
+	// are chat requests, and a backend that failed the plain one answers
+	// nothing about its features.
+	if (modelMeta.modelType == structs.ModelTypeLLM || typeGuessed) && api != nil {
+		c.verify(ctx, modelID, cfg, api, adapter)
+	}
+}
+
+// verify runs the verifier and the capability probes (design contract §5)
+// for a model whose probe just passed, when the flags allow: once per TTL
+// per (model, spec), each request paced by probeDelay, and never against a
+// hosted vendor or gateway unless MODEL_API_PROBE_HOSTED. The spec the
+// probes are chosen from carries the runtime evidence already established,
+// so a binding an earlier sweep saw rejected is not sent again; the
+// once-per-TTL key hashes the detection result itself, which is stable
+// across sweeps. A run cut short by the context records nothing, so the
+// next sweep retries.
+func (c *Checker) verify(ctx context.Context, modelID common.Hash, cfg config.ModelConfig, api *system.ModelApiSpec, adapter aiengine.AIEngineStream) {
+	if !c.deps.VerifyBindings && !c.deps.ProbeCapabilities {
+		return
+	}
+	if api.Stack == "" || api.Via != "" {
+		return
+	}
+	if apispec.IsHostedOrGatewayStack(api.Stack) && !c.deps.ProbeHosted {
+		return
+	}
+	id := modelID.Hex()
+	key := verifyKey(api)
+	if !c.runtime.verifyDue(id, key) {
+		return
+	}
+	spec := api.Clone()
+	if rt, ok := c.runtime.harvest(id, nil); ok {
+		apispec.MergeRuntime(spec, rt)
+	}
+
+	_, _, prompt := generateArithmeticPrompt()
+	v := &apiprobe.Verifier{
+		Adapter: adapter, Stack: spec.Stack, ModelName: cfg.ModelName, ApiURL: cfg.ApiURL, ApiKey: cfg.ApiKey,
+		Prompt: prompt,
+		Pace:   func(ctx context.Context) bool { return c.sleep(ctx, c.probeDelay) },
+		Now:    c.runtime.now,
+	}
+	var verdicts []apiprobe.Verdict
+	run := func(probe func(context.Context) apiprobe.Verdict) bool {
+		probeCtx, cancel := context.WithTimeout(ctx, c.timeout)
+		verdict := probe(probeCtx)
+		cancel()
+		if ctx.Err() != nil {
+			return false
+		}
+		verdicts = append(verdicts, verdict)
+		line := fmt.Sprintf("model %s: verify %s: %s (HTTP %d): %s", lib.Short(modelID), verdict.Probe, verdict.Outcome, verdict.Status, verdict.Reason)
+		switch verdict.Outcome {
+		case apiprobe.OutcomeRefuted, apiprobe.OutcomeRejected, apiprobe.OutcomeRefused:
+			c.log.Info(line)
+		default:
+			c.log.Debug(line)
+		}
+		return true
+	}
+
+	disableVerified := false
+	if c.deps.VerifyBindings {
+		if apiprobe.ReasoningDisableBinding(spec) != nil {
+			if !run(func(ctx context.Context) apiprobe.Verdict { return v.VerifyReasoningDisable(ctx, spec) }) {
+				return
+			}
+			disableVerified = verdicts[len(verdicts)-1].Outcome == apiprobe.OutcomeAccepted
+		}
+		if spec.Capabilities == nil || spec.Capabilities.Tools == nil {
+			if !run(v.ProbeTools) {
+				return
+			}
+		}
+	}
+	if c.deps.ProbeCapabilities {
+		if !hasCapListEntry(spec, apispec.CapFieldStructured, "json_schema") {
+			if !run(v.ProbeJSONSchema) {
+				return
+			}
+		}
+		if !hasCapListEntry(spec, apispec.CapFieldModalitiesInput, "image") {
+			if !run(v.ProbeImage) {
+				return
+			}
+		}
+		// The render check proves the template honours the kwarg without a
+		// completion; redundant once the completion with the kwarg applied
+		// already came back without reasoning content.
+		if _, _, ok := apiprobe.TemplateToggle(spec); ok && spec.Stack == "vllm" && !disableVerified {
+			if !run(func(ctx context.Context) apiprobe.Verdict { return v.RenderThinkingToggle(ctx, spec) }) {
+				return
+			}
+		}
+	}
+
+	var facts apispec.Runtime
+	apiprobe.Fold(&facts, verdicts...)
+	c.runtime.recordVerify(id, key, facts)
+}
+
+// verifyKey names the spec a verifier run answered for: the stack, the
+// gateway and the bindings (intent, kind, parameter, value). A changed
+// binding table is verified afresh before the TTL; runtime evidence is
+// excluded so the key does not change with the verdicts themselves.
+func verifyKey(api *system.ModelApiSpec) string {
+	type entry struct {
+		Kind  string `json:"kind"`
+		Param string `json:"param"`
+		Value any    `json:"value"`
+	}
+	bindings := make(map[string]entry, len(api.Bindings))
+	for intent, b := range api.Bindings {
+		if b != nil {
+			bindings[intent] = entry{Kind: b.Kind, Param: b.Param, Value: b.Value}
+		}
+	}
+	raw, _ := json.Marshal(struct {
+		Stack    string           `json:"stack"`
+		Via      string           `json:"via"`
+		Bindings map[string]entry `json:"bindings"`
+	}{api.Stack, api.Via, bindings})
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
+}
+
+func hasCapListEntry(api *system.ModelApiSpec, field, value string) bool {
+	if api.Capabilities == nil {
+		return false
+	}
+	var list []string
+	switch field {
+	case apispec.CapFieldStructured:
+		list = api.Capabilities.Structured
+	case apispec.CapFieldModalitiesInput:
+		if api.Capabilities.Modalities != nil {
+			list = api.Capabilities.Modalities.Input
+		}
+	}
+	for _, have := range list {
+		if have == value {
+			return true
+		}
+	}
+	return false
 }
 
 // publishedApi is the api block of one report: the declared or detected spec
@@ -642,6 +809,20 @@ func (c *Checker) publishedApi(modelID common.Hash, cfg config.ModelConfig, api 
 	if hasRuntime {
 		if trace := apispec.MergeRuntime(live, rt); len(trace) > 0 {
 			c.log.Debugf("model %s: runtime evidence: %s", lib.Short(modelID), strings.Join(trace, "; "))
+		}
+		// A refuted binding's evidence names what the probe saw
+		// (verify:reasoning_content_still_present@<at>), so the CLI can show
+		// why verified is false; MergeRuntime writes the intent's own name.
+		for intent, verdict := range rt.Verified {
+			if verdict.Verified || verdict.Reason == "" || live.Bindings[intent] == nil {
+				continue
+			}
+			if slug := apiprobe.ReasonSlug(verdict.Reason); slug != "" {
+				if live.Evidence == nil {
+					live.Evidence = map[string]string{}
+				}
+				live.Evidence[system.EvidenceKeyBinding(intent)] = apiprobe.VerifySource(slug, verdict.At)
+			}
 		}
 	}
 	live.DeclaredAt = time.Now().Unix()

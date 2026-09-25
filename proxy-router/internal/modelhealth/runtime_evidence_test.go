@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -31,6 +32,50 @@ type chatBackend struct {
 	reasoning string
 	errorBody string
 	server    *httptest.Server
+	// requests records every request (path and decoded body) in order.
+	requests []probeRequest
+	// script, when set, answers a request before the default handling; ok
+	// false falls through to it.
+	script func(r probeRequest) (status int, body string, ok bool)
+}
+
+type probeRequest struct {
+	path string
+	body map[string]any
+}
+
+func (r probeRequest) has(key string) bool { _, ok := r.body[key]; return ok }
+
+func (r probeRequest) firstContent() string {
+	msgs, _ := r.body["messages"].([]any)
+	if len(msgs) == 0 {
+		return ""
+	}
+	msg, _ := msgs[0].(map[string]any)
+	if s, ok := msg["content"].(string); ok {
+		return s
+	}
+	parts, _ := msg["content"].([]any)
+	for _, p := range parts {
+		if part, ok := p.(map[string]any); ok && part["type"] == "text" {
+			return part["text"].(string)
+		}
+	}
+	return ""
+}
+
+func (r probeRequest) hasImagePart() bool {
+	msgs, _ := r.body["messages"].([]any)
+	if len(msgs) == 0 {
+		return false
+	}
+	parts, _ := msgs[0].(map[string]any)["content"].([]any)
+	for _, p := range parts {
+		if part, ok := p.(map[string]any); ok && part["type"] == "image_url" {
+			return true
+		}
+	}
+	return false
 }
 
 func newChatBackend(t *testing.T) *chatBackend {
@@ -50,41 +95,58 @@ func (b *chatBackend) set(status int, model, reasoning, errorBody string, header
 func (b *chatBackend) serve(w http.ResponseWriter, r *http.Request) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	var body map[string]any
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	req := probeRequest{path: r.URL.Path, body: body}
+	b.requests = append(b.requests, req)
 	for k, v := range b.headers {
 		w.Header().Set(k, v)
 	}
 	w.Header().Set("Content-Type", "application/json")
+	if b.script != nil {
+		if status, resp, ok := b.script(req); ok {
+			w.WriteHeader(status)
+			_, _ = w.Write([]byte(resp))
+			return
+		}
+	}
 	if b.status != http.StatusOK {
 		w.WriteHeader(b.status)
 		_, _ = w.Write([]byte(b.errorBody))
 		return
 	}
-	var req struct {
-		Messages []struct {
-			Content string `json:"content"`
-		} `json:"messages"`
-	}
-	_ = json.NewDecoder(r.Body).Decode(&req)
 	var x, y int
-	if len(req.Messages) > 0 {
-		_, _ = fmt.Sscanf(req.Messages[0].Content, "What is %d+%d?", &x, &y)
-	}
+	_, _ = fmt.Sscanf(req.firstContent(), "What is %d+%d?", &x, &y)
 	message := map[string]any{"role": "assistant", "content": fmt.Sprintf("%d", x+y)}
 	if b.reasoning != "" {
 		message["reasoning_content"] = b.reasoning
 	}
-	body := map[string]any{
+	resp := map[string]any{
 		"id": "chatcmpl-1", "object": "chat.completion",
 		"choices": []any{map[string]any{"index": 0, "message": message, "finish_reason": "stop"}},
 	}
 	if b.model != "" {
-		body["model"] = b.model
+		resp["model"] = b.model
 	}
-	_ = json.NewEncoder(w).Encode(body)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func (b *chatBackend) adapter() aiengine.AIEngineStream {
-	return aiengine.NewOpenAIEngine("configured-name", b.server.URL, "", time.Minute, &lib.LoggerMock{}, nil)
+	return aiengine.NewOpenAIEngine("configured-name", b.server.URL+chatPath, "", time.Minute, &lib.LoggerMock{}, nil)
+}
+
+const chatPath = "/v1/chat/completions"
+
+func (b *chatBackend) recorded() []probeRequest {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return append([]probeRequest(nil), b.requests...)
+}
+
+func (b *chatBackend) setScript(script func(r probeRequest) (int, string, bool)) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.script = script
 }
 
 // runtimeDeps wires one bid-holding LLM model to the backend; det nil means
@@ -217,8 +279,11 @@ func TestRuntimeStoreVerifierOnlyEntryLeavesAtUnset(t *testing.T) {
 	store.now = func() time.Time { return clock }
 	supported := true
 	store.byModel["m"] = &runtimeEntry{
-		rt:   apispec.Runtime{ToolsSupported: &supported, ServedModelID: "qwen3-8b"},
-		seen: map[runtimeFact]time.Time{factServedModelID: clock},
+		rt:         apispec.Runtime{ServedModelID: "qwen3-8b"},
+		seen:       map[runtimeFact]time.Time{factServedModelID: clock},
+		verify:     apispec.Runtime{ToolsSupported: &supported},
+		verifiedAt: clock.Add(90 * time.Second),
+		verifyKey:  "k",
 	}
 
 	rt, ok := store.harvest("m", nil)
@@ -230,10 +295,16 @@ func TestRuntimeStoreVerifierOnlyEntryLeavesAtUnset(t *testing.T) {
 	// is left for MergeRuntime to fill with now rather than the zero time.
 	clock = clock.Add(2 * time.Minute)
 	rt, ok = store.harvest("m", nil)
-	require.True(t, ok, "verifier facts are not the harvest's to expire")
+	require.True(t, ok, "verifier facts expire on their own clock")
 	require.Equal(t, "", rt.ServedModelID)
 	require.NotNil(t, rt.ToolsSupported)
 	require.Zero(t, rt.At)
+
+	// Past its own TTL the verifier's fact goes too, and the entry with it.
+	clock = clock.Add(time.Minute)
+	_, ok = store.harvest("m", nil)
+	require.False(t, ok)
+	require.Empty(t, store.byModel)
 }
 
 func TestRuntimeContextFromErrorFillsOnlyUnset(t *testing.T) {
@@ -454,4 +525,427 @@ func orZero(want any, got any) any {
 		}
 	}
 	return got
+}
+
+// --- verifier and capability probes (design contract §5) ---
+
+const (
+	kwargRejectedBody   = `{"error":{"message":"[{'type': 'extra_forbidden', 'loc': ('body', 'chat_template_kwargs'), 'msg': 'Extra inputs are not permitted', 'input': {'enable_thinking': False}}]","type":"BadRequestError","param":null,"code":400}}`
+	toolChoiceRefusal   = `{"error":{"message":"\"auto\" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set","type":"BadRequestError","param":null,"code":400}}`
+	plainBadRequest     = `{"error":{"message":"not supported","type":"BadRequestError","code":400}}`
+	reasoningCompletion = `{"id":"1","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"5","reasoning_content":"thinking"},"finish_reason":"stop"}]}`
+	verifyClock         = int64(1_700_000_000)
+	verifyDelay         = 250 * time.Millisecond
+)
+
+type verifyFlags struct{ verify, caps, hosted bool }
+
+// verifyHarness is a checker with the probe flags set, a recording sleeper
+// in place of the timer and a controllable clock for the runtime store.
+type verifyHarness struct {
+	checker *Checker
+	deps    *mockDeps
+	backend *chatBackend
+	sleeps  []time.Duration
+	clock   time.Time
+}
+
+func newVerifyHarness(t *testing.T, spec *system.ModelApiSpec, flags verifyFlags) *verifyHarness {
+	t.Helper()
+	h := &verifyHarness{backend: newChatBackend(t), clock: time.Unix(verifyClock, 0)}
+	h.backend.set(http.StatusOK, "", "", "", nil)
+	cfg := vllmCfg
+	cfg.ApiKey = "sk-test"
+	// The render request is derived from apiUrl, so it must name the test
+	// backend, as the adapter does.
+	cfg.ApiURL = h.backend.server.URL + chatPath
+	h.deps = runtimeDeps(h.backend, cfg, &fakeDetector{spec: spec})
+	h.checker = NewChecker(Deps{
+		Adapters: h.deps, Bids: h.deps, Models: h.deps, ModelConfigs: h.deps, ApiDetect: h.deps.apiDetect,
+		ApiDetectTTL: time.Hour, VerifyBindings: flags.verify, ProbeCapabilities: flags.caps, ProbeHosted: flags.hosted,
+	}, time.Hour, time.Second, verifyDelay, 0, lib.NewTestLogger())
+	h.checker.runtime.now = func() time.Time { return h.clock }
+	h.checker.sleepFn = func(ctx context.Context, d time.Duration) bool {
+		h.sleeps = append(h.sleeps, d)
+		return true
+	}
+	return h
+}
+
+func (h *verifyHarness) sweep(t *testing.T) system.ModelHealthReport {
+	t.Helper()
+	h.checker.checkAll(context.Background(), common.Address{})
+	return reportByID(t, h.checker.GetReports(), modelLLM)
+}
+
+// kinds names each recorded request by the probe that shaped it.
+func kinds(reqs []probeRequest) []string {
+	var out []string
+	for _, r := range reqs {
+		switch {
+		case strings.HasSuffix(r.path, "/render") && r.has("chat_template_kwargs"):
+			out = append(out, "render+kwarg")
+		case strings.HasSuffix(r.path, "/render"):
+			out = append(out, "render")
+		case r.has("tool_choice"):
+			out = append(out, "tools")
+		case r.has("response_format"):
+			out = append(out, "json_schema")
+		case r.hasImagePart():
+			out = append(out, "image")
+		case r.has("max_tokens"):
+			// The health probe sets no max_tokens; every probe request does,
+			// and the one with no other marker carries the binding.
+			out = append(out, "reasoning.disable")
+		default:
+			out = append(out, "health")
+		}
+	}
+	return out
+}
+
+func detectedQwen3Both() *system.ModelApiSpec {
+	spec := detectedQwen3()
+	spec.Bindings[system.IntentReasoningEnable] = &system.ParamBinding{Kind: system.BindingKindTemplateKwarg, Param: "chat_template_kwargs.enable_thinking", ParamType: "boolean", Value: true}
+	return spec
+}
+
+func TestVerifyFlagsOffSendNothing(t *testing.T) {
+	h := newVerifyHarness(t, detectedQwen3(), verifyFlags{})
+	llm := h.sweep(t)
+	require.Equal(t, system.ModelHealthStatusHealthy, llm.Status)
+	require.Equal(t, []string{"health"}, kinds(h.backend.recorded()))
+	require.Empty(t, h.sleeps)
+	require.Nil(t, llm.Api.Bindings[system.IntentReasoningDisable].Verified)
+}
+
+func TestVerifyBindingsSendsPacedProbesOncePerTTL(t *testing.T) {
+	h := newVerifyHarness(t, detectedQwen3(), verifyFlags{verify: true})
+	llm := h.sweep(t)
+	require.Equal(t, system.ModelHealthStatusHealthy, llm.Status)
+	reqs := h.backend.recorded()
+	require.Equal(t, []string{"health", "reasoning.disable", "tools"}, kinds(reqs))
+	require.Equal(t, []time.Duration{verifyDelay, verifyDelay}, h.sleeps, "every probe request is paced")
+
+	disable := reqs[1]
+	require.Equal(t, map[string]any{"enable_thinking": false}, disable.body["chat_template_kwargs"])
+	require.Equal(t, float64(1), disable.body["max_tokens"])
+	require.Contains(t, disable.firstContent(), "What is")
+	tools := reqs[2]
+	require.Equal(t, "auto", tools.body["tool_choice"])
+	require.Len(t, tools.body["tools"].([]any), 1)
+	require.Equal(t, float64(1), tools.body["max_tokens"])
+
+	b := llm.Api.Bindings[system.IntentReasoningDisable]
+	require.NotNil(t, b.Verified)
+	require.True(t, *b.Verified)
+	require.Equal(t, verifyClock, b.VerifiedAt)
+	require.Equal(t, "verify:reasoning.disable@1700000000", llm.Api.Evidence[system.EvidenceKeyBinding(system.IntentReasoningDisable)])
+	require.NotNil(t, llm.Api.Capabilities)
+	require.True(t, *llm.Api.Capabilities.Tools)
+	require.Equal(t, "verify:tools@1700000000", llm.Api.Evidence["capabilities.tools"])
+	require.Equal(t, system.ThinkingModeControllable, llm.Api.Thinking.Mode)
+	first := llm.Api.DeclaredAt
+
+	// Within the TTL a sweep sends the health probe alone and republishes
+	// the verdicts unchanged.
+	h.clock = h.clock.Add(30 * time.Minute)
+	llm = h.sweep(t)
+	require.Equal(t, []string{"health", "reasoning.disable", "tools", "health"}, kinds(h.backend.recorded()))
+	require.Len(t, h.sleeps, 2)
+	require.True(t, *llm.Api.Bindings[system.IntentReasoningDisable].Verified)
+	require.Equal(t, verifyClock, llm.Api.Bindings[system.IntentReasoningDisable].VerifiedAt)
+	require.True(t, *llm.Api.Capabilities.Tools)
+	require.Equal(t, first, llm.Api.DeclaredAt, "nothing changed")
+
+	// Past the TTL the verifier runs again.
+	h.clock = h.clock.Add(31 * time.Minute)
+	llm = h.sweep(t)
+	require.Equal(t, []string{"health", "reasoning.disable", "tools", "health", "health", "reasoning.disable", "tools"}, kinds(h.backend.recorded()))
+	require.Equal(t, h.clock.Unix(), llm.Api.Bindings[system.IntentReasoningDisable].VerifiedAt)
+
+	// With the flag off again the facts expire with the TTL.
+	h.checker.deps.VerifyBindings = false
+	h.clock = h.clock.Add(61 * time.Minute)
+	llm = h.sweep(t)
+	require.Len(t, h.backend.recorded(), 8)
+	require.Nil(t, llm.Api.Bindings[system.IntentReasoningDisable].Verified)
+	require.Nil(t, llm.Api.Capabilities)
+	require.Empty(t, llm.Api.Evidence)
+}
+
+func TestVerifyReasoningContentStillPresent(t *testing.T) {
+	h := newVerifyHarness(t, detectedQwen3(), verifyFlags{verify: true})
+	h.backend.setScript(func(r probeRequest) (int, string, bool) {
+		if r.has("chat_template_kwargs") {
+			return http.StatusOK, reasoningCompletion, true
+		}
+		return 0, "", false
+	})
+	llm := h.sweep(t)
+	require.Equal(t, []string{"health", "reasoning.disable", "tools"}, kinds(h.backend.recorded()))
+	b := llm.Api.Bindings[system.IntentReasoningDisable]
+	require.NotNil(t, b.Verified)
+	require.False(t, *b.Verified)
+	require.Equal(t, "verify:reasoning_content_still_present@1700000000", llm.Api.Evidence[system.EvidenceKeyBinding(system.IntentReasoningDisable)])
+	require.Equal(t, system.ThinkingModeAlwaysOn, llm.Api.Thinking.Mode, "reasoning with the disable applied: the model reasons unconditionally")
+	require.True(t, *llm.Api.Capabilities.Reasoning)
+	require.Equal(t, "verify:reasoning_seen_with_disable@1700000000", llm.Api.Evidence["capabilities.reasoning"])
+	first := llm.Api.DeclaredAt
+
+	h.clock = h.clock.Add(10 * time.Minute)
+	llm = h.sweep(t)
+	require.Equal(t, first, llm.Api.DeclaredAt, "the refuted verdict republishes with its own timestamp")
+	require.Equal(t, "verify:reasoning_seen_with_disable@1700000000", llm.Api.Evidence["capabilities.reasoning"])
+}
+
+func TestVerifyRejectedParamDropsBinding(t *testing.T) {
+	h := newVerifyHarness(t, detectedQwen3(), verifyFlags{verify: true})
+	h.backend.setScript(func(r probeRequest) (int, string, bool) {
+		if r.has("chat_template_kwargs") {
+			return http.StatusBadRequest, kwargRejectedBody, true
+		}
+		return 0, "", false
+	})
+	llm := h.sweep(t)
+	require.Equal(t, []string{"health", "reasoning.disable", "tools"}, kinds(h.backend.recorded()))
+	require.Nil(t, llm.Api.Bindings[system.IntentReasoningDisable], "the backend refused the parameter")
+	require.Nil(t, llm.Api.Thinking)
+	require.Equal(t, "verify:rejected:chat_template_kwargs@1700000000", llm.Api.Evidence[system.EvidenceKeyBinding(system.IntentReasoningDisable)])
+	require.True(t, *llm.Api.Capabilities.Tools)
+
+	// Within the TTL the drop is republished without a request; past it the
+	// rejection expires with the other verdicts, the binding is back in the
+	// merged spec and is verified again (a backend upgrade may accept it).
+	h.clock = h.clock.Add(30 * time.Minute)
+	llm = h.sweep(t)
+	require.Equal(t, []string{"health", "reasoning.disable", "tools", "health"}, kinds(h.backend.recorded()))
+	require.Nil(t, llm.Api.Bindings[system.IntentReasoningDisable])
+	require.Equal(t, "verify:rejected:chat_template_kwargs@1700000000", llm.Api.Evidence[system.EvidenceKeyBinding(system.IntentReasoningDisable)])
+
+	h.clock = h.clock.Add(31 * time.Minute)
+	llm = h.sweep(t)
+	require.Equal(t, []string{"health", "reasoning.disable", "tools", "health", "health", "reasoning.disable", "tools"}, kinds(h.backend.recorded()))
+	require.Nil(t, llm.Api.Bindings[system.IntentReasoningDisable])
+	require.Equal(t, fmt.Sprintf("verify:rejected:chat_template_kwargs@%d", h.clock.Unix()), llm.Api.Evidence[system.EvidenceKeyBinding(system.IntentReasoningDisable)])
+}
+
+func TestVerifyToolsVerdicts(t *testing.T) {
+	t.Run("the vLLM refusal publishes tools false", func(t *testing.T) {
+		h := newVerifyHarness(t, detectedVLLMNoFamily(), verifyFlags{verify: true})
+		h.backend.setScript(func(r probeRequest) (int, string, bool) {
+			if r.has("tool_choice") {
+				return http.StatusBadRequest, toolChoiceRefusal, true
+			}
+			return 0, "", false
+		})
+		llm := h.sweep(t)
+		require.Equal(t, []string{"health", "tools"}, kinds(h.backend.recorded()), "no reasoning binding: only the tool probe")
+		require.False(t, *llm.Api.Capabilities.Tools)
+		require.Equal(t, "verify:tools@1700000000", llm.Api.Evidence["capabilities.tools"])
+	})
+
+	t.Run("another 4xx publishes nothing", func(t *testing.T) {
+		h := newVerifyHarness(t, detectedVLLMNoFamily(), verifyFlags{verify: true})
+		h.backend.setScript(func(r probeRequest) (int, string, bool) {
+			if r.has("tool_choice") {
+				return http.StatusBadRequest, plainBadRequest, true
+			}
+			return 0, "", false
+		})
+		llm := h.sweep(t)
+		require.Equal(t, []string{"health", "tools"}, kinds(h.backend.recorded()))
+		require.Nil(t, llm.Api.Capabilities)
+		require.Empty(t, llm.Api.Evidence)
+	})
+
+	t.Run("known tools are not probed", func(t *testing.T) {
+		spec := detectedVLLMNoFamily()
+		supported := true
+		spec.Capabilities = &system.ModelCapabilities{Tools: &supported}
+		spec.Evidence = map[string]string{"capabilities.tools": "llamacpp:/props.chat_template_caps.supports_tool_calls"}
+		h := newVerifyHarness(t, spec, verifyFlags{verify: true})
+		h.sweep(t)
+		require.Equal(t, []string{"health"}, kinds(h.backend.recorded()))
+	})
+}
+
+func renderScript(differ bool) func(r probeRequest) (int, string, bool) {
+	return func(r probeRequest) (int, string, bool) {
+		if !strings.HasSuffix(r.path, "/render") {
+			return 0, "", false
+		}
+		if differ && r.has("chat_template_kwargs") {
+			return http.StatusOK, `{"request_id":"r2","token_ids":[1,2,3,9]}`, true
+		}
+		return http.StatusOK, `{"request_id":"r1","token_ids":[1,2,3]}`, true
+	}
+}
+
+func TestProbeCapabilities(t *testing.T) {
+	t.Run("accepted probes publish structured, image input and the template bindings", func(t *testing.T) {
+		h := newVerifyHarness(t, detectedQwen3Both(), verifyFlags{caps: true})
+		h.backend.setScript(renderScript(true))
+		llm := h.sweep(t)
+		reqs := h.backend.recorded()
+		require.Equal(t, []string{"health", "json_schema", "image", "render", "render+kwarg"}, kinds(reqs))
+		require.Len(t, h.sleeps, 4, "both render requests are paced")
+		require.Equal(t, chatPath+"/render", reqs[3].path)
+		require.Equal(t, "my-alias", reqs[3].body["model"])
+		require.Equal(t, float64(1), reqs[1].body["max_tokens"])
+		require.Equal(t, float64(1), reqs[2].body["max_tokens"])
+
+		require.Equal(t, []string{"json_schema"}, llm.Api.Capabilities.Structured)
+		require.Equal(t, "verify:json_schema@1700000000", llm.Api.Evidence["capabilities.structured"])
+		require.Equal(t, []string{"text", "image"}, llm.Api.Capabilities.Modalities.Input)
+		require.Equal(t, "verify:image@1700000000", llm.Api.Evidence["capabilities.modalities.input"])
+		for _, intent := range []string{system.IntentReasoningDisable, system.IntentReasoningEnable} {
+			b := llm.Api.Bindings[intent]
+			require.NotNil(t, b.Verified, intent)
+			require.True(t, *b.Verified, intent)
+			require.Equal(t, verifyClock, b.VerifiedAt)
+			require.Equal(t, "verify:"+intent+"@1700000000", llm.Api.Evidence[system.EvidenceKeyBinding(intent)])
+		}
+		require.Nil(t, llm.Api.Capabilities.Tools, "the tool probe belongs to MODEL_API_VERIFY_BINDINGS")
+	})
+
+	t.Run("refused probes and an unchanged render publish the refutation only", func(t *testing.T) {
+		h := newVerifyHarness(t, detectedQwen3Both(), verifyFlags{caps: true})
+		render := renderScript(false)
+		h.backend.setScript(func(r probeRequest) (int, string, bool) {
+			if r.has("response_format") || r.hasImagePart() {
+				return http.StatusBadRequest, plainBadRequest, true
+			}
+			return render(r)
+		})
+		llm := h.sweep(t)
+		require.Equal(t, []string{"health", "json_schema", "image", "render", "render+kwarg"}, kinds(h.backend.recorded()))
+		require.Nil(t, llm.Api.Capabilities, "a refused list-valued probe publishes nothing")
+		for _, intent := range []string{system.IntentReasoningDisable, system.IntentReasoningEnable} {
+			require.False(t, *llm.Api.Bindings[intent].Verified, intent)
+			require.Equal(t, "verify:rendered_prompt_unchanged@1700000000", llm.Api.Evidence[system.EvidenceKeyBinding(intent)])
+		}
+		require.Equal(t, system.ThinkingModeControllable, llm.Api.Thinking.Mode)
+	})
+
+	t.Run("known structured and image input are not probed; a non-vllm stack is not rendered", func(t *testing.T) {
+		spec := detectedQwen3Both()
+		spec.Stack = "sglang"
+		spec.Capabilities = &system.ModelCapabilities{Structured: []string{"json_object", "json_schema"}, Modalities: &system.Modalities{Input: []string{"text", "image"}}}
+		spec.Evidence = map[string]string{"capabilities.structured": "sglang:/model_info", "capabilities.modalities.input": "sglang:/model_info.has_image_understanding"}
+		h := newVerifyHarness(t, spec, verifyFlags{caps: true})
+		h.sweep(t)
+		require.Equal(t, []string{"health"}, kinds(h.backend.recorded()))
+	})
+
+	t.Run("the render is skipped once the completion with the kwarg verified the binding", func(t *testing.T) {
+		h := newVerifyHarness(t, detectedQwen3Both(), verifyFlags{verify: true, caps: true})
+		h.backend.setScript(renderScript(true))
+		llm := h.sweep(t)
+		require.Equal(t, []string{"health", "reasoning.disable", "tools", "json_schema", "image"}, kinds(h.backend.recorded()))
+		require.True(t, *llm.Api.Bindings[system.IntentReasoningDisable].Verified)
+		require.Nil(t, llm.Api.Bindings[system.IntentReasoningEnable].Verified, "the completion probe says nothing about the enable binding")
+	})
+}
+
+func TestVerifyHostedGuard(t *testing.T) {
+	hosted := func(stack, via string) *system.ModelApiSpec {
+		return &system.ModelApiSpec{Stack: stack, Via: via, Source: system.ApiSpecSourceDetected,
+			Bindings: map[string]*system.ParamBinding{system.IntentReasoningDisable: {Kind: system.BindingKindBodyParam, Param: "reasoning.enabled", ParamType: "boolean", Value: false}}}
+	}
+	for _, spec := range []*system.ModelApiSpec{hosted("openrouter", ""), hosted("venice", ""), hosted("litellm", ""), hosted("anthropic", ""), hosted("openai", ""), hosted("groq", ""), hosted("hf-router", ""), hosted("", ""), hosted("vllm", "litellm")} {
+		name := spec.Stack + "/" + spec.Via
+		t.Run(name+" is skipped", func(t *testing.T) {
+			h := newVerifyHarness(t, spec, verifyFlags{verify: true, caps: true})
+			h.sweep(t)
+			require.Equal(t, []string{"health"}, kinds(h.backend.recorded()))
+			require.Empty(t, h.sleeps)
+		})
+	}
+
+	t.Run("MODEL_API_PROBE_HOSTED lets a hosted vendor be probed", func(t *testing.T) {
+		h := newVerifyHarness(t, hosted("openrouter", ""), verifyFlags{verify: true, hosted: true})
+		llm := h.sweep(t)
+		reqs := h.backend.recorded()
+		require.Equal(t, []string{"health", "reasoning.disable", "tools"}, kinds(reqs))
+		require.Equal(t, map[string]any{"enabled": false}, reqs[1].body["reasoning"], "the body_param binding lands at its dotted path")
+		require.True(t, *llm.Api.Bindings[system.IntentReasoningDisable].Verified)
+	})
+
+	t.Run("a gateway upstream is never probed even with the switch", func(t *testing.T) {
+		h := newVerifyHarness(t, hosted("vllm", "litellm"), verifyFlags{verify: true, hosted: true})
+		h.sweep(t)
+		require.Equal(t, []string{"health"}, kinds(h.backend.recorded()))
+	})
+}
+
+func TestVerifyOnlyAfterHealthyProbe(t *testing.T) {
+	h := newVerifyHarness(t, detectedQwen3(), verifyFlags{verify: true, caps: true})
+	h.backend.set(http.StatusInternalServerError, "", "", `{"error":"down"}`, nil)
+	llm := h.sweep(t)
+	require.Equal(t, system.ModelHealthStatusUnhealthy, llm.Status)
+	require.Equal(t, []string{"health"}, kinds(h.backend.recorded()))
+	require.Empty(t, h.sleeps)
+}
+
+func TestVerifySpecChangeReverifiesBeforeTTL(t *testing.T) {
+	h := newVerifyHarness(t, detectedQwen3(), verifyFlags{verify: true})
+	h.sweep(t)
+	require.Equal(t, []string{"health", "reasoning.disable", "tools"}, kinds(h.backend.recorded()))
+
+	det := h.deps.apiDetect.(*fakeDetector)
+	det.spec = detectedQwen3()
+	det.spec.Bindings[system.IntentReasoningDisable].Param = "chat_template_kwargs.thinking"
+	h.clock = h.clock.Add(time.Minute)
+	llm := h.sweep(t)
+	reqs := h.backend.recorded()
+	require.Equal(t, []string{"health", "reasoning.disable", "tools", "health", "reasoning.disable"}, kinds(reqs),
+		"the new binding is verified; tool support is a backend fact the first run settled")
+	require.Equal(t, map[string]any{"thinking": false}, reqs[4].body["chat_template_kwargs"])
+	require.True(t, *llm.Api.Bindings[system.IntentReasoningDisable].Verified)
+	require.Equal(t, h.clock.Unix(), llm.Api.Bindings[system.IntentReasoningDisable].VerifiedAt)
+	require.True(t, *llm.Api.Capabilities.Tools, "carried over from the first run")
+	require.Equal(t, "verify:tools@1700000000", llm.Api.Evidence["capabilities.tools"])
+}
+
+func TestVerifyCancelledRunRecordsNothing(t *testing.T) {
+	h := newVerifyHarness(t, detectedQwen3(), verifyFlags{verify: true})
+	ctx, cancel := context.WithCancel(context.Background())
+	calls := 0
+	h.checker.sleepFn = func(ctx context.Context, d time.Duration) bool {
+		calls++
+		if calls == 2 {
+			cancel()
+			return false
+		}
+		return true
+	}
+	h.checker.checkAll(ctx, common.Address{})
+	require.Equal(t, []string{"health", "reasoning.disable"}, kinds(h.backend.recorded()), "the second probe was cancelled before its request")
+	llm := reportByID(t, h.checker.GetReports(), modelLLM)
+	require.Nil(t, llm.Api.Bindings[system.IntentReasoningDisable].Verified, "an interrupted run publishes nothing")
+
+	// The next sweep runs the whole verifier again.
+	h.checker.sleepFn = func(context.Context, time.Duration) bool { return true }
+	h.clock = h.clock.Add(time.Minute)
+	llm = h.sweep(t)
+	require.Equal(t, []string{"health", "reasoning.disable", "health", "reasoning.disable", "tools"}, kinds(h.backend.recorded()))
+	require.True(t, *llm.Api.Bindings[system.IntentReasoningDisable].Verified)
+}
+
+func TestVerifyKeyIgnoresRuntimeVerdicts(t *testing.T) {
+	a := detectedQwen3()
+	b := detectedQwen3()
+	verified := true
+	b.Bindings[system.IntentReasoningDisable].Verified = &verified
+	b.Bindings[system.IntentReasoningDisable].VerifiedAt = 1
+	b.Capabilities = &system.ModelCapabilities{Tools: &verified}
+	require.Equal(t, verifyKey(a), verifyKey(b))
+
+	c := detectedQwen3()
+	c.Bindings[system.IntentReasoningDisable].Value = true
+	require.NotEqual(t, verifyKey(a), verifyKey(c))
+	d := detectedQwen3()
+	d.Stack = "sglang"
+	require.NotEqual(t, verifyKey(a), verifyKey(d))
 }

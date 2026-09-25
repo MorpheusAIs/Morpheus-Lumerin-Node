@@ -47,6 +47,15 @@ type runtimeEntry struct {
 	// seen is when each harvested fact was last established; a fact older
 	// than the TTL is cleared before the entry is merged.
 	seen map[runtimeFact]time.Time
+	// verify holds what the verifier and the capability probes established
+	// (Verified, ToolsSupported, CapabilityFacts, RejectedParams, reasoning
+	// seen with the disable applied); they are established together, so one
+	// timestamp expires them together. verifyKey names the spec they were
+	// established for (verifyKey in checker.go): a changed spec is verified
+	// again before the TTL.
+	verify     apispec.Runtime
+	verifiedAt time.Time
+	verifyKey  string
 }
 
 // runtimeStore keeps the runtime evidence per model id (design contract §5)
@@ -104,25 +113,120 @@ func (s *runtimeStore) harvest(modelID string, meta *aiengine.ResponseMeta) (rt 
 			latest = at
 		}
 	}
-	if len(entry.seen) == 0 && !hasVerifierFacts(&entry.rt) {
+	if !entry.verifiedAt.IsZero() && now.Sub(entry.verifiedAt) > s.ttl {
+		entry.verify = apispec.Runtime{}
+		entry.verifiedAt = time.Time{}
+		entry.verifyKey = ""
+	}
+	if len(entry.seen) == 0 && !hasVerifierFacts(&entry.verify) {
 		delete(s.byModel, modelID)
 		return apispec.Runtime{}, false
 	}
-	// At only reaches the wire through the verify:rejected:<param>@<at>
-	// evidence MergeRuntime writes for a refused parameter, so it follows that
-	// fact's own timestamp: stamped from the newest fact, a later served id
-	// would rewrite the string and reset declaredAt although nothing about the
-	// backend changed. An entry kept alive only by verifier facts leaves At at
-	// 0, which MergeRuntime reads as now.
+	// At reaches the wire through the verify:rejected:<param>@<at> evidence
+	// MergeRuntime writes for a refused parameter and through the
+	// verify:reasoning_seen_with_disable@<at> source, so it follows the
+	// timestamp of the fact that needs it: stamped from the newest fact, a
+	// later served id would rewrite the string and reset declaredAt although
+	// nothing about the backend changed. An entry kept alive only by other
+	// verifier facts leaves At at 0, which MergeRuntime reads as now.
 	switch rejectedAt := entry.seen[factRejectedParams]; {
 	case !rejectedAt.IsZero():
 		entry.rt.At = rejectedAt.Unix()
+	case len(entry.verify.RejectedParams) > 0 || entry.verify.ReasoningDisabledInRequest:
+		entry.rt.At = entry.verifiedAt.Unix()
 	case !latest.IsZero():
 		entry.rt.At = latest.Unix()
 	default:
 		entry.rt.At = 0
 	}
-	return entry.rt, true
+	rt = entry.rt
+	overlayVerify(&rt, &entry.verify)
+	return rt, true
+}
+
+// overlayVerify lays the verifier's facts over the harvested ones. The maps
+// and slices of v stay shared with the store (MergeRuntime only reads them);
+// RejectedParams is copied before the union so the store's slice is never
+// appended to.
+func overlayVerify(rt *apispec.Runtime, v *apispec.Runtime) {
+	if len(v.Verified) > 0 {
+		rt.Verified = v.Verified
+	}
+	if v.ToolsSupported != nil {
+		rt.ToolsSupported, rt.ToolsSource = v.ToolsSupported, v.ToolsSource
+	}
+	if !v.CapabilityFacts.Empty() {
+		rt.CapabilityFacts = v.CapabilityFacts
+	}
+	if v.ReasoningSeen {
+		rt.ReasoningSeen = true
+		rt.ReasoningDisabledInRequest = rt.ReasoningDisabledInRequest || v.ReasoningDisabledInRequest
+	}
+	if len(v.RejectedParams) > 0 {
+		rt.RejectedParams = append([]string(nil), rt.RejectedParams...)
+		for _, p := range v.RejectedParams {
+			if !containsParam(rt.RejectedParams, p) {
+				rt.RejectedParams = append(rt.RejectedParams, p)
+			}
+		}
+	}
+}
+
+func containsParam(list []string, p string) bool {
+	for _, have := range list {
+		if have == p {
+			return true
+		}
+	}
+	return false
+}
+
+// verifyDue reports whether the verifier should run for the model: never
+// yet, for another spec (key), or last more than the TTL ago.
+func (s *runtimeStore) verifyDue(modelID, key string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entry := s.byModel[modelID]
+	if entry == nil || entry.verifyKey != key || entry.verifiedAt.IsZero() {
+		return true
+	}
+	return s.now().Sub(entry.verifiedAt) > s.ttl
+}
+
+// recordVerify stores one verifier run's facts for the model under key. A
+// run within the TTL happens only for a changed spec (key): the binding
+// verdicts and rejections of the old spec go, since they describe bindings
+// that no longer exist, while the tool and capability facts describe the
+// backend and carry over unless the new run answered them itself (a
+// question the merged spec already answered is not asked again). A run with
+// no facts still counts as done, so a backend that answers nothing usable is
+// asked once per TTL, not once per sweep.
+func (s *runtimeStore) recordVerify(modelID, key string, facts apispec.Runtime) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entry := s.byModel[modelID]
+	if entry == nil {
+		entry = &runtimeEntry{seen: map[runtimeFact]time.Time{}}
+		s.byModel[modelID] = entry
+	}
+	prev := entry.verify
+	if facts.ToolsSupported == nil && prev.ToolsSupported != nil {
+		facts.ToolsSupported, facts.ToolsSource = prev.ToolsSupported, prev.ToolsSource
+	}
+	for field, source := range prev.CapabilityFacts.Sources {
+		if _, answered := facts.CapabilityFacts.Sources[field]; answered {
+			continue
+		}
+		switch field {
+		case apispec.CapFieldStructured:
+			facts.CapabilityFacts.SetStructured(prev.CapabilityFacts.Structured, source)
+		case apispec.CapFieldModalitiesInput:
+			facts.CapabilityFacts.SetInputModalities(prev.CapabilityFacts.Modalities.Input, source)
+		}
+	}
+	entry.verify = facts
+	entry.verifiedAt = s.now()
+	entry.verifyKey = key
 }
 
 // forget drops the entry for a model that is no longer reported.
@@ -132,10 +236,10 @@ func (s *runtimeStore) forget(modelID string) {
 	delete(s.byModel, modelID)
 }
 
-// hasVerifierFacts reports whether the entry carries facts the verifier
-// wrote; those are not the harvest's to expire.
+// hasVerifierFacts reports whether the verify block carries facts; those
+// expire with verifiedAt, not fact by fact.
 func hasVerifierFacts(rt *apispec.Runtime) bool {
-	return len(rt.Verified) > 0 || rt.ToolsSupported != nil || !rt.CapabilityFacts.Empty()
+	return len(rt.Verified) > 0 || rt.ToolsSupported != nil || !rt.CapabilityFacts.Empty() || len(rt.RejectedParams) > 0 || rt.ReasoningDisabledInRequest
 }
 
 func copyFact(dst, src *apispec.Runtime, fact runtimeFact) {
