@@ -404,6 +404,12 @@ func start() error {
 			ModelConfigs: modelConfigLoader,
 			TeeStatus:    backendVerifier,
 			ApiDetect:    apiDetect,
+			ApiDetectTTL: cfg.Proxy.ModelApiDetectTTL,
+			// Inference-traffic probes (design contract §5): opt-in, they
+			// cost tokens on the provider's backend.
+			VerifyBindings:    cfg.Proxy.ModelApiVerifyBindings,
+			ProbeCapabilities: cfg.Proxy.ModelApiProbeCapabilities,
+			ProbeHosted:       cfg.Proxy.ModelApiProbeHosted,
 		}, cfg.Proxy.ModelHealthCheckInterval, cfg.Proxy.ModelHealthCheckTimeout, cfg.Proxy.ModelHealthCheckProbeDelay, cfg.Proxy.ModelHealthMaxConsecErrors, appLog)
 		modelHealthReporter = modelHealthChecker
 	}
