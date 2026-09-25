@@ -25,6 +25,7 @@ var hostVendors = map[string]string{
 	"integrate.api.nvidia.com":          "nvidia-nim",
 	"api.cerebras.ai":                   "cerebras",
 	"api.sambanova.ai":                  "sambanova",
+	"router.huggingface.co":             "hf-router",
 }
 
 func StackFromHost(apiURL string) string {
