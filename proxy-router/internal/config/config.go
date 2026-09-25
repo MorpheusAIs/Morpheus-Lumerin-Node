@@ -81,6 +81,7 @@ type Config struct {
 		ModelHealthCheckProbeDelay time.Duration `env:"MODEL_HEALTH_CHECK_PROBE_DELAY" flag:"model-health-check-probe-delay" validate:"omitempty,duration" desc:"pause between per-model health probes so many-model providers don't burst their upstream and trip rate limits"`
 		ModelHealthMaxConsecErrors int           `env:"MODEL_HEALTH_MAX_CONSECUTIVE_ERRORS" flag:"model-health-max-consecutive-errors" validate:"omitempty,gte=1" desc:"consecutive session prompt failures after which a model is immediately reported unhealthy (or degraded when every failure was upstream rate limiting), without waiting for the next scheduled probe"`
 		ModelApiDetectEnabled      *lib.Bool     `env:"MODEL_API_DETECT_ENABLED" flag:"model-api-detect-enabled" desc:"auto-detect the backend API (stack, model family, reasoning knobs) of models without apiStack by probing service endpoints — never inference requests — including one hop through LiteLLM to its upstream; false disables all probing and such models advertise no api block; default true"`
+		ModelApiDetectTTL          time.Duration `env:"MODEL_API_DETECT_TTL" flag:"model-api-detect-ttl" validate:"omitempty,duration" desc:"how long a detected api block and a registry model listing are reused before the backend is probed again; default MODEL_HEALTH_CHECK_INTERVAL (one detection per sweep), minimum 1m"`
 		// SessionHealthPolicy is the consumer-side strictness towards provider
 		// model health self-reports when opening a session by model ID.
 		// Single-bid opens always force permissive (healthPolicySingleBid is
@@ -108,6 +109,10 @@ type Config struct {
 		PublicUrl string `env:"WEB_PUBLIC_URL" flag:"web-public-url" validate:"omitempty,url"          desc:"public url of the proxyrouter, falls back to web-address if empty" `
 	}
 }
+
+// Below one minute a many-model provider would re-probe every backend on
+// each manual re-check.
+const MinModelApiDetectTTL = time.Minute
 
 func (cfg *Config) SetDefaults() {
 	if cfg.Environment == "" {
@@ -249,6 +254,12 @@ func (cfg *Config) SetDefaults() {
 	if cfg.Proxy.ModelHealthMaxConsecErrors == 0 {
 		cfg.Proxy.ModelHealthMaxConsecErrors = 3
 	}
+	if cfg.Proxy.ModelApiDetectTTL == 0 {
+		cfg.Proxy.ModelApiDetectTTL = cfg.Proxy.ModelHealthCheckInterval
+	}
+	if cfg.Proxy.ModelApiDetectTTL < MinModelApiDetectTTL {
+		cfg.Proxy.ModelApiDetectTTL = MinModelApiDetectTTL
+	}
 	if cfg.Proxy.SessionHealthPolicy == "" {
 		cfg.Proxy.SessionHealthPolicy = "permissive"
 	}
@@ -331,6 +342,7 @@ func (cfg *Config) GetSanitized() interface{} {
 	publicCfg.Proxy.ModelHealthCheckProbeDelay = cfg.Proxy.ModelHealthCheckProbeDelay
 	publicCfg.Proxy.ModelHealthMaxConsecErrors = cfg.Proxy.ModelHealthMaxConsecErrors
 	publicCfg.Proxy.ModelApiDetectEnabled = cfg.Proxy.ModelApiDetectEnabled
+	publicCfg.Proxy.ModelApiDetectTTL = cfg.Proxy.ModelApiDetectTTL
 	publicCfg.Proxy.SessionHealthPolicy = cfg.Proxy.SessionHealthPolicy
 
 	publicCfg.System.Enable = cfg.System.Enable
