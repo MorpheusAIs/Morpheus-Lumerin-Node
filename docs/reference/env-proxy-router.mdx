@@ -3,7 +3,7 @@ title: "Env: proxy-router"
 description: "Every environment variable consumed by the proxy-router, with mainnet/testnet defaults and explicit precedence rules where two variables overlap."
 audience: ["provider-full", "provider-resale", "prosumer", "developer"]
 product: ["proxy-router"]
-last_verified: "2026-09-22"
+last_verified: "2026-09-25"
 source: "docs/proxy-router.all.env"
 ---
 
@@ -149,7 +149,7 @@ For TEE images logging is **frozen** to production / JSON / minimal at build tim
 | `WEB_ADDRESS` | `0.0.0.0:8082` | Bind for the HTTP/Swagger API |
 | `WEB_PUBLIC_URL` | `http://localhost:<WEB_ADDRESS port>` | Public-facing URL of the API. **Set explicitly** for any provider that consumers must reach. |
 | `PROXY_ADDRESS` | `0.0.0.0:3333` | Bind for the consumer-to-provider TCP proxy |
-| `PROXY_CORS_ALLOWED_ORIGINS` | (unset) | Comma-separated list of extra origins allowed to call the HTTP API by browser. Loopback origins and Electron's `null`/`file` origins are always allowed regardless of this setting. Set to `*` to allow any origin (not recommended — the API exposes wallet operations such as `/blockchain/send/mor`); needed if you front the API with a non-localhost browser client. |
+| `PROXY_CORS_ALLOWED_ORIGINS` | (unset) | Comma-separated list of extra origins allowed to call the HTTP API by browser. Always allowed regardless of this setting: loopback origins, Electron's `null`/`file` origins, and the hosted [MyProvider](/providers/full/myprovider-gui) at `https://myprovider.mor.org`. Set to `*` to allow any origin (not recommended — the API exposes wallet operations such as `/blockchain/send/mor`); needed if you front the API with some other non-localhost browser client. |
 | `MORPHEUS_DESKTOP_INSTANCE_TOKEN` | (unset) | Opaque identifier the Desktop app sets so multiple local proxy-router instances can be told apart. When set, it is echoed back on the `X-Morpheus-Instance-Token` header of `GET /healthcheck`. Not needed outside the bundled Desktop app. |
 
 ## Proxy state & configs
