@@ -1,123 +1,99 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import styled from 'styled-components';
-import PropTypes from 'prop-types';
-import 'react-hint/css/index.css';
-import * as utils from '../../store/utils';
-import {
-  PasswordStrengthMeter,
-  TextInput,
-  AltLayout,
-  AltLayoutNarrow,
-  Btn,
-  Sp,
-  Tooltip
-} from '../common';
-import Message from './Message';
+import { TextInput, AltLayout, AltLayoutNarrow, Btn, Sp } from '../common';
+import PasswordStrengthMeter from '../common/PasswordStrengthMeter';
+import SecondaryBtn from './SecondaryBtn';
+import SetupFeedback from './SetupFeedback';
 
-const PasswordMessage = styled(Message)`
-  text-align: left;
-  color: ${p => p.theme.colors.dark};
-  text-align: justify;
+const Description = styled.p`
+  color: var(--text-muted);
+  font-size: 1.4rem;
+  line-height: 1.6;
 `;
-
-const Green = styled.div`
-  display: inline-block;
-  color: ${p => p.theme.colors.success};
-`;
-
-const PasswordInputWrap = styled.div`
-  position: relative;
-`;
-
-const SecondaryBtn = styled(Btn)`
-    border: 1px solid #20dc8e;
-    color: #20dc8e;
-    background: transparent;
-`
-
-const PasswordStep = props => {
-  const [typed, setTyped] = useState(false);
-  const [suggestion, setSuggestion] = useState('');
-  const onPasswordSubmit = (e, useImportFlow) => {
-    e.preventDefault();
-    props.onPasswordSubmit({ clearOnError: false, useImportFlow });
-  };
-  let tooltipTimeout;
-
+export default function PasswordStep(props) {
+  const [showPassword, setShowPassword] = useState(false);
+  const [suggestions, setSuggestions] = useState('');
   return (
-    <AltLayout title="Let`s get started" data-testid="onboarding-container">
+    <AltLayout
+      title="Create your app password"
+      data-testid="onboarding-container"
+    >
       <AltLayoutNarrow>
-        <form data-testid="pass-form">
-          <PasswordMessage>
-            Enter a strong password until the meter turns <Green>green</Green>.
-          </PasswordMessage>
-          <PasswordInputWrap>
-            <Sp mt={2}>
-              <Tooltip
-                content={suggestion}
-                show={typed && props.password && suggestion.length}
-              />
-              <TextInput
-                data-testid="pass-field"
-                autoFocus
-                onChange={e => {
-                  if (!typed) {
-                    tooltipTimeout && clearTimeout(tooltipTimeout);
-                    setTyped(true);
-                    tooltipTimeout = setTimeout(() => setTyped(false), 5000);
-                  }
-                  return props.onInputChange(e);
-                }}
-                error={props.errors.password}
-                label="Password"
-                value={props.password}
-                type="password"
-                id="password"
-              />
-              {!props.errors.password && (
-                <PasswordStrengthMeter
-                  password={props.password}
-                  onChange={res => {
-                    const string = res?.suggestions?.join(`\n`);
-                    setSuggestion(string);
-                  }}
-                />
-              )}
-            </Sp>
-          </PasswordInputWrap>
+        <Description>
+          Choose a new password to unlock Morpheus on this device. This is not
+          your recovery phrase or a password from another wallet app.
+        </Description>
+        <form
+          data-testid="pass-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            props.onPasswordSubmit();
+          }}
+        >
           <Sp mt={3}>
             <TextInput
-              data-testid="pass-again-field"
+              id="password"
+              label="New password"
+              type={showPassword ? 'text' : 'password'}
+              value={props.password}
+              onChange={props.onInputChange}
+              error={props.errors.password}
+              autoFocus
+              autoComplete="new-password"
+              data-testid="pass-field"
+              disabled={props.isPreparingWallet}
+            />
+            <PasswordStrengthMeter
+              password={props.password}
+              onChange={(result) =>
+                setSuggestions(result?.suggestions?.join(' ') || '')
+              }
+            />
+            {suggestions && <Description>{suggestions}</Description>}
+          </Sp>
+          <Sp mt={2}>
+            <TextInput
+              id="passwordAgain"
+              label="Repeat new password"
+              type={showPassword ? 'text' : 'password'}
+              value={props.passwordAgain}
               onChange={props.onInputChange}
               error={props.errors.passwordAgain}
-              label="Repeat password"
-              value={props.passwordAgain}
-              type="password"
-              id="passwordAgain"
+              autoComplete="new-password"
+              data-testid="pass-again-field"
+              disabled={props.isPreparingWallet}
             />
           </Sp>
-          <Sp mt={6}>
-            <Btn block onClick={(e) => onPasswordSubmit(e, false)}>
-              Create a new wallet
+          <Sp mt={2}>
+            <SecondaryBtn
+              block
+              aria-pressed={showPassword}
+              onClick={() => setShowPassword(!showPassword)}
+            >
+              {showPassword ? 'Hide passwords' : 'Show passwords'}
+            </SecondaryBtn>
+          </Sp>
+          <SetupFeedback setupError={props.setupError} />
+          <Sp mt={3}>
+            <Btn block submit disabled={props.isPreparingWallet}>
+              {props.isPreparingWallet
+                ? 'Preparing recovery phrase…'
+                : props.useImportFlow
+                  ? 'Continue to wallet import'
+                  : 'Continue to recovery phrase'}
             </Btn>
           </Sp>
-          <Sp style={{ marginTop: '10px'}}>
-            <SecondaryBtn block onClick={(e) => onPasswordSubmit(e, true)}>
-              Import an existing wallet
+          <Sp mt={2}>
+            <SecondaryBtn
+              block
+              onClick={props.onChooseWallet}
+              disabled={props.isPreparingWallet}
+            >
+              Back to wallet options
             </SecondaryBtn>
           </Sp>
         </form>
       </AltLayoutNarrow>
     </AltLayout>
   );
-};
-
-PasswordStep.propTypes = {
-  onPasswordSubmit: PropTypes.func.isRequired,
-  onInputChange: PropTypes.func.isRequired,
-  passwordAgain: PropTypes.string,
-  password: PropTypes.string,
-  errors: utils.errorPropTypes('passwordAgain', 'password')
-};
-
-export default PasswordStep;
+}

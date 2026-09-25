@@ -3,7 +3,7 @@ title: "API endpoints (selected)"
 description: "Hand-picked, prose-explained endpoints of the proxy-router HTTP API. Full schema lives in the repo at proxy-router/docs/swagger.yaml."
 audience: ["developer", "prosumer", "provider-full", "provider-resale"]
 product: ["proxy-router"]
-last_verified: "2026-09-23"
+last_verified: "2026-09-25"
 source: "docs/proxy-router-api-endpoints.md"
 ---
 
@@ -34,6 +34,7 @@ OpenAI-compatible chat. The request body is forwarded to the provider; you don't
 | Header | Purpose |
 |--------|---------|
 | `session_id` (hex32) | Required for remote provider routing |
+| `x-morpheus-history` | Optional per-request history override. `off` neither stores this exchange nor prepends stored history to it, whatever `PROXY_STORE_CHAT_CONTEXT` / `PROXY_FORWARD_CHAT_CONTEXT` say. `on` / `default` (or omitted) keep the node's policy. A client can opt **out** of history for one request; it cannot turn history **on** where the operator disabled it. Anything else returns `400`. |
 
 ```bash
 curl --location 'http://localhost:8084/v1/chat/completions' \
@@ -164,6 +165,64 @@ curl --location 'http://localhost:8082/blockchain/providers' \
 
 `ModelType` is one of `LLM`, `STT`, `TTS`, `EMBEDDING`, `DECISIONS`, `UNKNOWN`. Use it to choose the appropriate endpoint family. Full sample response in [`proxy-router/docs/swagger.yaml`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/docs/swagger.yaml).
 
+The registry read is cached in the node for **30 seconds**. Your own `POST /blockchain/models` and `DELETE /blockchain/models/:id` invalidate it immediately; a model registered by someone else can take up to 30 s to appear.
+
+### Model price index
+
+`GET /blockchain/models/prices` — permission `get_bids`
+
+One call that returns the live per-second price range for **every** registered model, so a client can rank by cost without one bid request per model. Cached for 60 seconds.
+
+```json
+{
+  "prices": [
+    { "model_id": "0x…", "min_price_per_second_wei": "10000000000", "max_price_per_second_wei": "25000000000", "bid_count": 3 },
+    { "model_id": "0x…", "min_price_per_second_wei": "", "max_price_per_second_wei": "", "bid_count": 0 }
+  ],
+  "failed_model_ids": []
+}
+```
+
+Empty price strings with `bid_count: 0` mean **no live provider**, not "free". `failed_model_ids` lists models whose bids could not be read this time; the rest of the answer is still returned. Rows are not sorted — order them client-side.
+
+---
+
+## Session duration bounds
+
+`GET /blockchain/sessions/duration` — permission `get_sessions`
+
+Reads `MIN_SESSION_DURATION` and `getMaxSessionDuration()` from the deployed contract so clients stop hardcoding them:
+
+```json
+{ "min_seconds": "300", "max_seconds": "86400" }
+```
+
+---
+
+## Estimate a session before opening
+
+`GET /blockchain/models/:id/session/estimate?sessionDuration=3600[&directPayment=false][&bidId=0x…]` — permission `get_bids`
+
+Returns the MOR amount `openSession` will pull from the wallet and every input it was derived from. Without `bidId` it quotes the **top-scored** bid — the one an unattended open tries first. With `bidId` it quotes that bid (must be one of the model's rated bids, `400` if the value is not 32 bytes).
+
+```json
+{
+  "stake_wei": "…",
+  "session_cost_wei": "…",
+  "mor_supply_wei": "…",
+  "emissions_budget_wei": "…",
+  "price_per_second_wei": "…",
+  "duration_seconds": "3600",
+  "direct_payment": false,
+  "bid_id": "0x…",
+  "top_bid_provider": "0x…",
+  "top_bid_score": 0.98,
+  "explanation": "…"
+}
+```
+
+`stake_wei` is what the contract locks; `session_cost_wei` (`price × duration`) is what the compute is worth. They differ by roughly `supply ÷ budget` — several hundred × — and confusing them makes the desktop app look like it is charging hundreds of times the real price. Formula in [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover#how-much-mor-does-an-open-lock).
+
 ---
 
 ## Open session by model ID
@@ -172,9 +231,11 @@ curl --location 'http://localhost:8082/blockchain/providers' \
 
 | Body field | Required | Notes |
 |------------|----------|-------|
-| `sessionDuration` | yes | Seconds |
-| `directPayment` | optional | |
-| `failover` | optional | |
+| `sessionDuration` | yes | Seconds. Must be within the [contract bounds](#session-duration-bounds). |
+| `directPayment` | optional | Pay the provider from your escrowed amount at close instead of from the emissions pool. The locked amount is the same either way; only who pays the provider changes. |
+| `failover` | optional | Try the next rated provider if the first handshake fails. |
+| `rejectExisting` | optional | Refuse to open when this wallet already has a live session for the same model and return **`409 { "existingSessionID": "0x…" }`** instead. Off by default so callers that intentionally run parallel sessions keep working. |
+| `omitProvider` | optional | Exclude one provider address from bid selection. |
 
 ```bash
 curl --location 'http://localhost:8084/blockchain/models/0xe086adc275c99e32bb10b0aff5e8bfc391aad18cbb184727a75b2569149425c6/session' \
@@ -189,11 +250,13 @@ Response includes `sessionID`.
 
 `POST /blockchain/bids/:id/session`
 
-Same as above but targets one specific bid instead of running the failover loop. Accepts one extra field:
+Same as above but targets one specific bid instead of running the failover loop. Fields:
 
 | Body field | Required | Notes |
 |------------|----------|-------|
 | `sessionDuration` | yes | Seconds |
+| `directPayment` | optional | Same meaning as above. Earlier releases forced staking on this route; a consumer picking their own provider can now pay directly. |
+| `rejectExisting` | optional | Same `409` behaviour as above, keyed on the bid's model. |
 | `maxStakeWei` | optional | Reject the open before anything is broadcast if the computed stake exceeds this cap. Also switches this open onto the gateway stake formula — see [Companion gateway mode](/prosumers/companion-gateway-mode#stake-cap-on-open-by-bid-maxstakewei). |
 
 Open-by-bid, close, and withdraw also accept an optional `X-Gateway-Operation` idempotency header on nodes running with `GATEWAY_JOURNAL_PATH`; when sent, responses gain a `progress` object. Nodes without the env, and calls without the header, return the same bodies as before. Details in [Companion gateway mode](/prosumers/companion-gateway-mode#operation-journal-x-gateway-operation).
@@ -258,6 +321,27 @@ cast send 0x6aBE1d282f72B474E54527D93b979A4f64d3030a \
 ```
 
 Function selector: `0xa98a7c6b`. The caller must be the delegatee allowed for that consumer (usually the same key your consumer node uses). See [Where is my MOR? → Bucket 2](/ai/where-is-my-mor#bucket-2-on-hold-queue-used-stipend-day-lock).
+
+---
+
+## Wallet and HD accounts
+
+`GET /wallet` — permission `get_wallet`
+
+```json
+{ "address": "0x…", "kind": "mnemonic", "derivationPath": "0" }
+```
+
+`kind` is `mnemonic`, `privateKey`, or `env` (`WALLET_PRIVATE_KEY`). `kind` and `derivationPath` are omitted on releases that predate them and on wallets the node cannot classify, so read `address` first and treat the rest as advisory.
+
+`POST /wallet/derivationPath` — permission `set_wallet`
+
+```bash
+curl -u 'admin:admin' -X POST 'http://localhost:8082/wallet/derivationPath' \
+  -H 'Content-Type: application/json' -d '{"derivationPath": "1"}'
+```
+
+Re-derives the active key from the mnemonic **already stored on the node** and switches the wallet to that HD account, so a client never has to hold the seed phrase to change accounts. A bare index (`"0"`, `"1"`, …) is relative to `m/44'/60'/0'/0` — the same numbering MetaMask uses for Account 1, Account 2, …; a full path is accepted too. Returns the new `address`. `400` if the wallet was imported as a raw private key (`kind: privateKey`) or comes from the environment, or if the path is not derivable. The change is persisted and takes effect immediately for every subsequent call.
 
 ---
 

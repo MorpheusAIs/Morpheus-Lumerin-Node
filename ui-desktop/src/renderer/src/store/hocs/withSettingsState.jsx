@@ -7,13 +7,13 @@ import React from 'react';
 import { ToastsContext } from '../../components/toasts';
 import selectors from '../selectors';
 
-const withSettingsState = WrappedComponent => {
+const withSettingsState = (WrappedComponent) => {
   class Container extends React.Component {
-
     static contextType = ToastsContext;
 
-    static displayName = `withSettingsState(${WrappedComponent.displayName ||
-      WrappedComponent.name})`;
+    static displayName = `withSettingsState(${
+      WrappedComponent.displayName || WrappedComponent.name
+    })`;
 
     logout = () => {
       return this.props.client.logout();
@@ -21,53 +21,44 @@ const withSettingsState = WrappedComponent => {
 
     getConfig = async () => {
       try {
-        const authHeaders = await this.props.client.getAuthHeaders();
-        const path = `${this.props.config.chain.localProxyRouterUrl}/config`;
-        const response = await fetch(path, {
-          headers: authHeaders
-        });
-        const data = await response.json();
-        return data;
-      }
-      catch (e) {
-        console.log("Error", e)
+        return await this.props.client.getNodeConfig();
+      } catch (e) {
+        console.log('Error', e);
         return [];
       }
-    }
+    };
 
     updateEthNodeUrl = async (value) => {
-      if(!value)
-        return;
+      if (!value) return;
 
-      if(!/\b(?:http|ws)s?:\/\/\S*[^\s."]/g.test(value)) {
-        this.context.toast('error', "Invalid format");
-        return;
-      }
-
-      const authHeaders = await this.props.client.getAuthHeaders();
-      const ethNodeResult = await fetch(`${this.props.config.chain.localProxyRouterUrl}/config/ethNode`, {
-        method: 'POST',
-        body: JSON.stringify({ urls: [value] }),
-        headers: authHeaders,
-      })
-
-      const dataResponse = await ethNodeResult.json();
-      if (dataResponse.error) {
-        this.context.toast('error', dataResponse.error);
+      if (!/\b(?:http|ws)s?:\/\/\S*[^\s."]/g.test(value)) {
+        this.context.toast('error', 'Invalid format');
         return;
       }
 
-      this.context.toast('success', "Changed");
-    }
+      try {
+        const dataResponse = await this.props.client.updateEthNode({
+          url: value,
+        });
+        if (dataResponse?.error) {
+          this.context.toast('error', dataResponse.error);
+          return;
+        }
+        this.context.toast('success', 'Changed');
+      } catch (error) {
+        this.context.toast(
+          'error',
+          error?.message || 'Could not change the Ethereum node',
+        );
+      }
+    };
 
     updateFailoverSetting = async (value) => {
       await this.props.client.setFailoverSetting(value);
-      this.context.toast('success', "Setting changed")
-    }
-
+      this.context.toast('success', 'Setting changed');
+    };
 
     render() {
-
       return (
         <WrappedComponent
           logout={this.logout}
@@ -82,11 +73,10 @@ const withSettingsState = WrappedComponent => {
   }
 
   const mapStateToProps = (state, props) => ({
-    config: state.config
+    config: state.config,
   });
 
-  const mapDispatchToProps = dispatch => ({
-  });
+  const mapDispatchToProps = (dispatch) => ({});
 
   return withClient(connect(mapStateToProps, mapDispatchToProps)(Container));
 };

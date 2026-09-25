@@ -1,9 +1,13 @@
 .model-header button {
-    background: #03160e!important;
-    color: #20dc8e!important;
-    font-size: 2rem;
+  background: var(--surface-raised, #10271e) !important;
+  color: var(--text-primary, #edf7f0) !important;
+  font-size: 1.5rem;
+  line-height: 1.4;
+  min-height: 52px;
+  gap: 12px;
+  overflow-wrap: anywhere;
 }
 
 .accordion-item {
-    background: transparent!important;
+  background: transparent !important;
 }

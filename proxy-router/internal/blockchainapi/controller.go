@@ -70,6 +70,9 @@ func (c *BlockchainController) RegisterRoutes(r interfaces.Router) {
 
 	// models
 	r.GET("/blockchain/models", c.authConf.CheckAuth("get_models"), c.getAllModels)
+	// Registered before the /:id routes for the same reason /blockchain/sessions/user
+	// is: "prices" is a literal segment, not a model id.
+	r.GET("/blockchain/models/prices", c.authConf.CheckAuth("get_bids"), c.getModelPrices)
 	r.POST("/blockchain/models", c.authConf.CheckAuth("create_model"), c.createNewModel)
 	r.DELETE("/blockchain/models/:id", c.authConf.CheckAuth("delete_model"), c.deregisterModel)
 
@@ -93,7 +96,9 @@ func (c *BlockchainController) RegisterRoutes(r interfaces.Router) {
 	r.POST("/blockchain/sessions", c.authConf.CheckAuth("open_session"), c.openSession)
 	r.POST("/blockchain/bids/:id/session", c.authConf.CheckAuth("open_session"), c.openSessionByBid)
 	r.POST("/blockchain/models/:id/session", c.authConf.CheckAuth("open_session"), c.openSessionByModelId)
+	r.GET("/blockchain/models/:id/session/estimate", c.authConf.CheckAuth("get_bids"), c.estimateOpenSession)
 	r.POST("/blockchain/sessions/:id/close", c.authConf.CheckAuth("close_session"), c.closeSession)
+	r.GET("/blockchain/sessions/duration", c.authConf.CheckAuth("get_sessions"), c.getSessionDurationBounds)
 	r.GET("/blockchain/sessions/budget", c.authConf.CheckAuth("get_budget"), c.getBudget)
 	r.GET("/blockchain/token/supply", c.authConf.CheckAuth("get_supply"), c.getSupply)
 }
@@ -450,6 +455,30 @@ func (c *BlockchainController) getAllModels(ctx *gin.Context) {
 	return
 }
 
+// GetModelPrices godoc
+//
+//	@Summary		Get price index for every model
+//	@Description	Get the live price range per second of compute for every registered model, so a client can rank models by cost without one request per model
+//	@Tags			models
+//	@Produce		json
+//	@Success		200	{object}	structs.ModelPricesRes
+//	@Failure		500	{object}	structs.ErrRes
+//	@Security		BasicAuth
+//	@Router			/blockchain/models/prices [get]
+func (c *BlockchainController) getModelPrices(ctx *gin.Context) {
+	prices, err := c.service.GetModelPrices(ctx)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	// Deliberately not sorted here. A model with no live provider has no price to
+	// rank, and whether those rows belong at the bottom of a cheap-first list or
+	// hidden entirely is the client's decision, not the router's.
+	ctx.JSON(http.StatusOK, prices)
+}
+
 // GetBidsByModelAgent godoc
 //
 //	@Summary		Get Bids by	Model Agent
@@ -689,6 +718,7 @@ func (c *BlockchainController) openSession(ctx *gin.Context) {
 //	@Param			opensession	body		structs.OpenSessionWithDurationRequest	true	"Open session"
 //	@Param			id			path		string									true	"Bid ID"
 //	@Success		200			{object}	structs.OpenSessionRes
+//	@Failure		409			{object}	structs.ExistingSessionRes
 //	@Router			/blockchain/bids/{id}/session [post]
 //	@Security		BasicAuth
 func (s *BlockchainController) openSessionByBid(ctx *gin.Context) {
@@ -724,14 +754,95 @@ func (s *BlockchainController) openSessionByBid(ctx *gin.Context) {
 	if reqPayload.MaxStakeWei != nil {
 		ctx.Set(lib.GatewayMaxStakeKey, reqPayload.MaxStakeWei.Unpack())
 	}
-	sessionId, err := s.service.openSessionByBid(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), usernameStr)
+
+	var sessionId common.Hash
+	if reqPayload.RejectExisting {
+		sessionId, err = s.service.OpenSessionByBidIdRejectExisting(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), reqPayload.DirectPayment, usernameStr)
+	} else {
+		sessionId, err = s.service.openSessionByBid(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), reqPayload.DirectPayment, usernameStr, nil)
+	}
 	if err != nil {
+		s.log.Error(err)
+		var existing *ExistingSessionError
+		if errors.As(err, &existing) {
+			ctx.JSON(http.StatusConflict, structs.ExistingSessionRes{ExistingSessionID: existing.SessionID})
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error(), SessionID: gatewaySessionIDPtr(progress), Progress: progress})
 		return
 	}
 
 	ctx.JSON(http.StatusOK, structs.OpenSessionRes{SessionID: sessionId, Progress: progress})
 	return
+}
+
+// EstimateOpenSession godoc
+//
+//	@Summary		Estimate what opening a session costs
+//	@Description	Returns the MOR amount an open would move and every input it was derived from, for the top-scored bid or for one named bid
+//	@Tags			sessions
+//	@Produce		json
+//	@Param			id				path		string	true	"Model ID"
+//	@Param			sessionDuration	query		int		true	"Session length in seconds"
+//	@Param			directPayment	query		bool	false	"Pay the provider from the escrowed amount instead of staking"
+//	@Param			bidId			query		string	false	"Quote this bid instead of the top-scored one"
+//	@Success		200				{object}	structs.OpenSessionStakeEstimate
+//	@Router			/blockchain/models/{id}/session/estimate [get]
+//	@Security		BasicAuth
+func (c *BlockchainController) estimateOpenSession(ctx *gin.Context) {
+	var params structs.PathHex32ID
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	var query structs.QueryOpenSessionEstimate
+	if err := ctx.ShouldBindQuery(&query); err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	// HexToHash silently left-pads anything shorter, which would quote the
+	// wrong bid rather than fail, so the length is checked first.
+	var bidID common.Hash
+	if query.BidID != "" {
+		if len(common.FromHex(query.BidID)) != common.HashLength {
+			ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: "bidId must be a 32 byte hex value"})
+			return
+		}
+		bidID = common.HexToHash(query.BidID)
+	}
+
+	estimate, err := c.service.EstimateOpenSessionStake(ctx, params.ID.Hash, bidID, query.SessionDuration.Unpack(), query.DirectPayment)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, estimate)
+}
+
+// GetSessionDurationBounds godoc
+//
+//	@Summary		Get the session length range the contract accepts
+//	@Description	Returns MIN_SESSION_DURATION and getMaxSessionDuration so consumers stop hardcoding them
+//	@Tags			sessions
+//	@Produce		json
+//	@Success		200	{object}	structs.SessionDurationBounds
+//	@Router			/blockchain/sessions/duration [get]
+//	@Security		BasicAuth
+func (c *BlockchainController) getSessionDurationBounds(ctx *gin.Context) {
+	bounds, err := c.service.GetSessionDurationBounds(ctx)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, bounds)
 }
 
 // OpenSessionByModelId godoc
@@ -744,6 +855,7 @@ func (s *BlockchainController) openSessionByBid(ctx *gin.Context) {
 //	@Param			opensession	body		structs.OpenSessionWithFailover	true	"Open session"
 //	@Param			id			path		string							true	"Model ID"
 //	@Success		200			{object}	structs.OpenSessionRes
+//	@Failure		409			{object}	structs.ExistingSessionRes
 //	@Router			/blockchain/models/{id}/session [post]
 //	@Security		BasicAuth
 func (s *BlockchainController) openSessionByModelId(ctx *gin.Context) {
@@ -771,15 +883,33 @@ func (s *BlockchainController) openSessionByModelId(ctx *gin.Context) {
 	usernameStr := username.(string)
 
 	isFailoverEnabled := reqPayload.Failover
-	sessionId, err := s.service.OpenSessionByModelId(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), reqPayload.DirectPayment, isFailoverEnabled, reqPayload.OmitProvider.Address, usernameStr)
+	var sessionId common.Hash
+	if reqPayload.RejectExisting {
+		sessionId, err = s.service.OpenSessionByModelIdRejectExisting(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), reqPayload.DirectPayment, isFailoverEnabled, reqPayload.OmitProvider.Address, usernameStr)
+	} else {
+		sessionId, err = s.service.OpenSessionByModelId(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), reqPayload.DirectPayment, isFailoverEnabled, reqPayload.OmitProvider.Address, usernameStr)
+	}
 	if err != nil {
 		s.log.Error(err)
-		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
+		writeOpenSessionError(ctx, err)
 		return
 	}
 
 	ctx.JSON(http.StatusOK, structs.OpenSessionRes{SessionID: sessionId})
 	return
+}
+
+// writeOpenSessionError is shared by both open routes: either can now be asked
+// to reject an existing session, so either can need to answer 409.
+func writeOpenSessionError(ctx *gin.Context, err error) {
+	var existing *ExistingSessionError
+	if errors.As(err, &existing) {
+		ctx.JSON(http.StatusConflict, structs.ExistingSessionRes{
+			ExistingSessionID: existing.SessionID,
+		})
+		return
+	}
+	ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
 }
 
 // CloseSession godoc

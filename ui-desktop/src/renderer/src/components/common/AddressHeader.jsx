@@ -4,6 +4,7 @@ import { ToastsContext } from '../toasts';
 import { BaseBtn } from '.';
 import { abbreviateAddress } from '../../utils';
 import { IconCopy } from '@tabler/icons-react';
+import { copyWalletAddress } from '../../utils/clipboard';
 
 const Container = styled.header`
   padding: 1.6rem;
@@ -15,52 +16,67 @@ const Container = styled.header`
 const AddressContainer = styled.div`
   display: flex;
   align-items: center;
-  background-color: #fff;
-  border-radius: 12px;
-  border: 2px solid rgba(14, 67, 83, 0.28);
-  padding: 0.5rem 1.25rem;
-  color: ${p => p.theme.colors.dark};
-  opacity: 0.8;
-
-  border-radius: 0.375rem;
-  background: rgba(255,255,255, 0.04);
-  border-width: 1px;
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  color: white;
+  min-width: 0;
+  width: 100%;
+  gap: 0.8rem;
+  padding: 0.4rem 0.6rem 0.4rem 1.2rem;
+  border-radius: 0.8rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: ${(p) => p.theme.colors.light};
 `;
 
 const Address = styled.div`
   font-size: 1.3rem;
-  margin-right: 1rem;
+  flex: 1;
+  min-width: 0;
   cursor: default;
-  border-right: 1px;
   font-weight: 600;
   text-overflow: ellipsis;
   overflow: hidden;
-  max-width: 240px;
-  @media (min-width: 960px) {
-    max-width: 100%;
+  white-space: nowrap;
+`;
+
+const CopyButton = styled(BaseBtn)`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 3.6rem;
+  height: 3.6rem;
+  border-radius: 0.6rem;
+  color: ${(p) => p.theme.colors.morMain};
+
+  &:hover:not(:disabled) {
+    background: rgba(32, 220, 142, 0.1);
+  }
+
+  &:focus-visible {
+    outline: 2px solid ${(p) => p.theme.colors.morMain};
+    outline-offset: 2px;
   }
 `;
 
 export const AddressHeader = ({ copyToClipboard, address }) => {
   const context = useContext(ToastsContext);
 
-  const onCopyToClipboardClick = () => {
-    copyToClipboard(address);
-    context.toast('info', 'Address copied to clipboard', {
-      autoClose: 1500
-    });
-  };
+  const onCopyToClipboardClick = () =>
+    copyWalletAddress(address, copyToClipboard, context.toast);
 
   return (
     <Container className="sidebar-address">
       <AddressContainer>
-        <Address data-testid="address">{abbreviateAddress(address, 5)}</Address>
-        <IconCopy
-          style={{ cursor: 'pointer' }}
+        <Address data-testid="address" title={address}>
+          {address ? abbreviateAddress(address, 5) : 'Wallet not connected'}
+        </Address>
+        <CopyButton
+          aria-label="Copy wallet address"
+          title="Copy wallet address"
+          disabled={!address}
           onClick={onCopyToClipboardClick}
-        />
+        >
+          <IconCopy size={18} aria-hidden="true" />
+        </CopyButton>
       </AddressContainer>
     </Container>
   );

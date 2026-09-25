@@ -11,6 +11,7 @@ import { StartupItemComponent } from '@renderer/components/StartupItem';
 import withServicesState from '@renderer/store/hocs/withServicesState';
 import { LoadingState } from 'src/main/orchestrator/orchestrator.types';
 import { ToastsContext } from '@renderer/components/toasts';
+import ConfirmWalletReset from '../common/ConfirmWalletReset';
 
 type CommonProps = {
   client: Client;
@@ -24,6 +25,7 @@ type CommonProps = {
 
 const Common = (props: CommonProps) => {
   const [ethNodeUrl, setEthUrl] = useState<string>('');
+  const [confirmReset, setConfirmReset] = useState(false);
   const [useFailover, setUseFailover] = useState<boolean>(false);
 
   useEffect(() => {
@@ -40,10 +42,25 @@ const Common = (props: CommonProps) => {
 
   return (
     <>
+      <ConfirmWalletReset
+        open={confirmReset}
+        onCancel={() => setConfirmReset(false)}
+        onConfirm={() => props.logout()}
+      />
       <Sp mt={3}>
-        <Subtitle>Reset</Subtitle>
-        <StyledParagraph>Set up your wallet from scratch.</StyledParagraph>
-        <StyledBtn onClick={() => props.logout()}>Reset</StyledBtn>
+        <Subtitle>Erase wallet</Subtitle>
+        {/* Previously labelled "Reset" / "Set up your wallet from scratch",
+            which understated it: this deletes the key material. */}
+        <StyledParagraph>
+          Deletes this wallet&apos;s private key or recovery phrase from this
+          computer and restarts the app into first-time setup. Your funds stay
+          on-chain, but you will need your recovery phrase to reach them again.
+          To add another wallet without losing this one, use the wallet switcher
+          on the Wallet tab.
+        </StyledParagraph>
+        <StyledBtn onClick={() => setConfirmReset(true)}>
+          Erase wallet…
+        </StyledBtn>
       </Sp>
       <Sp mt={3}>
         <Subtitle>Set Custom ETH Node</Subtitle>

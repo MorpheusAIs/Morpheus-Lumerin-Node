@@ -3,7 +3,7 @@ title: "Env: proxy-router"
 description: "Every environment variable consumed by the proxy-router, with mainnet/testnet defaults and explicit precedence rules where two variables overlap."
 audience: ["provider-full", "provider-resale", "prosumer", "developer"]
 product: ["proxy-router"]
-last_verified: "2026-09-22"
+last_verified: "2026-09-25"
 source: "docs/proxy-router.all.env"
 ---
 
@@ -104,14 +104,14 @@ Storage and forwarding are independent. `PROXY_STORE_CHAT_CONTEXT` persists chat
 | Variable | Default | Notes |
 |----------|---------|-------|
 | `ETH_NODE_CHAIN_ID` | `8453` (mainnet) / `84532` (testnet) | BASE chain ID |
-| `ETH_NODE_ADDRESS` | (unset, falls back to built-in public RPC round-robin) | RPC endpoint URL (HTTPS or WSS — must match `ETH_NODE_USE_SUBSCRIPTIONS`). **Set explicitly for any real deployment** — the public round-robin fallback is rate-limited and unreliable; missed events break the node silently. |
+| `ETH_NODE_ADDRESS` | (unset, falls back to built-in public RPC round-robin) | RPC endpoint URL (HTTPS or WSS — must match `ETH_NODE_USE_SUBSCRIPTIONS`). **Set explicitly for any real deployment** — the public round-robin fallback is rate-limited and unreliable; missed events break the node silently. The fallback rotates to the next endpoint on rate limits, `401`/`403` WAF pages, `404`/`405`/`410` (a retired service), and on read-only endpoints that answer `eth_sendRawTransaction` with `method is not allowed` — so opening a session works out of the box even when the first public URL refuses writes. |
 | `ETH_NODE_LEGACY_TX` | `false` | Set `true` to disable EIP-1559 |
 | `BLOCKSCOUT_API_URL` | `https://base.blockscout.com/api/v2` | Block explorer API |
 | `EXPLORER_RETRY_DELAY` | `5` | Delay between explorer retries (seconds) |
 | `EXPLORER_MAX_RETRIES` | `5` | Max explorer retries |
 | `ETH_NODE_USE_SUBSCRIPTIONS` | `false` | `true` to use WSS subscriptions; `false` for HTTP polling |
 | `ETH_NODE_POLLING_INTERVAL` | `10` | Polling interval (seconds, only when `ETH_NODE_USE_SUBSCRIPTIONS=false`) |
-| `ETH_NODE_MAX_RECONNECTS` | `30` | Max reconnect attempts |
+| `ETH_NODE_MAX_RECONNECTS` | `30` | Max WSS resubscribe attempts (`-1` = unlimited). Retries back off exponentially from 0.5 s to a 30 s cap, and each attempt resubscribes from the block after the last event seen. |
 
 ## Environment
 
@@ -149,6 +149,8 @@ For TEE images logging is **frozen** to production / JSON / minimal at build tim
 | `WEB_ADDRESS` | `0.0.0.0:8082` | Bind for the HTTP/Swagger API |
 | `WEB_PUBLIC_URL` | `http://localhost:<WEB_ADDRESS port>` | Public-facing URL of the API. **Set explicitly** for any provider that consumers must reach. |
 | `PROXY_ADDRESS` | `0.0.0.0:3333` | Bind for the consumer-to-provider TCP proxy |
+| `PROXY_CORS_ALLOWED_ORIGINS` | (unset) | Comma-separated list of extra origins allowed to call the HTTP API by browser. Always allowed regardless of this setting: loopback origins, Electron's `null`/`file` origins, and the hosted [MyProvider](/providers/full/myprovider-gui) at `https://myprovider.mor.org`. Set to `*` to allow any origin (not recommended — the API exposes wallet operations such as `/blockchain/send/mor`); needed if you front the API with some other non-localhost browser client. |
+| `MORPHEUS_DESKTOP_INSTANCE_TOKEN` | (unset) | Opaque identifier the Desktop app sets so multiple local proxy-router instances can be told apart. When set, it is echoed back on the `X-Morpheus-Instance-Token` header of `GET /healthcheck`. Not needed outside the bundled Desktop app. |
 
 ## Proxy state & configs
 
@@ -156,7 +158,7 @@ For TEE images logging is **frozen** to production / JSON / minimal at build tim
 |----------|---------|-------|
 | `MAX_CACHED_DESTS` | `5` | Max cached provider destinations |
 | `PROXY_STORAGE_PATH` | `./data/badger/` | Local Badger / runtime state |
-| `PROXY_STORE_CHAT_CONTEXT` | `true` | Persist chat context. **Frozen `false` in `-tee` images.** |
+| `PROXY_STORE_CHAT_CONTEXT` | `true` | Persist chat context as one JSON file per chat under `<PROXY_STORAGE_PATH>/chats/`. The directory is kept at mode `0700` and files at `0600` (enforced on every read and write); writes are atomic (temp file + rename), so a crash mid-write cannot truncate a chat. Multimodal turns keep their `multi_content` parts (image / document attachments) in the stored history. **Frozen `false` in `-tee` images.** |
 | `PROXY_FORWARD_CHAT_CONTEXT` | `false` | Prepend stored history to prompts. Opt-in for clients that send only the latest turn (the bundled Desktop UI sets it to `true`); leave off for OpenAI-compatible clients that already send the full transcript. |
 | `MODELS_CONFIG_PATH` | `./models-config.json` | See [models-config](/reference/models-config). See precedence above. |
 | `MODELS_CONFIG_CONTENT` | (unset) | **Seeds the models config file on first start only.** See precedence above. |
@@ -168,10 +170,11 @@ For TEE images logging is **frozen** to production / JSON / minimal at build tim
 
 | Variable | Default | Notes |
 |----------|---------|-------|
-| `LLM_TIMEOUT` | (depends on release) | P-Node → backend LLM timeout (streaming + non-streaming) |
-| `CNODE_PNODE_TIMEOUT` | (depends on release) | Per-attempt timeout for C-Node waiting for P-Node first response |
-| `CNODE_PNODE_MAX_RETRIES` | (depends on release) | Max retries for C-Node → P-Node read timeout (chat / embeddings) |
-| `CNODE_PNODE_AUDIO_MAX_RETRIES` | (depends on release) | Max retries for audio transcription / speech routes |
+| `LLM_TIMEOUT` | `4m` | P-Node → backend LLM timeout (streaming + non-streaming). Go duration (`30s`, `10m`, `1h`). Empty or `0` **falls back to the default** — there is no "no deadline" setting; raise the value for a genuinely slow model. |
+| `CNODE_PNODE_TIMEOUT` | `90s` | Per-attempt timeout for C-Node waiting for the P-Node's first response on chat / embeddings / media / audio. Empty or `0` falls back to the default. Total budget ≈ `CNODE_PNODE_TIMEOUT × CNODE_PNODE_MAX_RETRIES`. |
+| *(fixed)* | `30s` | Read deadline on the C-Node → P-Node control calls that are not streamed: session handshake (`initiate_session`), provider ping, session reports, agent tool listing / calls, and audio upload chunks. Not configurable. A provider that accepts the TCP connection and then goes silent now fails with `504 provider did not respond within 30s` instead of hanging the request forever. |
+| `CNODE_PNODE_MAX_RETRIES` | `3` | Max retries for C-Node → P-Node read timeout (chat / embeddings) |
+| `CNODE_PNODE_AUDIO_MAX_RETRIES` | `20` | Max retries for audio transcription / speech routes |
 
 For exact defaults check the source of truth ([`config.go`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/internal/config/config.go)) — these can change between releases as we tune the network.
 
@@ -218,7 +221,7 @@ These are only consulted when at least one model in the marketplace is `tee`-tag
 
 | Variable | Default | Notes |
 |----------|---------|-------|
-| `TEE_PORTAL_URL` | `https://secretai.scrtlabs.com/api` | SecretAI Portal used to verify raw TDX CPU quotes |
+| `TEE_PORTAL_URL` | `https://secretai.scrtlabs.com/api/quote-parse` | SecretAI Portal used to verify raw TDX CPU quotes |
 | `TEE_IMAGE_REPO` | `ghcr.io/morpheusais/morpheus-lumerin-node-tee` | GHCR repo where the consumer-side P-Node attestation fetches the signed golden manifest via cosign |
 | `ARTIFACT_REGISTRY_URL` | `https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/tdx.csv` | SecretVM TDX artifact registry CSV (MRTD + RTMR0-2 lookup). Served from the published [secretvm-verify](https://www.npmjs.com/package/secretvm-verify) package after the GitHub repo was removed. |
 | `SEV_ARTIFACT_REGISTRY_URL` | `https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/sev.json` | SecretVM SEV-SNP artifact registry JSON |

@@ -76,24 +76,25 @@ const TransfersMeta = ({ transfers, walletAddress }) => {
   }
 };
 
+// `currency` is an ERC-20 symbol, not an ISO 4217 code. Intl's currency
+// style only accepts well-formed 3-letter codes, so MOR and ETH happened to
+// work while USDC threw "Invalid currency code" and took the wallet tab down.
+// Format the number as a decimal and attach the symbol ourselves, keeping the
+// "MOR 1.2345" shape the currency style used to produce.
 const formatCurrency = ({
   value,
   currency,
   maxSignificantFractionDigits = 5,
 }) => {
-  let style = 'currency';
-
-  if (!currency) {
-    currency = undefined;
-    style = 'decimal';
-  }
+  const withSymbol = (formatted) =>
+    currency ? `${currency} ${formatted}` : formatted;
 
   if (value < 1) {
-    return new Intl.NumberFormat(navigator.language, {
-      style: style,
-      currency: currency,
-      maximumSignificantDigits: 5,
-    }).format(value);
+    return withSymbol(
+      new Intl.NumberFormat(navigator.language, {
+        maximumSignificantDigits: 5,
+      }).format(value),
+    );
   }
 
   const integerDigits = value?.toFixed(0).toString().length;
@@ -102,12 +103,12 @@ const formatCurrency = ({
     fractionDigits = 0;
   }
 
-  return new Intl.NumberFormat(navigator.language, {
-    style: style,
-    currency: currency,
-    minimumFractionDigits: fractionDigits,
-    maximumFractionDigits: fractionDigits,
-  }).format(value);
+  return withSymbol(
+    new Intl.NumberFormat(navigator.language, {
+      minimumFractionDigits: fractionDigits,
+      maximumFractionDigits: fractionDigits,
+    }).format(value),
+  );
 };
 
 export const metaComponentMap = {
