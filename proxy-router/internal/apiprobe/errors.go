@@ -30,8 +30,13 @@ const (
 	// llama.cpp server, type exceed_context_size_error with structured n_ctx:
 	// https://github.com/ggml-org/llama.cpp/blob/master/tools/server/server.cpp
 	ContextSourceLlamaCpp = "health-probe:llamacpp.exceed_context_size_error"
-	// TGI validation error: https://github.com/huggingface/text-generation-inference/blob/main/router/src/validation.rs
+	// TGI ValidationError::MaxTotalTokens, the served window (max_total_tokens):
+	// https://github.com/huggingface/text-generation-inference/blob/v3.3.7/router/src/validation.rs#L999
 	ContextSourceTGI = "health-probe:tgi.validation_error"
+	// TGI ValidationError::InputLength carries max_input_tokens, a lower bound
+	// of the window (TGI requires max_total_tokens > max_input_tokens):
+	// https://github.com/huggingface/text-generation-inference/blob/v3.3.7/router/src/validation.rs#L1001
+	ContextSourceTGIInput = "health-probe:tgi.max_input_tokens"
 	// Anthropic 400 invalid_request_error "prompt is too long":
 	// https://docs.anthropic.com/en/api/errors
 	ContextSourceAnthropic = "health-probe:anthropic.prompt_too_long"
@@ -41,9 +46,13 @@ var (
 	openaiContextRe   = regexp.MustCompile(`(?i)maximum context length is (\d+) tokens`)
 	vllmContextRe     = regexp.MustCompile(`(?i)exceeds (?:the )?model's maximum context length \((\d+)\)`)
 	llamaCppContextRe = regexp.MustCompile(`(?i)exceeds the available context size \((\d+) tokens\)`)
-	tgiContextRe      = regexp.MustCompile("(?i)must (?:be <= |have less than )(\\d+)")
-	anthropicTooLong  = regexp.MustCompile(`(?i)prompt is too long`)
-	anthropicLimitRe  = regexp.MustCompile(`(?i)(\d+) tokens > (\d+) maximum`)
+	// Anchored on the parameter names: the neighbouring MaxNewTokens sentence
+	// ("`max_new_tokens` must be <= N") and any "x must be <= N" range error
+	// carry no window.
+	tgiTotalRe       = regexp.MustCompile("`inputs` tokens \\+ `max_new_tokens` must be <= (\\d+)")
+	tgiInputRe       = regexp.MustCompile("`inputs` must have less than (\\d+) tokens")
+	anthropicTooLong = regexp.MustCompile(`(?i)prompt is too long`)
+	anthropicLimitRe = regexp.MustCompile(`(?i)(\d+) tokens > (\d+) maximum`)
 
 	// OpenAI: "Unrecognized request argument supplied: foo" (plural form with a
 	// comma list): https://platform.openai.com/docs/guides/error-codes
@@ -200,8 +209,11 @@ func ParseContextLimit(body []byte, status int) (limit int64, source string, ok 
 	if n, found := firstNumber(openaiContextRe, p.texts, 1); found {
 		return n, ContextSourceOpenAI, true
 	}
-	if n, found := firstNumber(tgiContextRe, p.texts, 1); found {
+	if n, found := firstNumber(tgiTotalRe, p.texts, 1); found {
 		return n, ContextSourceTGI, true
+	}
+	if n, found := firstNumber(tgiInputRe, p.texts, 1); found {
+		return n, ContextSourceTGIInput, true
 	}
 	if matchesAny(anthropicTooLong, p.texts) {
 		if n, found := firstNumber(anthropicLimitRe, p.texts, 2); found {

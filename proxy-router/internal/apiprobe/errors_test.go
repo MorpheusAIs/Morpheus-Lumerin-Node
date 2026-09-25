@@ -62,9 +62,24 @@ func TestParseContextLimit(t *testing.T) {
 			status: 422, limit: 4096, source: ContextSourceTGI, ok: true,
 		},
 		{
-			name:   "tgi must have less than",
+			name:   "tgi input length reports the input bound under its own source",
 			body:   "{\"error\":\"Input validation error: `inputs` must have less than 4095 tokens. Given: 5000\",\"error_type\":\"validation\"}",
-			status: 422, limit: 4095, source: ContextSourceTGI, ok: true,
+			status: 422, limit: 4095, source: ContextSourceTGIInput, ok: true,
+		},
+		{
+			name:   "tgi max_new_tokens validation is not a window",
+			body:   "{\"error\":\"Input validation error: `max_new_tokens` must be <= 1000. Given: 5000\",\"error_type\":\"validation\"}",
+			status: 422, ok: false,
+		},
+		{
+			name:   "tgi top_n_tokens validation is not a window",
+			body:   "{\"error\":\"Input validation error: `top_n_tokens` must be <= 5. Given: 10\",\"error_type\":\"validation\"}",
+			status: 422, ok: false,
+		},
+		{
+			name:   "a parameter range error is not a window",
+			body:   `{"error":{"message":"temperature must be <= 2","type":"invalid_request_error"}}`,
+			status: 400, ok: false,
 		},
 		{
 			name:   "anthropic prompt too long with totals",
