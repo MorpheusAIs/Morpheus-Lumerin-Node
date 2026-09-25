@@ -165,6 +165,21 @@ func (d *Detector) DetectWithTrace(ctx context.Context, cfg config.ModelConfig) 
 	return api, trace.lines
 }
 
+// Runs for a model whose host resolved to the hosted vendor `ev.Stack`; the
+// probe owns its own trace lines. Keyed by the stack name StackFromHost
+// returns; vendors without an entry are not probed.
+type hostedProbe func(ctx context.Context, d *Detector, bases []string, cfg config.ModelConfig, ev *apispec.Evidence)
+
+var hostedProbes = map[string]hostedProbe{}
+
+// Called from init() in the probe file that owns the vendor.
+func registerHostedProbe(stack string, probe hostedProbe) {
+	if _, dup := hostedProbes[stack]; dup {
+		panic("apidetect: hosted probe for " + stack + " registered twice")
+	}
+	hostedProbes[stack] = probe
+}
+
 func (d *Detector) detect(ctx context.Context, cfg config.ModelConfig) *system.ModelApiSpec {
 	ev := apispec.Evidence{ModelName: cfg.ModelName, ModelFamily: cfg.ModelFamily}
 
@@ -175,8 +190,7 @@ func (d *Detector) detect(ctx context.Context, cfg config.ModelConfig) *system.M
 	}
 	bases := baseCandidates(cfg.ApiURL)
 
-	switch ev.Stack {
-	case "":
+	if ev.Stack == "" {
 		apiURLText := "(no apiUrl)"
 		if cfg.ApiURL != "" {
 			apiURLText = RedactURL(cfg.ApiURL)
@@ -187,10 +201,9 @@ func (d *Detector) detect(ctx context.Context, cfg config.ModelConfig) *system.M
 			tracef(ctx, "no engine fingerprint matched; checking for a registry-shaped model listing")
 			d.probeRegistryShape(ctx, bases, cfg.ModelName, cfg.ApiKey, &ev)
 		}
-	case "openrouter", "venice":
-		tracef(ctx, "host recognized as %s by hostname; importing its model listing", ev.Stack)
-		d.probeRegistryShape(ctx, bases, cfg.ModelName, cfg.ApiKey, &ev)
-	default:
+	} else if probe, ok := hostedProbes[ev.Stack]; ok {
+		probe(ctx, d, bases, cfg, &ev)
+	} else {
 		tracef(ctx, "host recognized as hosted vendor %q by hostname; no probing needed", ev.Stack)
 	}
 

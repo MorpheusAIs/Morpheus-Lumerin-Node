@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apispec"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 )
 
 // Registry listings grow with the vendor's catalogue (OpenRouter ~0.7 MB).
@@ -19,6 +20,17 @@ var veniceCapabilityNames = map[string]string{
 	"supportsWebSearch":       "web_search",
 	"supportsResponseSchema":  "response_format",
 	"supportsLogProbs":        "logprobs",
+}
+
+func init() {
+	for _, vendor := range []string{"openrouter", "venice"} {
+		registerHostedProbe(vendor, probeHostedRegistry)
+	}
+}
+
+func probeHostedRegistry(ctx context.Context, d *Detector, bases []string, cfg config.ModelConfig, ev *apispec.Evidence) {
+	tracef(ctx, "host recognized as %s by hostname; importing its model listing", ev.Stack)
+	d.probeRegistryShape(ctx, bases, cfg.ModelName, cfg.ApiKey, ev)
 }
 
 func (d *Detector) probeRegistryShape(ctx context.Context, bases []string, modelName, apiKey string, ev *apispec.Evidence) {
