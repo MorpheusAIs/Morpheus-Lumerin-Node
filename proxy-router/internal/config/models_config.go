@@ -219,6 +219,9 @@ func (e *ModelConfigLoader) loadCapabilities(modelID string, cfg ModelConfig) *D
 		e.log.Errorf("%s — capabilities ignored for this model", err)
 		return nil
 	}
+	if cfg.Capabilities.Empty() {
+		return nil
+	}
 	return cfg.Capabilities
 }
 

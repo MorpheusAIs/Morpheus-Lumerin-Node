@@ -171,10 +171,11 @@ func TestInitV2KeepsValidCapabilitiesAndDropsInvalidOnes(t *testing.T) {
 		{"modelId":"0x03","modelName":"unknownkey","apiType":"openai","apiUrl":"http://h/v1","capabilities":{"context":4096,"reasoning":true}},
 		{"modelId":"0x04","modelName":"badtype","apiType":"openai","apiUrl":"http://h/v1","capabilities":{"tools":"yes"}},
 		{"modelId":"0x05","modelName":"badvocab","apiType":"openai","apiStack":"ollama","apiUrl":"http://h/v1","capabilities":{"modalities":{"input":["vision"]}}},
-		{"modelId":"0x06","modelName":"none","apiType":"openai","apiUrl":"http://h/v1"}]}`)
+		{"modelId":"0x06","modelName":"none","apiType":"openai","apiUrl":"http://h/v1"},
+		{"modelId":"0x07","modelName":"emptyblock","apiType":"openai","apiStack":"vllm","apiUrl":"http://h/v1","capabilities":{}}]}`)
 	require.NoError(t, l.Init(), "an invalid capabilities block never fails the load")
 	ids, _ := l.GetAll()
-	require.Len(t, ids, 6, "every model is stored; only the bad capabilities are dropped")
+	require.Len(t, ids, 7, "every model is stored; only the bad capabilities are dropped")
 
 	ok := l.ModelConfigFromID("0x01")
 	require.NotNil(t, ok.Capabilities)
@@ -194,6 +195,8 @@ func TestInitV2KeepsValidCapabilitiesAndDropsInvalidOnes(t *testing.T) {
 	}
 	require.Equal(t, "ollama", l.ModelConfigFromID("0x05").ApiStack, "a bad capabilities block does not cost the model its apiStack")
 	require.Nil(t, l.ModelConfigFromID("0x06").Capabilities)
+	require.Nil(t, l.ModelConfigFromID("0x07").Capabilities, "{} declares nothing and is stored as absent")
+	require.Equal(t, "vllm", l.ModelConfigFromID("0x07").ApiStack)
 }
 
 func TestInitLegacyMapValidatesCapabilities(t *testing.T) {

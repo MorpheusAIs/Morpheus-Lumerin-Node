@@ -86,28 +86,14 @@ func TestDeclaredCapabilitiesStrictDecodeRecordsErrorsInsteadOfFailing(t *testin
 	})
 }
 
-func TestDeclaredCapabilitiesCloneIsDeep(t *testing.T) {
+func TestDeclaredCapabilitiesEmpty(t *testing.T) {
 	var nilCaps *DeclaredCapabilities
-	require.Nil(t, nilCaps.Clone())
-	orig := &DeclaredCapabilities{Context: i64(1), MaxOutput: i64(2), Modalities: &DeclaredModalities{Input: []string{"text"}, Output: []string{"text"}}, Tools: bp(true), Structured: []string{"json_schema"}, WebSearch: bp(false), Embeddings: bp(false)}
-	c := orig.Clone()
-	require.Equal(t, orig, c)
-	*c.Context = 9
-	*c.MaxOutput = 9
-	*c.Tools = false
-	*c.WebSearch = true
-	*c.Embeddings = true
-	c.Modalities.Input[0] = "mutated"
-	c.Modalities.Output[0] = "mutated"
-	c.Structured[0] = "mutated"
-	require.Equal(t, int64(1), *orig.Context)
-	require.Equal(t, int64(2), *orig.MaxOutput)
-	require.True(t, *orig.Tools)
-	require.False(t, *orig.WebSearch)
-	require.False(t, *orig.Embeddings)
-	require.Equal(t, []string{"text"}, orig.Modalities.Input)
-	require.Equal(t, []string{"text"}, orig.Modalities.Output)
-	require.Equal(t, []string{"json_schema"}, orig.Structured)
+	require.True(t, nilCaps.Empty())
+	require.True(t, (&DeclaredCapabilities{}).Empty())
+	require.True(t, (&DeclaredCapabilities{Modalities: nil}).Empty())
+	require.False(t, (&DeclaredCapabilities{Tools: bp(false)}).Empty(), "an explicit false is a declared fact")
+	require.False(t, (&DeclaredCapabilities{Modalities: &DeclaredModalities{}}).Empty(), "an empty modalities object is still a set field")
+	require.False(t, (&DeclaredCapabilities{Structured: []string{}}).Empty())
 }
 
 func TestCapabilityVocabularies(t *testing.T) {

@@ -74,45 +74,10 @@ func (d *DeclaredCapabilities) UnmarshalJSON(raw []byte) error {
 	return nil
 }
 
-func (d *DeclaredCapabilities) Clone() *DeclaredCapabilities {
-	if d == nil {
-		return nil
-	}
-	c := *d
-	if d.Context != nil {
-		v := *d.Context
-		c.Context = &v
-	}
-	if d.MaxOutput != nil {
-		v := *d.MaxOutput
-		c.MaxOutput = &v
-	}
-	if d.Tools != nil {
-		v := *d.Tools
-		c.Tools = &v
-	}
-	if d.WebSearch != nil {
-		v := *d.WebSearch
-		c.WebSearch = &v
-	}
-	if d.Embeddings != nil {
-		v := *d.Embeddings
-		c.Embeddings = &v
-	}
-	if d.Structured != nil {
-		c.Structured = append([]string(nil), d.Structured...)
-	}
-	if d.Modalities != nil {
-		m := DeclaredModalities{}
-		if d.Modalities.Input != nil {
-			m.Input = append([]string(nil), d.Modalities.Input...)
-		}
-		if d.Modalities.Output != nil {
-			m.Output = append([]string(nil), d.Modalities.Output...)
-		}
-		c.Modalities = &m
-	}
-	return &c
+// Empty is true for a block that sets no field ({}): it declares nothing.
+func (d *DeclaredCapabilities) Empty() bool {
+	return d == nil || (d.Context == nil && d.MaxOutput == nil && d.Modalities == nil &&
+		d.Tools == nil && d.Structured == nil && d.WebSearch == nil && d.Embeddings == nil)
 }
 
 func ValidateDeclaredCapabilities(modelID string, caps *DeclaredCapabilities) error {
