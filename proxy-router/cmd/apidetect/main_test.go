@@ -1,9 +1,17 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apispec"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 	"github.com/stretchr/testify/require"
 )
@@ -193,4 +201,200 @@ func TestJSONReportCarriesNewFields(t *testing.T) {
 	require.NotContains(t, string(legacy), `"capabilities"`)
 	require.NotContains(t, string(legacy), `"evidence"`)
 	require.NotContains(t, string(legacy), `"verified"`)
+}
+
+// The -verify path against a fake llama.cpp-shaped OpenAI backend: /props
+// carries the Qwen3 template so detection yields a template_kwarg
+// reasoning.disable binding the verifier can apply, and the chat endpoint
+// answers every probe with one of two behaviours.
+
+const testQwen3Template = `{%- if messages %}{% generation %}{% endgeneration %}{%- endif %}
+{%- if enable_thinking is defined and enable_thinking is false %}<think></think>{%- endif %}`
+
+const (
+	testAt  = int64(1790330400)
+	testKey = "sk-test-secret-key"
+)
+
+// rejectKwargs makes the backend answer a request carrying
+// chat_template_kwargs with OpenAI's unrecognised-argument error.
+func fakeBackend(t *testing.T, rejectKwargs bool) *httptest.Server {
+	t.Helper()
+	writeJSON := func(w http.ResponseWriter, status int, v any) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(v)
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/props", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"default_generation_settings": map[string]any{"id": 0, "n_ctx": 8192},
+			"total_slots":                 1,
+			"chat_template":               testQwen3Template,
+			"build_info":                  "b11177-abcdef0",
+		})
+	})
+	mux.HandleFunc("/v1/models", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"object": "list",
+			"data":   []map[string]any{{"id": "qwen3-32b", "object": "model", "owned_by": "llamacpp"}},
+		})
+	})
+	mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.NotFound(w, r)
+			return
+		}
+		require.Equal(t, "Bearer "+testKey, r.Header.Get("Authorization"), "the probes carry the model's key")
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		if _, ok := body["chat_template_kwargs"]; ok && rejectKwargs {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{
+				"message": "Unrecognized request argument supplied: chat_template_kwargs",
+				"type":    "invalid_request_error",
+			}})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"id": "chatcmpl-probe", "object": "chat.completion", "model": body["model"],
+			"choices": []map[string]any{{"index": 0, "finish_reason": "length", "message": map[string]any{"role": "assistant", "content": "5"}}},
+		})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func writeConfig(t *testing.T, models ...map[string]any) string {
+	t.Helper()
+	raw, err := json.Marshal(map[string]any{"models": models})
+	require.NoError(t, err)
+	path := filepath.Join(t.TempDir(), "models-config.json")
+	require.NoError(t, os.WriteFile(path, raw, 0o644))
+	return path
+}
+
+func pinClock(t *testing.T) {
+	t.Helper()
+	prev := now
+	now = func() time.Time { return time.Unix(testAt, 0) }
+	t.Cleanup(func() { now = prev })
+}
+
+func runCLI(t *testing.T, args ...string) (code int, stdout, stderr string) {
+	t.Helper()
+	var out, errOut bytes.Buffer
+	code = run(args, &out, &errOut)
+	return code, out.String(), errOut.String()
+}
+
+func TestVerifyRequiresExactlyOneModel(t *testing.T) {
+	srv := fakeBackend(t, false)
+	cfg := writeConfig(t,
+		map[string]any{"modelId": "0x01", "modelName": "qwen3-32b", "apiType": "openai", "apiUrl": srv.URL + "/v1/chat/completions"},
+		map[string]any{"modelId": "0x02", "modelName": "qwen3-8b", "apiType": "openai", "apiUrl": srv.URL + "/v1/chat/completions"},
+	)
+
+	code, _, stderr := runCLI(t, "-config", cfg, "-verify")
+	require.Equal(t, 2, code)
+	require.Contains(t, stderr, "-verify needs -model")
+
+	code, _, stderr = runCLI(t, "-config", cfg, "-verify", "-model", "qwen3")
+	require.Equal(t, 2, code)
+	require.Contains(t, stderr, "matches 2")
+	require.Contains(t, stderr, "qwen3-32b (0x01)")
+}
+
+func TestVerifyVerifiedBindingText(t *testing.T) {
+	pinClock(t)
+	srv := fakeBackend(t, false)
+	cfg := writeConfig(t, map[string]any{"modelId": "0x01", "modelName": "qwen3-32b", "apiType": "openai", "apiUrl": srv.URL + "/v1/chat/completions", "apiKey": testKey})
+
+	code, stdout, stderr := runCLI(t, "-config", cfg, "-verify", "-model", "qwen3-32b")
+	require.Equal(t, 0, code, stderr)
+	require.NotContains(t, stdout+stderr, testKey)
+	require.Empty(t, stderr, "a self-hosted stack gets no cost warning")
+
+	require.Contains(t, stdout, "    stack:       llamacpp\n")
+	require.Contains(t, stdout, "      reasoning.disable: template_kwarg chat_template_kwargs.enable_thinking (boolean, value=false) [verified 2026-09-25T10:00:00Z]\n")
+	require.Contains(t, stdout, "      tools:             true\n")
+	require.Contains(t, stdout, "      bindings.reasoning.disable -> verify:reasoning.disable@1790330400\n")
+	require.Contains(t, stdout, "      capabilities.structured -> llamacpp:/props\n", "the stack already lists json_schema; the probe adds nothing")
+	require.Contains(t, stdout, "      capabilities.tools -> verify:tools@1790330400\n")
+	require.Contains(t, stdout, "      capabilities.modalities.input -> verify:image@1790330400\n")
+
+	want := "  verify:\n" +
+		"    requests:\n" +
+		"      - POST /v1/chat/completions -> HTTP 200\n" +
+		"      - POST /v1/chat/completions -> HTTP 200\n" +
+		"      - POST /v1/chat/completions -> HTTP 200\n" +
+		"      - POST /v1/chat/completions -> HTTP 200\n" +
+		"    verdicts:\n" +
+		"      - reasoning.disable: accepted (HTTP 200): no reasoning content with the binding applied\n" +
+		"      - tools: accepted (HTTP 200): accepted\n" +
+		"      - json_schema: accepted (HTTP 200): accepted\n" +
+		"      - image: accepted (HTTP 200): accepted\n" +
+		"    merge:\n" +
+		"      - bindings.reasoning.disable verified = true (verify:reasoning.disable@1790330400): no reasoning content with the binding applied\n"
+	require.Contains(t, stdout, want)
+	require.Contains(t, stdout, "      - capabilities.tools = true (verify:tools@1790330400)\n")
+	require.Contains(t, stdout, "      - capabilities.modalities.input = image (verify:image@1790330400)\n")
+	require.Contains(t, stdout, "      - capabilities.structured: runtime value [json_schema] adds nothing to [json_object json_schema grammar]\n")
+	require.Contains(t, stdout, "      - capabilities.modalities.input: text prepended — a chat model accepts text (verify:image@1790330400)\n")
+}
+
+func TestVerifyRejectedBindingJSON(t *testing.T) {
+	pinClock(t)
+	srv := fakeBackend(t, true)
+	cfg := writeConfig(t, map[string]any{"modelId": "0x01", "modelName": "qwen3-32b", "apiType": "openai", "apiUrl": srv.URL + "/v1/chat/completions", "apiKey": testKey})
+
+	code, stdout, stderr := runCLI(t, "-config", cfg, "-verify", "-model", "0x01", "-json")
+	require.Equal(t, 0, code, stderr)
+	require.NotContains(t, stdout+stderr, testKey)
+
+	var reports []struct {
+		Api            *system.ModelApiSpec `json:"api"`
+		Runtime        *apispec.Runtime     `json:"runtime"`
+		VerifyTrace    []string             `json:"verifyTrace"`
+		VerifyRequests []probeRequest       `json:"verifyRequests"`
+		VerifyVerdicts []probeVerdict       `json:"verifyVerdicts"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(stdout), &reports))
+	require.Len(t, reports, 1)
+	r := reports[0]
+
+	require.NotNil(t, r.Runtime)
+	require.Equal(t, []string{"chat_template_kwargs"}, r.Runtime.RejectedParams)
+	require.Empty(t, r.Runtime.Verified)
+	require.NotNil(t, r.Runtime.ToolsSupported)
+	require.True(t, *r.Runtime.ToolsSupported)
+	require.Equal(t, testAt, r.Runtime.At)
+
+	require.NotNil(t, r.Api)
+	require.Equal(t, "llamacpp", r.Api.Stack)
+	require.Nil(t, r.Api.Bindings[system.IntentReasoningDisable], "the rejected binding is dropped")
+	require.Nil(t, r.Api.Bindings[system.IntentReasoningEnable], "the sibling on the rejected parameter goes with it")
+	require.Equal(t, "verify:rejected:chat_template_kwargs@1790330400", r.Api.Evidence[system.EvidenceKeyBinding(system.IntentReasoningDisable)])
+	require.Equal(t, "verify:tools@1790330400", r.Api.Evidence[system.EvidenceKeyCapability("tools")])
+
+	require.Equal(t, []probeRequest{
+		{Method: "POST", Path: "/v1/chat/completions", Status: 400},
+		{Method: "POST", Path: "/v1/chat/completions", Status: 200},
+		{Method: "POST", Path: "/v1/chat/completions", Status: 200},
+		{Method: "POST", Path: "/v1/chat/completions", Status: 200},
+	}, r.VerifyRequests)
+	require.Len(t, r.VerifyVerdicts, 4)
+	require.Equal(t, probeVerdict{Probe: "reasoning.disable", Outcome: "rejected", Status: 400, Reason: "backend rejected chat_template_kwargs", RejectedParams: []string{"chat_template_kwargs"}}, r.VerifyVerdicts[0])
+
+	joined := strings.Join(r.VerifyTrace, "\n")
+	require.Contains(t, joined, "bindings: reasoning.disable dropped — backend rejected parameter chat_template_kwargs (verify:rejected:chat_template_kwargs@1790330400)")
+	require.Contains(t, joined, "bindings: reasoning.enable dropped")
+	require.Contains(t, joined, "thinking.mode: controllable -> tunable after the drop", "reasoning.budget from the stack table survives the drop")
+}
+
+func TestVerifyWarnsBeforeProbingHostedStack(t *testing.T) {
+	require.Contains(t, hostedWarning(&system.ModelApiSpec{Stack: "openai"}), "hosted vendor")
+	require.Contains(t, hostedWarning(&system.ModelApiSpec{Stack: "vllm", Via: "litellm"}), "through litellm")
+	require.Contains(t, hostedWarning(nil), "not identified")
+	require.Empty(t, hostedWarning(&system.ModelApiSpec{Stack: "vllm"}))
 }
