@@ -21,7 +21,9 @@ const (
 	openrouterReasoningSource = openrouterModelsSource + ".reasoning"
 	openrouterEffortsSource   = openrouterReasoningSource + ".supported_efforts"
 	// The web plugin (plugins: [{id: "web"}], alias ":online") attaches
-	// search results to any model, so the capability holds listing-wide:
+	// search results to any model, so the capability holds listing-wide on
+	// the OpenRouter service itself (hostname-recognized), not on another
+	// host whose listing merely shares the shape:
 	// https://openrouter.ai/docs/guides/features/plugins/web-search
 	openrouterPluginsSource = openrouterModelsSource + ".plugins"
 )
@@ -64,6 +66,10 @@ func probeHostedRegistry(ctx context.Context, d *Detector, bases []string, cfg c
 }
 
 func (d *Detector) probeRegistryShape(ctx context.Context, bases []string, modelName, apiKey string, ev *apispec.Evidence) {
+	// A stack set before the listing is read came from hostname recognition;
+	// the fingerprint fallback arrives with none, and service-level facts are
+	// then not asserted from the listing's shape alone.
+	hosted := ev.Stack != ""
 	for _, base := range bases {
 		list := d.requestJSON(ctx, http.MethodGet, base+"/models", apiKey, nil, maxRegistryBody)
 		if list == nil {
@@ -84,7 +90,7 @@ func (d *Detector) probeRegistryShape(ctx context.Context, bases []string, model
 				ev.Stack = "openrouter"
 			}
 			tracef(ctx, "model listing at %s/models has supported_parameters -> openrouter-style registry", base)
-			readOpenRouterEntry(ctx, entry, params, modelName, ev)
+			readOpenRouterEntry(ctx, entry, params, modelName, hosted, ev)
 			return
 		}
 
@@ -99,7 +105,7 @@ func (d *Detector) probeRegistryShape(ctx context.Context, bases []string, model
 	}
 }
 
-func readOpenRouterEntry(ctx context.Context, entry map[string]any, params []any, modelName string, ev *apispec.Evidence) {
+func readOpenRouterEntry(ctx context.Context, entry map[string]any, params []any, modelName string, hosted bool, ev *apispec.Evidence) {
 	var structured []string
 	for _, p := range params {
 		s, ok := p.(string)
@@ -138,8 +144,12 @@ func readOpenRouterEntry(ctx context.Context, entry map[string]any, params []any
 		ev.Caps.SetStructured(structured, openrouterParamsSource)
 	}
 	if ev.Caps.WebSearch == nil {
-		ev.Caps.SetWebSearch(true, openrouterPluginsSource)
-		tracef(ctx, "/models: the web plugin searches for any openrouter model -> webSearch")
+		if hosted {
+			ev.Caps.SetWebSearch(true, openrouterPluginsSource)
+			tracef(ctx, "/models: the web plugin searches for any openrouter model -> webSearch")
+		} else {
+			tracef(ctx, "/models: openrouter-shaped listing on an unrecognized host; the web plugin is not assumed, webSearch left unset")
+		}
 	}
 
 	if n, ok := registryInt(entry["context_length"]); ok {
@@ -194,7 +204,8 @@ func readOpenRouterEntry(ctx context.Context, entry map[string]any, params []any
 	if !ok {
 		return
 	}
-	if mandatory, ok := reasoning["mandatory"].(bool); ok && mandatory {
+	mandatory, _ := reasoning["mandatory"].(bool)
+	if mandatory {
 		ev.MandatoryReasoning = true
 		tracef(ctx, "/models.reasoning.mandatory -> reasoning cannot be disabled")
 	}
@@ -203,14 +214,31 @@ func readOpenRouterEntry(ctx context.Context, entry map[string]any, params []any
 		ev.EffortsSource = openrouterEffortsSource
 		tracef(ctx, "/models.reasoning.supported_efforts %v -> reasoning.effort levels", efforts)
 	}
-	if effort, ok := reasoning["default_effort"].(string); ok && effort != "" {
+	// default_enabled is whether reasoning runs unasked; default_effort is the
+	// level applied once it runs. The level is a default only when the toggle
+	// is on or reasoning is mandatory (the live listing pairs
+	// default_enabled: false with a default_effort on many models).
+	enabled, hasEnabled := reasoning["default_enabled"].(bool)
+	effort, _ := reasoning["default_effort"].(string)
+	switch {
+	case !mandatory && hasEnabled && !enabled:
+		ev.ThinkingDefault = "off"
+		ev.ThinkingDefaultSource = openrouterReasoningSource + ".default_enabled"
+		tracef(ctx, "/models.reasoning.default_enabled false -> thinking.default off (default_effort %q applies only when reasoning is requested)", effort)
+	case !mandatory && !hasEnabled:
+		tracef(ctx, "/models.reasoning.default_enabled absent and reasoning not mandatory; thinking.default left unset (default_effort %q applies only when reasoning is requested)", effort)
+	case effort != "":
 		ev.ThinkingDefault = effort
 		ev.ThinkingDefaultSource = openrouterReasoningSource + ".default_effort"
 		tracef(ctx, "/models.reasoning.default_effort %q -> thinking.default", effort)
-	} else if enabled, ok := reasoning["default_enabled"].(bool); ok {
-		ev.ThinkingDefault = onOff(enabled)
+	case hasEnabled:
+		ev.ThinkingDefault = "on"
 		ev.ThinkingDefaultSource = openrouterReasoningSource + ".default_enabled"
-		tracef(ctx, "/models.reasoning.default_enabled %t -> thinking.default %s", enabled, ev.ThinkingDefault)
+		tracef(ctx, "/models.reasoning.default_enabled true -> thinking.default on")
+	default:
+		ev.ThinkingDefault = "on"
+		ev.ThinkingDefaultSource = openrouterReasoningSource + ".mandatory"
+		tracef(ctx, "/models.reasoning.mandatory -> thinking.default on")
 	}
 	if supportsMax, ok := reasoning["supports_max_tokens"].(bool); ok && !supportsMax {
 		tracef(ctx, "/models.reasoning.supports_max_tokens false; the reasoning.budget binding stays as documented for the stack")
@@ -282,13 +310,6 @@ func readVeniceSpec(ctx context.Context, spec map[string]any, ev *apispec.Eviden
 			tracef(ctx, "/models.model_spec.capabilities.quantization is not a plain label; ignored")
 		}
 	}
-}
-
-func onOff(v bool) string {
-	if v {
-		return "on"
-	}
-	return "off"
 }
 
 // JSON numbers decode as float64; a fractional or non-numeric value is not a

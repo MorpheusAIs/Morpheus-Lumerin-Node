@@ -37,7 +37,7 @@ func openrouterEntry(id string, overrides map[string]any) map[string]any {
 		},
 		"reasoning": map[string]any{
 			"mandatory":           false,
-			"default_enabled":     false,
+			"default_enabled":     true,
 			"supported_efforts":   []string{"none", "low", "medium", "high"},
 			"default_effort":      "medium",
 			"supports_max_tokens": true,
@@ -110,6 +110,21 @@ func detectListing(t *testing.T, vendor string, entries ...map[string]any) (*sys
 	api, trace := newTestDetector().DetectWithTrace(context.Background(), config.ModelConfig{ModelName: id, ApiType: "openai", ApiURL: srv.URL + "/api/v1/chat/completions"})
 	require.NotNil(t, api)
 	require.Equal(t, vendor, api.Stack)
+	return api, strings.Join(trace, "\n")
+}
+
+// detectListingByShape serves the listing on a host no vendor table knows, so
+// the detector reaches probeRegistryShape through the fingerprint fallback.
+func detectListingByShape(t *testing.T, entries ...map[string]any) (*system.ModelApiSpec, string) {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/models", jsonHandler(map[string]any{"data": entries}))
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	id, _ := entries[0]["id"].(string)
+	api, trace := newTestDetector().DetectWithTrace(context.Background(), config.ModelConfig{ModelName: id, ApiType: "openai", ApiURL: srv.URL + "/api/v1/chat/completions"})
+	require.NotNil(t, api)
 	return api, strings.Join(trace, "\n")
 }
 
@@ -222,6 +237,123 @@ func TestOpenRouterEntryVariants(t *testing.T) {
 			"reasoning": map[string]any{"mandatory": false, "default_enabled": false, "supported_efforts": []string{"none", "high"}},
 		}))
 		require.Equal(t, "off", api.Thinking.Default)
+		require.Equal(t, "openrouter:/models.reasoning.default_enabled", api.Evidence["thinking.default"])
+	})
+
+	// Live listing: anthropic/claude-opus-4.8 reports default_enabled: false
+	// with default_effort: "high"; the level is what applies once reasoning
+	// is requested, not evidence that it runs unasked.
+	t.Run("default_enabled false wins over a default effort", func(t *testing.T) {
+		api, trace := detectListing(t, "openrouter", openrouterEntry("vendor/opt-in", map[string]any{
+			"reasoning": map[string]any{
+				"mandatory": false, "default_enabled": false, "supported_efforts": []string{"none", "low", "medium", "high"}, "default_effort": "high",
+			},
+		}))
+		require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
+		require.Equal(t, "off", api.Thinking.Default)
+		require.Equal(t, "openrouter:/models.reasoning.default_enabled", api.Evidence["thinking.default"])
+		require.Contains(t, trace, `/models.reasoning.default_enabled false -> thinking.default off (default_effort "high" applies only when reasoning is requested)`)
+		require.NotContains(t, trace, `/models.reasoning.default_effort "high" -> thinking.default`)
+	})
+
+	t.Run("default_enabled absent and not mandatory publishes no default", func(t *testing.T) {
+		api, trace := detectListing(t, "openrouter", openrouterEntry("vendor/unstated", map[string]any{
+			"reasoning": map[string]any{"mandatory": false, "supported_efforts": []string{"low", "medium", "high"}, "default_effort": "medium"},
+		}))
+		require.NotNil(t, api.Thinking)
+		require.Empty(t, api.Thinking.Default)
+		require.NotContains(t, api.Evidence, "thinking.default")
+		require.Equal(t, []string{"low", "medium", "high"}, api.Bindings[system.IntentReasoningEffort].EnumValues)
+		require.Contains(t, trace, "/models.reasoning.default_enabled absent and reasoning not mandatory; thinking.default left unset")
+	})
+
+	t.Run("mandatory reasoning takes the default effort as its level", func(t *testing.T) {
+		api, _ := detectListing(t, "openrouter", openrouterEntry("vendor/forced", map[string]any{
+			"reasoning": map[string]any{"mandatory": true, "supported_efforts": []string{"low", "medium", "high"}, "default_effort": "high"},
+		}))
+		require.Equal(t, system.ThinkingModeAlwaysOn, api.Thinking.Mode)
+		require.Equal(t, "high", api.Thinking.Default)
+		require.Equal(t, "openrouter:/models.reasoning.default_effort", api.Evidence["thinking.default"])
+	})
+
+	t.Run("mandatory reasoning without a toggle or level is on", func(t *testing.T) {
+		api, _ := detectListing(t, "openrouter", openrouterEntry("vendor/forced-plain", map[string]any{
+			"reasoning": map[string]any{"mandatory": true},
+		}))
+		require.Equal(t, system.ThinkingModeAlwaysOn, api.Thinking.Mode)
+		require.Equal(t, "on", api.Thinking.Default)
+		require.Equal(t, "openrouter:/models.reasoning.mandatory", api.Evidence["thinking.default"])
+	})
+
+	// Live listing: openai/gpt-5.1 reports default_enabled: true with
+	// default_effort: "none" — the rule-5 off switch is itself a level.
+	t.Run("default_enabled true keeps a none level as reported", func(t *testing.T) {
+		api, _ := detectListing(t, "openrouter", openrouterEntry("vendor/none-level", map[string]any{
+			"reasoning": map[string]any{
+				"mandatory": false, "default_enabled": true, "supported_efforts": []string{"none", "low", "medium", "high"}, "default_effort": "none",
+			},
+		}))
+		require.Equal(t, "none", api.Thinking.Default)
+		require.Equal(t, "openrouter:/models.reasoning.default_effort", api.Evidence["thinking.default"])
+	})
+
+	t.Run("the web plugin is asserted only for a hostname-recognized openrouter", func(t *testing.T) {
+		api, trace := detectListingByShape(t, openrouterEntry("vendor/model", nil))
+		require.Equal(t, "openrouter", api.Stack)
+		require.NotNil(t, api.Capabilities)
+		require.Nil(t, api.Capabilities.WebSearch)
+		require.NotContains(t, api.Evidence, "capabilities.webSearch")
+		require.Equal(t, true, *api.Capabilities.Tools, "facts read from the listing itself still apply")
+		require.EqualValues(t, 163840, *api.Capabilities.Context)
+		require.Contains(t, trace, "/models: openrouter-shaped listing on an unrecognized host; the web plugin is not assumed, webSearch left unset")
+		require.NotContains(t, trace, "the web plugin searches for any openrouter model")
+	})
+
+	t.Run("web_search_options on an unrecognized host is still the model's own evidence", func(t *testing.T) {
+		api, _ := detectListingByShape(t, openrouterEntry("vendor/search", map[string]any{
+			"supported_parameters": []string{"tools", "web_search_options"},
+		}))
+		require.Equal(t, true, *api.Capabilities.WebSearch)
+		require.Equal(t, "openrouter:/models.supported_parameters", api.Evidence["capabilities.webSearch"])
+	})
+
+	t.Run("a string-typed context_length is not a token count", func(t *testing.T) {
+		api, _ := detectListing(t, "openrouter", openrouterEntry("vendor/stringy", map[string]any{
+			"context_length": "163840",
+			"top_provider":   map[string]any{"context_length": "131072", "max_completion_tokens": "32768"},
+		}))
+		require.Nil(t, api.Capabilities.Context)
+		require.Nil(t, api.Capabilities.MaxOutput)
+		require.NotContains(t, api.Evidence, "capabilities.context")
+		require.NotContains(t, api.Evidence, "capabilities.maxOutput")
+	})
+
+	t.Run("max_completion_tokens out of range is ignored", func(t *testing.T) {
+		api, trace := detectListing(t, "openrouter", openrouterEntry("vendor/huge-output", map[string]any{
+			"top_provider": map[string]any{"context_length": 131072, "max_completion_tokens": 1 << 40},
+		}))
+		require.Nil(t, api.Capabilities.MaxOutput)
+		require.EqualValues(t, 163840, *api.Capabilities.Context)
+		require.Contains(t, trace, "/models.top_provider.max_completion_tokens 1099511627776 is out of range; ignored")
+	})
+
+	t.Run("non-string entries in supported_efforts and supported_parameters are dropped", func(t *testing.T) {
+		api, _ := detectListing(t, "openrouter", openrouterEntry("vendor/mixed", map[string]any{
+			"supported_parameters": []any{"tools", 7, "reasoning", map[string]any{"name": "temperature"}},
+			"reasoning":            map[string]any{"mandatory": false, "default_enabled": true, "supported_efforts": []any{"low", 3, "high", true}},
+		}))
+		require.Equal(t, []string{"low", "high"}, api.Bindings[system.IntentReasoningEffort].EnumValues)
+		require.Equal(t, true, *api.Capabilities.Tools)
+		require.NotContains(t, api.Parameters, "temperature")
+	})
+
+	t.Run("a non-object reasoning field reads as no reasoning block", func(t *testing.T) {
+		api, trace := detectListing(t, "openrouter", openrouterEntry("vendor/yes", map[string]any{"reasoning": "yes"}))
+		require.NotNil(t, api.Thinking, "supported_parameters still lists reasoning")
+		require.Empty(t, api.Thinking.Default)
+		require.NotContains(t, api.Evidence, "thinking.default")
+		require.NotContains(t, api.Evidence, "bindings.reasoning.effort")
+		require.NotContains(t, trace, "/models.reasoning.")
 	})
 
 	t.Run("unknown modalities are filtered, none known leaves the field unset", func(t *testing.T) {
@@ -318,6 +450,41 @@ func TestVeniceSpecVariants(t *testing.T) {
 		require.Nil(t, api.Capabilities.Structured)
 		require.Empty(t, api.Capabilities.Quantization)
 		require.NotContains(t, api.Evidence, "capabilities.quantization")
+	})
+
+	t.Run("wrong-type and fractional numerics are not token counts", func(t *testing.T) {
+		entry := veniceSpecEntry("odd-numbers", nil)
+		spec := entry["model_spec"].(map[string]any)
+		spec["availableContextTokens"] = "131072"
+		spec["maxCompletionTokens"] = 1.5
+		api, _ := detectListing(t, "venice", entry)
+		require.Nil(t, api.Capabilities.Context)
+		require.Nil(t, api.Capabilities.MaxOutput)
+		require.NotContains(t, api.Evidence, "capabilities.context")
+		require.NotContains(t, api.Evidence, "capabilities.maxOutput")
+	})
+
+	t.Run("absent and out-of-range numerics are ignored", func(t *testing.T) {
+		entry := veniceSpecEntry("no-numbers", nil)
+		spec := entry["model_spec"].(map[string]any)
+		delete(spec, "availableContextTokens")
+		spec["maxCompletionTokens"] = 1 << 40
+		api, trace := detectListing(t, "venice", entry)
+		require.Nil(t, api.Capabilities.Context)
+		require.Nil(t, api.Capabilities.MaxOutput)
+		require.Contains(t, trace, "/models.model_spec.maxCompletionTokens 1099511627776 is out of range; ignored")
+	})
+
+	t.Run("non-string effort options are dropped", func(t *testing.T) {
+		api, _ := detectListing(t, "venice", veniceSpecEntry("qwen3-235b", map[string]any{"reasoningEffortOptions": []any{"low", 3, "high", false}}))
+		require.Equal(t, []string{"low", "high"}, api.Bindings[system.IntentReasoningEffort].EnumValues)
+	})
+
+	t.Run("a quantization label that is not a plain name is ignored", func(t *testing.T) {
+		api, trace := detectListing(t, "venice", veniceSpecEntry("qwen3-235b", map[string]any{"quantization": "fp8 (dynamic)"}))
+		require.Empty(t, api.Capabilities.Quantization)
+		require.NotContains(t, api.Evidence, "capabilities.quantization")
+		require.Contains(t, trace, "/models.model_spec.capabilities.quantization is not a plain label; ignored")
 	})
 
 	t.Run("video and audio inputs", func(t *testing.T) {
