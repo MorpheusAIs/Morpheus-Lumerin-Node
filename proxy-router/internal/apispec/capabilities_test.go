@@ -482,7 +482,7 @@ func TestComposeRule9EvidenceOnlyFields(t *testing.T) {
 	f.SetStructured([]string{"json_object", "json_schema", "grammar"}, "llamacpp:built-in")
 	f.SetEmbeddings(false, "llamacpp:/v1/models.capabilities")
 	f.SetPromptCache(true, "llamacpp:cache_prompt")
-	f.SetMaxOutput(2048, "tgi:/info.max_total_tokens-max_input_tokens")
+	f.SetMaxOutput(2048, "litellm:/model_group/info.max_output_tokens")
 	f.SetQuantization("Q4_K_M", "llamacpp:/v1/models.meta.ftype")
 	api, lines := ComposeWithTrace(Evidence{Stack: "llamacpp", ModelName: "llama-3.3-70b", Caps: f})
 	c := api.Capabilities

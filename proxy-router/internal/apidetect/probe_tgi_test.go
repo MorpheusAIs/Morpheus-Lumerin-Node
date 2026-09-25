@@ -39,17 +39,19 @@ func TestProbeTGIFacts(t *testing.T) {
 	require.Equal(t, "mistralai/Mistral-7B-Instruct-v0.3", ev.ServedModelID)
 	c := ev.Caps
 	require.Equal(t, int64(4096), *c.Context)
-	require.Equal(t, int64(1), *c.MaxOutput)
+	require.Nil(t, c.MaxOutput, "max_total_tokens - max_input_tokens is a guaranteed minimum, not a maximum")
 	require.Nil(t, c.ContextTrained)
-	require.Equal(t, map[string]string{
-		apispec.CapFieldContext:   "tgi:/info.max_total_tokens",
-		apispec.CapFieldMaxOutput: "tgi:/info.max_total_tokens-max_input_tokens",
-	}, c.Sources)
+	require.Equal(t, map[string]string{apispec.CapFieldContext: "tgi:/info.max_total_tokens"}, c.Sources)
 	require.Contains(t, trace, "tgi /info max_total_tokens 4096 -> context")
-	require.Contains(t, trace, "tgi /info max_total_tokens - max_input_tokens = 1 -> maxOutput")
+	for _, line := range trace {
+		require.NotContains(t, line, "maxOutput")
+	}
 }
 
-func TestProbeTGIMaxOutputOnlyWhenPositive(t *testing.T) {
+// max_input_tokens, whatever its value, never becomes maxOutput (contract
+// amendment a): the difference to max_total_tokens is the completion budget
+// at the longest prompt, a floor.
+func TestProbeTGINeverPublishesMaxOutput(t *testing.T) {
 	cases := map[string]map[string]any{
 		"input absent":       {},
 		"input zero":         {"max_input_tokens": 0},
@@ -58,6 +60,7 @@ func TestProbeTGIMaxOutputOnlyWhenPositive(t *testing.T) {
 		"input equals total": {"max_input_tokens": 4096},
 		"input above total":  {"max_input_tokens": 8192},
 		"input fractional":   {"max_input_tokens": 4095.5},
+		"input far below":    {"max_input_tokens": 1024},
 	}
 	for name, patch := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -152,7 +155,7 @@ func TestDetectTGIPublishesCapabilities(t *testing.T) {
 	require.Equal(t, "tgi", api.Stack)
 	require.NotNil(t, api.Capabilities)
 	require.Equal(t, int64(4096), *api.Capabilities.Context)
-	require.Equal(t, int64(1), *api.Capabilities.MaxOutput)
+	require.Nil(t, api.Capabilities.MaxOutput)
 	require.Equal(t, "tgi:/info.max_total_tokens", api.Evidence["capabilities.context"])
-	require.Equal(t, "tgi:/info.max_total_tokens-max_input_tokens", api.Evidence["capabilities.maxOutput"])
+	require.NotContains(t, api.Evidence, "capabilities.maxOutput")
 }
