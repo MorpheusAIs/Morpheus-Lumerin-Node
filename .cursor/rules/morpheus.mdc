@@ -26,7 +26,7 @@ This repository has nuance that generic web knowledge gets wrong. **Before answe
 6. **There is no `recover` RPC.** Closing the session is the recovery path. Day-lock claim is `POST /blockchain/stakes/withdraw`.
 7. **For TEE questions, separate Phase 1 (consumer → P-Node) from Phase 2 (P-Node → backend).** A v6+ consumer transparently benefits from a v7+ provider's Phase 2 with no client-side upgrade.
 8. **The proxy-router `:8082` admin/API port must not be exposed publicly.** Only `:3333` is public, and only on providers.
-9. **MorpheusUI mnemonic recovery only works for tier-1 (index 0) addresses.** For derived addresses, recommend importing the private key directly.
+9. **A mnemonic import derives account index 0 unless the index is set.** For a funded derived sub-account, recommend setting the index on import, adding the HD account from the wallet switcher (MorpheusUI 7.12+, `POST /wallet/derivationPath`), or importing the private key. Do not claim derived accounts are unsupported.
 
 ## When unsure
 

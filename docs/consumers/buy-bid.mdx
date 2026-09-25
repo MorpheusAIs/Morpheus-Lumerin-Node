@@ -3,7 +3,7 @@ title: "Open a session (buy a bid)"
 description: "How to open a Morpheus session via MorpheusUI or the API: pick a model, select a bid, stake MOR, and what happens next."
 audience: ["consumer"]
 product: ["proxy-router", "ui-desktop"]
-last_verified: "v7.11.0"
+last_verified: "2026-09-25"
 source: "docs/05-bid-purchase.md"
 ---
 
@@ -16,13 +16,16 @@ Opening a session = "buying a bid." You stake MOR for a fixed duration; the prox
     Lower-left of MorpheusUI shows your wallet address; the Wallet tab shows MOR and ETH balances. You need at least `5` MOR for a session and a small ETH balance for gas.
   </Step>
   <Step title="Pick a remote model">
-    Chat tab → **Change Model** → pick from the remote dropdown (anything other than "Local Model"). The dropdown lists models registered in the Diamond marketplace contract.
+    Chat tab → **Change Model** → pick from the model list (anything other than "Local Model"). The list is the Diamond marketplace registry, searchable by name or tag and sortable by price per second of compute; the price column comes from one `GET /blockchain/models/prices` call, so it loads in one round trip instead of one per model. Models with no live provider say so rather than showing a price.
   </Step>
-  <Step title="Open a session">
-    Click **Open Session**. Enter a stake (minimum `5` MOR). Confirm.
+  <Step title="Choose a provider and a payment method">
+    MorpheusUI 7.12+ shows the providers bidding on the model with their price and rating score and lets you pick one; the default is the top-scored bid — the same one the node would choose unattended. Choose **Stake** (default; your MOR is escrowed and the provider is paid from emissions) or **Direct Pay** (the provider is paid out of your escrowed amount at close). The amount locked is identical either way.
+  </Step>
+  <Step title="Confirm the session">
+    The confirmation quotes the bid you actually selected: the MOR that will be **locked** (the stake) alongside the cost of the compute you are buying — the two differ by a few hundred × because stake is proportional to your share of total MOR supply against today's emissions budget, not to the price. Session length is bounded by the values the contract reports (`GET /blockchain/sessions/duration`), not by numbers hardcoded in the app. Both figures come from [`GET /blockchain/models/:id/session/estimate`](/reference/api-endpoints#estimate-a-session-before-opening). See [How much MOR does an open lock?](/concepts/sessions-stake-close-recover#how-much-mor-does-an-open-lock).
   </Step>
   <Step title="Watch for the on-chain confirmation">
-    A transaction will be submitted. Once confirmed, the session is open and you can prompt.
+    Approve (if needed) and open are submitted; once mined the session is open and you can prompt. MorpheusUI opens with `rejectExisting`, so a double-click or a retry after a slow confirmation cannot lock stake twice — if the wallet already has a live session for that model the node answers `409` and the app reuses it.
   </Step>
   <Step title="Close when done (or let it expire naturally)">
     Either path:
