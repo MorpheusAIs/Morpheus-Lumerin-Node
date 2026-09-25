@@ -135,6 +135,8 @@ const (
 
 // Evidence keys are wire field paths. Sources are "<stack>:<endpoint>.<field>"
 // (vllm:/v1/models.max_model_len), "declared", "registry:<name>@<YYYY-MM-DD>",
+// "derived:<what>" (the composer inferred it from the thinking mode or the
+// surviving reasoning.* bindings; cleared together with detected facts),
 // "health-probe:<what>" or "verify:<what>@<unix>".
 const EvidenceKeyThinkingDefault = "thinking.default"
 
@@ -179,7 +181,9 @@ type ModelApiSpec struct {
 	// stack tables or the family name.
 	Capabilities *ModelCapabilities `json:"capabilities,omitempty"`
 	// Evidence maps a wire field path (capabilities.context, thinking.default,
-	// bindings.reasoning.disable, ...) to the source it was set from.
+	// bindings.reasoning.disable, ...) to the source it was set from: a
+	// backend endpoint, declared, registry, derived, health-probe or verify
+	// (see EvidenceKeyThinkingDefault).
 	Evidence map[string]string `json:"evidence,omitempty"`
 }
 
