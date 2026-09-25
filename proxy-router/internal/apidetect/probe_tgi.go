@@ -6,8 +6,13 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apispec"
 )
 
+// TGI leaves /info open even with an API key (the key covers generate / chat
+// only), so it is requested key-free first (§0). max_total_tokens is the
+// served window (prompt + completion); the completion budget is what remains
+// above max_input_tokens.
+// https://github.com/huggingface/text-generation-inference/blob/v3.3.7/router/src/lib.rs
 func (d *Detector) probeTGI(ctx context.Context, base, apiKey string, ev *apispec.Evidence) bool {
-	info := d.getJSON(ctx, base+"/info", apiKey)
+	info := d.getJSONKeyFree(ctx, base+"/info", apiKey)
 	if info == nil {
 		return false
 	}
@@ -18,5 +23,16 @@ func (d *Detector) probeTGI(ctx context.Context, base, apiKey string, ev *apispe
 	ev.Stack = "tgi"
 	ev.ServedModelID = modelID
 	tracef(ctx, "identified tgi by /info; served model id %q", modelID)
+
+	total, ok := capInt64(info["max_total_tokens"])
+	if !ok || !ev.Caps.SetContext(total, "tgi:/info.max_total_tokens") {
+		return true
+	}
+	tracef(ctx, "tgi /info max_total_tokens %d -> context", total)
+	if input, ok := capInt64(info["max_input_tokens"]); ok && input < total {
+		if ev.Caps.SetMaxOutput(total-input, "tgi:/info.max_total_tokens-max_input_tokens") {
+			tracef(ctx, "tgi /info max_total_tokens - max_input_tokens = %d -> maxOutput", total-input)
+		}
+	}
 	return true
 }
