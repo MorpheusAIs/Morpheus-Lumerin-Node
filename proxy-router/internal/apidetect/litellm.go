@@ -339,8 +339,10 @@ const (
 // supports_* flag is Field(default=False), flipped to true only when a
 // deployment's cost-map entry says so. A false therefore also covers a model
 // the cost map does not know, so only true crosses as a fact; the one
-// exception is supports_reasoning false (contract rule 3). The group carries
-// no supports_audio_input; audio is a deployment-level field.
+// exception is supports_reasoning false (contract rule 3), which the
+// composer publishes only when no reasoning toggle or always_on mode
+// contradicts it. The group carries no supports_audio_input; audio is a
+// deployment-level field.
 // supports_url_context has no wire field.
 func litellmGroupCaps(ctx context.Context, group map[string]any, ev *apispec.Evidence) {
 	src := func(field string) string { return litellmGroupSource + field }

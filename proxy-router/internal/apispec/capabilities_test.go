@@ -187,17 +187,38 @@ func TestComposeRule3Reasoning(t *testing.T) {
 		api := Compose(Evidence{Stack: "vllm", ModelName: "llama-3.3-70b", DeclaredCaps: declaredCtx})
 		require.Nil(t, api.Capabilities.Reasoning)
 	})
-	t.Run("backend false stands even with family bindings", func(t *testing.T) {
+	t.Run("backend false stands without a surviving knob", func(t *testing.T) {
 		var f CapabilityFacts
 		f.SetReasoning(false, "litellm:/model_group/info.supports_reasoning")
-		api := Compose(Evidence{Stack: "litellm", ModelName: "qwen3-32b", Declared: true, Caps: f})
-		require.NotNil(t, api.Bindings[system.IntentReasoningDisable], "documented knobs stay")
+		api := Compose(Evidence{Stack: "litellm", ModelName: "llama-3.3-70b", Caps: f})
+		require.Nil(t, api.Bindings[system.IntentReasoningDisable])
 		require.False(t, *api.Capabilities.Reasoning)
 		require.Equal(t, "litellm:/model_group/info.supports_reasoning", api.Evidence["capabilities.reasoning"])
 	})
-	t.Run("backend true", func(t *testing.T) {
+	t.Run("backend false against surviving family bindings is left unknown", func(t *testing.T) {
 		var f CapabilityFacts
+		f.SetReasoning(false, "litellm:/model_group/info.supports_reasoning")
+		api, lines := ComposeWithTrace(Evidence{Stack: "litellm", ModelName: "qwen3-32b", Declared: true, Caps: f})
+		require.NotNil(t, api.Bindings[system.IntentReasoningDisable], "documented knobs stay")
+		require.Nil(t, api.Capabilities, "the contested field was the only fact: no block")
+		require.NotContains(t, api.Evidence, "capabilities.reasoning")
+		require.Contains(t, joined(lines), "capabilities.reasoning: backend false (litellm:/model_group/info.supports_reasoning) contradicts the surviving reasoning.* bindings; left unknown")
+		require.NotContains(t, joined(lines), "capabilities.reasoning = true")
+	})
+	t.Run("backend false against an always_on family is left unknown", func(t *testing.T) {
+		var f CapabilityFacts
+		f.SetReasoning(false, "litellm:/model_group/info.supports_reasoning")
+		f.SetContext(8192, "litellm:/model_group/info.max_input_tokens")
+		api, lines := ComposeWithTrace(Evidence{Stack: "litellm", ModelName: "deepseek-r1", Caps: f})
+		require.Equal(t, system.ThinkingModeAlwaysOn, api.Thinking.Mode)
+		require.Nil(t, api.Capabilities.Reasoning)
+		require.Equal(t, int64(8192), *api.Capabilities.Context, "the other facts stay")
+		require.NotContains(t, api.Evidence, "capabilities.reasoning")
+		require.Contains(t, joined(lines), "capabilities.reasoning: backend false (litellm:/model_group/info.supports_reasoning) contradicts the always_on thinking mode; left unknown")
+	})
+	t.Run("backend true", func(t *testing.T) {
 		f.SetReasoning(true, "sglang:/model_info.reasoning_parser")
+		var f CapabilityFacts
 		api := Compose(Evidence{Stack: "sglang", ModelName: "llama-3.3-70b", Caps: f})
 		require.True(t, *api.Capabilities.Reasoning)
 		require.Equal(t, "sglang:/model_info.reasoning_parser", api.Evidence["capabilities.reasoning"])

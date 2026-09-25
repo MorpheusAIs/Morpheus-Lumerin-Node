@@ -941,6 +941,7 @@ func TestDetectLiteLLMTwoHopIdentifiedUpstreamBecomesStack(t *testing.T) {
 		require.Nil(t, api.Bindings[system.IntentStreamIncludeUsage])
 		require.Equal(t, "chat_template_kwargs.enable_thinking", api.Bindings[system.IntentReasoningDisable].Param)
 		require.Equal(t, []string{"temperature"}, api.Parameters)
+		require.Nil(t, api.Capabilities, "the group's supports_reasoning false against the upstream family's toggle publishes neither")
 	})
 
 	t.Run("openai upstream by hostname, no request needed", func(t *testing.T) {
@@ -1212,7 +1213,9 @@ func TestDetectLiteLLMCapabilityFacts(t *testing.T) {
 		require.NotNil(t, api.Capabilities)
 		require.Equal(t, int64(128000), *api.Capabilities.Context)
 		require.Equal(t, true, *api.Capabilities.PromptCache)
-		require.Equal(t, false, *api.Capabilities.Reasoning, "a backend-reported false stands (rule 3) even when the upstream listing says otherwise")
+		require.Nil(t, api.Capabilities.Reasoning, "the group's false against the reasoning knobs the upstream listing opened: contested, published as unknown")
+		require.NotContains(t, api.Evidence, "capabilities.reasoning")
+		require.Contains(t, trace, "capabilities.reasoning: backend false (litellm:/model_group/info.supports_reasoning) contradicts the surviving reasoning.* bindings; left unknown")
 		require.Equal(t, "litellm:/model_group/info.max_input_tokens", api.Evidence["capabilities.context"])
 		require.Equal(t, "litellm:/model/info.model_info.supports_prompt_caching", api.Evidence["capabilities.promptCache"])
 		for key, source := range api.Evidence {

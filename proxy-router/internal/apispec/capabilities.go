@@ -220,8 +220,25 @@ func (s *capState) modalities() *system.Modalities {
 
 // Rule 3: reasoning is true when the mode is always_on or a reasoning.*
 // binding survived every filter; false only when a layer reported false.
+// The two clauses can both hold: LiteLLM's supports_reasoning is
+// Field(default=False), so its false also covers a model the cost map does
+// not know, while the toggle beside it comes from the model's own family or
+// chat template. A block asserting both would give a consumer a knob it also
+// denies, so the contested field is published as unknown (§0: a wrong
+// capability is worse than a missing one) rather than as either side.
 func (s *capState) deriveReasoning(alwaysOn bool, bindings map[string]*system.ParamBinding, tracef func(string, ...any)) {
 	if s.isSet(CapFieldReasoning) {
+		if s.layerOf[CapFieldReasoning] == layerBackend && s.caps.Reasoning != nil && !*s.caps.Reasoning && (alwaysOn || hasReasoningBindings(bindings)) {
+			source := s.evidence[system.EvidenceKeyCapability(CapFieldReasoning)]
+			s.caps.Reasoning = nil
+			delete(s.evidence, system.EvidenceKeyCapability(CapFieldReasoning))
+			delete(s.layerOf, CapFieldReasoning)
+			what := "the surviving reasoning.* bindings"
+			if alwaysOn {
+				what = "the always_on thinking mode"
+			}
+			tracef("capabilities.reasoning: backend false (%s) contradicts %s; left unknown", source, what)
+		}
 		return
 	}
 	t := true
