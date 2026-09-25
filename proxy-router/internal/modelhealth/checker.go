@@ -152,6 +152,10 @@ type Checker struct {
 	// failures tracks the consecutive real-session prompt failure streak per
 	// model, including whether the whole streak was upstream rate limiting.
 	failures map[string]failureStreak
+	// runtime holds the evidence the health probe's own response established
+	// per model (design contract §5, harvest); merged onto the detection
+	// result after every probe.
+	runtime *runtimeStore
 
 	// triggerCh carries manual re-check requests into the Run loop; buffered
 	// at 1 so triggers queue at most one extra sweep and can never overlap.
@@ -176,6 +180,11 @@ type Deps struct {
 	// attestation does not pass are reported as tee_unverified.
 	TeeStatus TeeStatusProvider
 	ApiDetect ApiDetector
+	// ApiDetectTTL is MODEL_API_DETECT_TTL, the TTL the detector caches by;
+	// runtime evidence harvested from the health probe is re-merged for the
+	// same span after a probe stops producing it. <= 0 means
+	// DefaultRuntimeTTL.
+	ApiDetectTTL time.Duration
 }
 
 func NewChecker(deps Deps, interval, timeout, probeDelay time.Duration, maxConsecutiveErrors int, log lib.ILogger) *Checker {
@@ -192,6 +201,7 @@ func NewChecker(deps Deps, interval, timeout, probeDelay time.Duration, maxConse
 		reports:              make(map[string]system.ModelHealthReport),
 		modelMeta:            make(map[string]modelMeta),
 		failures:             make(map[string]failureStreak),
+		runtime:              newRuntimeStore(deps.ApiDetectTTL),
 		triggerCh:            make(chan struct{}, 1),
 	}
 }
@@ -379,6 +389,7 @@ func (c *Checker) prune(seen map[string]bool) {
 	for id := range c.reports {
 		if !seen[id] {
 			delete(c.reports, id)
+			c.runtime.forget(id)
 		}
 	}
 }
@@ -453,30 +464,34 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 	} else if cfg.Capabilities != nil {
 		api = apispec.Build(cfg)
 	}
-	if api != nil {
-		api.DeclaredAt = time.Now().Unix()
-		if hasPrev && prev.Api != nil && sameApiSpecIgnoringDeclaredAt(prev.Api, api) {
-			api.DeclaredAt = prev.Api.DeclaredAt
-		}
-		report.Api = api
+
+	// The api block is finalised after the probe on every exit: the probe's
+	// own response is runtime evidence (design contract §3 rule 11), and a
+	// sweep that never probes still re-merges what an earlier one harvested.
+	var meta *aiengine.ResponseMeta
+	var prevApi *system.ModelApiSpec
+	if hasPrev {
+		prevApi = prev.Api
 	}
+	defer func() {
+		report.Api = c.publishedApi(modelID, cfg, api, meta, prevApi)
+		c.setReport(report)
+	}()
 
 	if !hasBid {
 		report.Status = system.ModelHealthStatusNoBid
-		c.setReport(report)
 		return
 	}
 
-	meta, err := c.modelMetaFor(ctx, modelID)
+	modelMeta, err := c.modelMetaFor(ctx, modelID)
 	if err != nil {
 		c.log.Warnf("model %s: cannot resolve model metadata: %s", lib.Short(modelID), err)
 		report.Status = system.ModelHealthStatusSkipped
 		report.ErrorKind = system.ModelHealthErrorTypeLookup
-		c.setReport(report)
 		return
 	}
-	report.ModelName = meta.name
-	report.ModelType = string(meta.modelType)
+	report.ModelName = modelMeta.name
+	report.ModelType = string(modelMeta.modelType)
 
 	// Re-run backend attestation for TEE-tagged models on every sweep after
 	// the first (the first sweep relies on the startup attestation),
@@ -486,7 +501,7 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 	// attestation does not pass cannot serve sessions (session requests are
 	// rejected by the receiver), so it is reported as tee_unverified and the
 	// backend probe is skipped.
-	if meta.isTee && c.deps.TeeStatus != nil {
+	if modelMeta.isTee && c.deps.TeeStatus != nil {
 		if reattestTee {
 			attestCtx, cancel := context.WithTimeout(ctx, c.timeout)
 			if err := c.deps.TeeStatus.ReattestBackend(attestCtx, modelID.Hex(), cfg.ApiURL); err != nil {
@@ -500,7 +515,6 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 			c.log.Warnf("model %s: backend TEE attestation is not passed, reporting tee_unverified", lib.Short(modelID))
 			report.Status = system.ModelHealthStatusTeeUnverified
 			report.ErrorKind = system.ModelHealthErrorTeeAttestation
-			c.setReport(report)
 			return
 		}
 	}
@@ -511,10 +525,18 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 	// the probe.
 	typeGuessed := false
 
+	// Only the LLM probe harvests response metadata: the OpenAI adapter is
+	// the one that fills it, and it serves chat completions.
+	llmProbe := func(ctx context.Context, adapter aiengine.AIEngineStream, report *system.ModelHealthReport) error {
+		var err error
+		meta, err = c.probeLLM(ctx, adapter, report)
+		return err
+	}
+
 	var probe func(ctx context.Context, adapter aiengine.AIEngineStream, report *system.ModelHealthReport) error
-	switch meta.modelType {
+	switch modelMeta.modelType {
 	case structs.ModelTypeLLM:
-		probe = c.probeLLM
+		probe = llmProbe
 	case structs.ModelTypeEMBEDDING:
 		probe = c.probeEmbeddings
 	case structs.ModelTypeDECISIONS:
@@ -533,16 +555,14 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 		// classify. Those reach Unknown too, and firing a text prompt at an
 		// image or video backend buys an upstream call and a misleading
 		// unhealthy row rather than information.
-		if meta.mediaOnly {
+		if modelMeta.mediaOnly {
 			report.Status = system.ModelHealthStatusSkipped
-			c.setReport(report)
 			return
 		}
 		typeGuessed = true
-		probe = c.probeLLM
+		probe = llmProbe
 	default:
 		report.Status = system.ModelHealthStatusSkipped
-		c.setReport(report)
 		return
 	}
 
@@ -551,7 +571,6 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 		c.log.Warnf("model %s: cannot get adapter: %s", lib.Short(modelID), err)
 		report.Status = system.ModelHealthStatusUnhealthy
 		report.ErrorKind = system.ModelHealthErrorBadResponse
-		c.setReport(report)
 		return
 	}
 
@@ -588,15 +607,48 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 			report.Status = system.ModelHealthStatusUnhealthy
 			report.ErrorKind = classifyError(err)
 		}
-	} else {
-		report.Status = system.ModelHealthStatusHealthy
-		report.LastHealthy = time.Now().Unix()
-		// A passing probe is direct evidence the backend works again, so the
-		// consecutive session-failure streak (if any) is over.
-		c.resetFailures(modelID)
+		return
 	}
 
-	c.setReport(report)
+	report.Status = system.ModelHealthStatusHealthy
+	report.LastHealthy = time.Now().Unix()
+	// A passing probe is direct evidence the backend works again, so the
+	// consecutive session-failure streak (if any) is over.
+	c.resetFailures(modelID)
+}
+
+// publishedApi is the api block of one report: the declared or detected spec
+// with the model's runtime evidence merged onto a clone (the detector's cache
+// stays free of it), or nil when nothing is known. A LiteLLM proxy seen only
+// in the probe's headers names the stack on its own when detection found
+// nothing; the composer adds no reasoning knob to it, since no reasoning
+// evidence exists. declaredAt survives a sweep whose merged spec is equal to
+// the previous one.
+func (c *Checker) publishedApi(modelID common.Hash, cfg config.ModelConfig, api *system.ModelApiSpec, meta *aiengine.ResponseMeta, prev *system.ModelApiSpec) *system.ModelApiSpec {
+	rt, hasRuntime := c.runtime.harvest(modelID.Hex(), meta)
+	if api == nil && hasRuntime && len(rt.StackHints) > 0 {
+		if stack := apispec.StackFor(rt.StackHints[0]); stack != "" {
+			api = apispec.Compose(apispec.Evidence{Stack: stack, ModelName: cfg.ModelName, ServedModelID: rt.ServedModelID})
+			if api.Evidence == nil {
+				api.Evidence = map[string]string{}
+			}
+			api.Evidence[evidenceKeyStack] = sourceStackHeaders
+		}
+	}
+	if api == nil {
+		return nil
+	}
+	live := api.Clone()
+	if hasRuntime {
+		if trace := apispec.MergeRuntime(live, rt); len(trace) > 0 {
+			c.log.Debugf("model %s: runtime evidence: %s", lib.Short(modelID), strings.Join(trace, "; "))
+		}
+	}
+	live.DeclaredAt = time.Now().Unix()
+	if prev != nil && sameApiSpecIgnoringDeclaredAt(prev, live) {
+		live.DeclaredAt = prev.DeclaredAt
+	}
+	return live
 }
 
 func sameApiSpecIgnoringDeclaredAt(a, b *system.ModelApiSpec) bool {
@@ -605,7 +657,10 @@ func sameApiSpecIgnoringDeclaredAt(a, b *system.ModelApiSpec) bool {
 	return reflect.DeepEqual(ac, bc)
 }
 
-func (c *Checker) probeLLM(ctx context.Context, adapter aiengine.AIEngineStream, report *system.ModelHealthReport) error {
+// probeLLM sends the arithmetic prompt and returns what the response revealed
+// about the backend (aiengine.ResponseMeta); the meta is filled by the OpenAI
+// adapter only and stays empty for the others.
+func (c *Checker) probeLLM(ctx context.Context, adapter aiengine.AIEngineStream, report *system.ModelHealthReport) (*aiengine.ResponseMeta, error) {
 	a, b, prompt := generateArithmeticPrompt()
 
 	req := &gcs.OpenAICompletionRequestExtra{
@@ -617,9 +672,10 @@ func (c *Checker) probeLLM(ctx context.Context, adapter aiengine.AIEngineStream,
 		},
 	}
 
+	meta := &aiengine.ResponseMeta{}
 	var response strings.Builder
 	var engineErr error
-	err := adapter.Prompt(ctx, req, func(ctx context.Context, chunk gcs.Chunk, aiEngineErr *gcs.AiEngineErrorResponse) error {
+	err := adapter.Prompt(aiengine.WithResponseMeta(ctx, meta), req, func(ctx context.Context, chunk gcs.Chunk, aiEngineErr *gcs.AiEngineErrorResponse) error {
 		if aiEngineErr != nil {
 			report.HttpStatus = aiEngineErr.StatusCode
 			engineErr = errors.New("model backend returned an error response")
@@ -631,18 +687,18 @@ func (c *Checker) probeLLM(ctx context.Context, adapter aiengine.AIEngineStream,
 		return nil
 	})
 	if err != nil {
-		return err
+		return meta, err
 	}
 	if engineErr != nil {
-		return engineErr
+		return meta, engineErr
 	}
 	if response.Len() == 0 {
-		return errors.New("empty completion response")
+		return meta, errors.New("empty completion response")
 	}
 
 	correct := verifyArithmeticAnswer(response.String(), a+b)
 	report.PromptCorrect = &correct
-	return nil
+	return meta, nil
 }
 
 func (c *Checker) probeEmbeddings(ctx context.Context, adapter aiengine.AIEngineStream, report *system.ModelHealthReport) error {
