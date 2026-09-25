@@ -92,17 +92,21 @@ func readLMStudioV1(ctx context.Context, entry map[string]any, ev *apispec.Evide
 	if vision, ok := caps["vision"].(bool); ok && vision && ev.Caps.AddInputModality("image", ep+".capabilities.vision") {
 		tracef(ctx, "lmstudio /api/v1/models capabilities.vision -> modalities.input image")
 	}
-	if tools, ok := caps["trained_for_tool_use"].(bool); ok {
-		ev.Caps.SetTools(tools, ep+".capabilities.trained_for_tool_use")
-		tracef(ctx, "lmstudio /api/v1/models capabilities.trained_for_tool_use %v -> tools", tools)
+	// trained_for_tool_use describes training, not acceptance: LM Studio
+	// accepts tools[] for every model, so false is not a tools: false report.
+	// https://lmstudio.ai/docs/developer/openai-compat/tools
+	if tools, ok := caps["trained_for_tool_use"].(bool); ok && tools {
+		ev.Caps.SetTools(true, ep+".capabilities.trained_for_tool_use")
+		tracef(ctx, "lmstudio /api/v1/models capabilities.trained_for_tool_use true -> tools")
 	}
 	reasoning, ok := caps["reasoning"].(map[string]any)
 	if !ok {
 		return
 	}
 	if options, ok := reasoning["allowed_options"].([]any); ok {
-		// "off" / "on" describe a toggle; anything else is a level. A list of
-		// only "off" is the backend saying the model cannot reason (rule 3).
+		// "off" / "on" describe a toggle; anything else is a level. Only "off"
+		// is not a documented shape, so it sets no reasoning fact (rule 3 lists
+		// the explicit false reports; LM Studio is not among them).
 		var levels []string
 		hasOff, hasOn := false, false
 		for _, o := range options {
@@ -122,9 +126,6 @@ func readLMStudioV1(ctx context.Context, entry map[string]any, ev *apispec.Evide
 		if hasOn || len(levels) > 0 {
 			ev.Caps.SetReasoning(true, ep+".capabilities.reasoning.allowed_options")
 			tracef(ctx, "lmstudio /api/v1/models capabilities.reasoning.allowed_options -> reasoning")
-		} else if hasOff {
-			ev.Caps.SetReasoning(false, ep+".capabilities.reasoning.allowed_options")
-			tracef(ctx, "lmstudio /api/v1/models capabilities.reasoning.allowed_options lists only off -> reasoning false")
 		}
 		if len(levels) > 0 {
 			if hasOff {
@@ -212,11 +213,12 @@ func matchModelEntryBy(data []any, modelName, field string) map[string]any {
 	return nil
 }
 
-// capInt64 reads a JSON number as a whole token count; fractions and
-// non-numbers are not counts.
+// capInt64 reads a JSON number as a positive whole token count; fractions,
+// non-numbers and values <= 0 are not counts (§0 bounds), so a bad operand
+// never reaches a subtraction or a minimum.
 func capInt64(v any) (int64, bool) {
 	f, ok := v.(float64)
-	if !ok || f != float64(int64(f)) {
+	if !ok || f <= 0 || f != float64(int64(f)) {
 		return 0, false
 	}
 	return int64(f), true

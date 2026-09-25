@@ -104,6 +104,10 @@ func TestProbeLMStudioV1Embedding(t *testing.T) {
 	require.Nil(t, c.Reasoning)
 	require.Nil(t, c.Modalities)
 	require.Empty(t, ev.Architecture)
+	require.Empty(t, ev.ThinkingDefault)
+	require.Empty(t, ev.ThinkingDefaultSource)
+	require.Empty(t, ev.ReasoningEfforts)
+	require.Empty(t, ev.EffortsSource)
 }
 
 func TestProbeLMStudioV1ReasoningLevels(t *testing.T) {
@@ -132,8 +136,10 @@ func TestProbeLMStudioV1ReasoningOnlyOff(t *testing.T) {
 	defer srv.Close()
 
 	ev, _ := probeLMStudioAt(t, srv.URL, "google/gemma-4-26b-a4b", "")
-	require.False(t, *ev.Caps.Reasoning)
-	require.False(t, *ev.Caps.Tools)
+	require.Nil(t, ev.Caps.Reasoning, "only off is not a documented shape: no reasoning fact")
+	require.Nil(t, ev.Caps.Tools, "trained_for_tool_use false is not a tools false report")
+	require.NotContains(t, ev.Caps.Sources, apispec.CapFieldReasoning)
+	require.NotContains(t, ev.Caps.Sources, apispec.CapFieldTools)
 	require.Empty(t, ev.ReasoningEfforts)
 	require.Equal(t, "off", ev.ThinkingDefault)
 }
@@ -144,6 +150,8 @@ func TestProbeLMStudioV1SmallestLoadedInstanceWins(t *testing.T) {
 		{"id": "a", "config": map[string]any{"context_length": 32768}},
 		{"id": "b", "config": map[string]any{"context_length": 8192}},
 		{"id": "c", "config": map[string]any{}},
+		{"id": "d", "config": map[string]any{"context_length": -1}},
+		{"id": "e", "config": map[string]any{"context_length": 0}},
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/models", jsonHandler(map[string]any{"models": []map[string]any{entry}}))
@@ -166,6 +174,210 @@ func TestProbeLMStudioV1RejectsOutOfRangeAndFractionalCounts(t *testing.T) {
 	ev, _ := probeLMStudioAt(t, srv.URL, "google/gemma-4-26b-a4b", "")
 	require.Nil(t, ev.Caps.Context)
 	require.Nil(t, ev.Caps.ContextTrained)
+}
+
+// Each documented field with a wrong type or an out-of-range value leaves its
+// capability unset and its evidence key absent.
+func TestProbeLMStudioV1RejectsWrongTypes(t *testing.T) {
+	cases := map[string]struct {
+		mutate func(entry map[string]any)
+		check  func(t *testing.T, ev apispec.Evidence)
+	}{
+		"quantization.name non-string": {
+			func(e map[string]any) { e["quantization"] = map[string]any{"name": 4} },
+			func(t *testing.T, ev apispec.Evidence) {
+				require.Empty(t, ev.Caps.Quantization)
+				require.NotContains(t, ev.Caps.Sources, apispec.CapFieldQuantization)
+			},
+		},
+		"quantization absent": {
+			func(e map[string]any) { delete(e, "quantization") },
+			func(t *testing.T, ev apispec.Evidence) { require.Empty(t, ev.Caps.Quantization) },
+		},
+		"vision non-bool": {
+			func(e map[string]any) { e["capabilities"] = map[string]any{"vision": "true"} },
+			func(t *testing.T, ev apispec.Evidence) {
+				require.Nil(t, ev.Caps.Modalities)
+				require.NotContains(t, ev.Caps.Sources, apispec.CapFieldModalitiesInput)
+			},
+		},
+		"trained_for_tool_use non-bool": {
+			func(e map[string]any) { e["capabilities"] = map[string]any{"trained_for_tool_use": 1} },
+			func(t *testing.T, ev apispec.Evidence) {
+				require.Nil(t, ev.Caps.Tools)
+				require.NotContains(t, ev.Caps.Sources, apispec.CapFieldTools)
+			},
+		},
+		"type non-string": {
+			func(e map[string]any) { e["type"] = 7 },
+			func(t *testing.T, ev apispec.Evidence) { require.Nil(t, ev.Caps.Embeddings) },
+		},
+		"architecture non-string": {
+			func(e map[string]any) { e["architecture"] = []string{"gemma4"} },
+			func(t *testing.T, ev apispec.Evidence) { require.Empty(t, ev.Architecture) },
+		},
+		"allowed_options non-string entries": {
+			func(e map[string]any) {
+				e["capabilities"] = map[string]any{"reasoning": map[string]any{"allowed_options": []any{1, true, nil}}}
+			},
+			func(t *testing.T, ev apispec.Evidence) {
+				require.Nil(t, ev.Caps.Reasoning)
+				require.Empty(t, ev.ReasoningEfforts)
+				require.Empty(t, ev.EffortsSource)
+			},
+		},
+		"allowed_options empty": {
+			func(e map[string]any) {
+				e["capabilities"] = map[string]any{"reasoning": map[string]any{"allowed_options": []string{}}}
+			},
+			func(t *testing.T, ev apispec.Evidence) {
+				require.Nil(t, ev.Caps.Reasoning)
+				require.Empty(t, ev.ReasoningEfforts)
+			},
+		},
+		"allowed_options non-list": {
+			func(e map[string]any) {
+				e["capabilities"] = map[string]any{"reasoning": map[string]any{"allowed_options": "on"}}
+			},
+			func(t *testing.T, ev apispec.Evidence) { require.Nil(t, ev.Caps.Reasoning) },
+		},
+		"reasoning.default non-string": {
+			func(e map[string]any) {
+				e["capabilities"] = map[string]any{"reasoning": map[string]any{"allowed_options": []string{"off", "on"}, "default": true}}
+			},
+			func(t *testing.T, ev apispec.Evidence) {
+				require.True(t, *ev.Caps.Reasoning)
+				require.Empty(t, ev.ThinkingDefault)
+				require.Empty(t, ev.ThinkingDefaultSource)
+			},
+		},
+		"reasoning.default absent": {
+			func(e map[string]any) {
+				e["capabilities"] = map[string]any{"reasoning": map[string]any{"allowed_options": []string{"off", "on"}}}
+			},
+			func(t *testing.T, ev apispec.Evidence) { require.Empty(t, ev.ThinkingDefault) },
+		},
+		"reasoning non-object": {
+			func(e map[string]any) { e["capabilities"] = map[string]any{"reasoning": "on"} },
+			func(t *testing.T, ev apispec.Evidence) { require.Nil(t, ev.Caps.Reasoning) },
+		},
+		"max_context_length string": {
+			func(e map[string]any) { e["max_context_length"] = "262144" },
+			func(t *testing.T, ev apispec.Evidence) { require.Nil(t, ev.Caps.ContextTrained) },
+		},
+		"max_context_length non-positive": {
+			func(e map[string]any) { e["max_context_length"] = -262144 },
+			func(t *testing.T, ev apispec.Evidence) { require.Nil(t, ev.Caps.ContextTrained) },
+		},
+		"loaded_instances non-list": {
+			func(e map[string]any) {
+				e["loaded_instances"] = map[string]any{"config": map[string]any{"context_length": 4096}}
+			},
+			func(t *testing.T, ev apispec.Evidence) { require.Nil(t, ev.Caps.Context) },
+		},
+		"loaded_instances context_length string": {
+			func(e map[string]any) {
+				e["loaded_instances"] = []map[string]any{{"id": "a", "config": map[string]any{"context_length": "4096"}}}
+			},
+			func(t *testing.T, ev apispec.Evidence) { require.Nil(t, ev.Caps.Context) },
+		},
+		"loaded_instances only non-positive": {
+			func(e map[string]any) {
+				e["loaded_instances"] = []map[string]any{{"id": "a", "config": map[string]any{"context_length": -1}}}
+			},
+			func(t *testing.T, ev apispec.Evidence) {
+				require.Nil(t, ev.Caps.Context)
+				require.NotContains(t, ev.Caps.Sources, apispec.CapFieldContext)
+			},
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			entry := lmstudioV1Gemma()
+			tc.mutate(entry)
+			mux := http.NewServeMux()
+			mux.HandleFunc("/api/v1/models", jsonHandler(map[string]any{"models": []map[string]any{entry}}))
+			srv := httptest.NewServer(mux)
+			defer srv.Close()
+
+			ev, _ := probeLMStudioAt(t, srv.URL, "google/gemma-4-26b-a4b", "")
+			require.Equal(t, "lmstudio", ev.Stack)
+			tc.check(t, ev)
+		})
+	}
+}
+
+func TestProbeLMStudioV0RejectsWrongTypes(t *testing.T) {
+	base := func() map[string]any {
+		return map[string]any{
+			"id": "qwen2-vl-7b-instruct", "object": "model", "type": "vlm", "publisher": "mlx-community", "arch": "qwen2_vl",
+			"compatibility_type": "mlx", "quantization": "4bit", "state": "not-loaded", "max_context_length": 32768, "capabilities": []string{"tool_use"},
+		}
+	}
+	cases := map[string]struct {
+		mutate func(entry map[string]any)
+		check  func(t *testing.T, ev apispec.Evidence)
+	}{
+		"quantization non-string": {
+			func(e map[string]any) { e["quantization"] = map[string]any{"name": "4bit"} },
+			func(t *testing.T, ev apispec.Evidence) {
+				require.Empty(t, ev.Caps.Quantization)
+				require.NotContains(t, ev.Caps.Sources, apispec.CapFieldQuantization)
+			},
+		},
+		"quantization absent": {
+			func(e map[string]any) { delete(e, "quantization") },
+			func(t *testing.T, ev apispec.Evidence) { require.Empty(t, ev.Caps.Quantization) },
+		},
+		"max_context_length out of range": {
+			func(e map[string]any) { e["max_context_length"] = 1 << 31 },
+			func(t *testing.T, ev apispec.Evidence) { require.Nil(t, ev.Caps.Context) },
+		},
+		"max_context_length fractional": {
+			func(e map[string]any) { e["max_context_length"] = 32768.5 },
+			func(t *testing.T, ev apispec.Evidence) { require.Nil(t, ev.Caps.Context) },
+		},
+		"max_context_length string": {
+			func(e map[string]any) { e["max_context_length"] = "32768" },
+			func(t *testing.T, ev apispec.Evidence) { require.Nil(t, ev.Caps.Context) },
+		},
+		"capabilities non-strings": {
+			func(e map[string]any) { e["capabilities"] = []any{1, true, map[string]any{"tool_use": true}} },
+			func(t *testing.T, ev apispec.Evidence) {
+				require.Nil(t, ev.Caps.Tools)
+				require.NotContains(t, ev.Caps.Sources, apispec.CapFieldTools)
+			},
+		},
+		"capabilities non-list": {
+			func(e map[string]any) { e["capabilities"] = "tool_use" },
+			func(t *testing.T, ev apispec.Evidence) { require.Nil(t, ev.Caps.Tools) },
+		},
+		"type non-string": {
+			func(e map[string]any) { e["type"] = 1 },
+			func(t *testing.T, ev apispec.Evidence) {
+				require.Nil(t, ev.Caps.Modalities)
+				require.Nil(t, ev.Caps.Embeddings)
+			},
+		},
+		"arch non-string": {
+			func(e map[string]any) { e["arch"] = 1 },
+			func(t *testing.T, ev apispec.Evidence) { require.Empty(t, ev.Architecture) },
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			entry := base()
+			tc.mutate(entry)
+			mux := http.NewServeMux()
+			mux.HandleFunc("/api/v0/models", jsonHandler(map[string]any{"object": "list", "data": []map[string]any{entry}}))
+			srv := httptest.NewServer(mux)
+			defer srv.Close()
+
+			ev, _ := probeLMStudioAt(t, srv.URL, "qwen2-vl-7b-instruct", "")
+			require.Equal(t, "lmstudio", ev.Stack)
+			tc.check(t, ev)
+		})
+	}
 }
 
 func TestProbeLMStudioV1MatchesBareIDAndSingleEntry(t *testing.T) {
