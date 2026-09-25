@@ -164,6 +164,36 @@ var stackBindings = map[string]bindingSet{
 	"openai": {
 		system.IntentWebSearchEnable: {Kind: bodyParam, Param: "web_search_options", ParamType: "object", Value: map[string]any{}, Hint: "only on search models such as gpt-5-search-api; Responses API uses the web_search tool"},
 	},
+
+	// Gemini's OpenAI-compatible endpoint
+	// (https://generativelanguage.googleapis.com/v1beta/openai/), not the
+	// native generateContent API: Gemini-only fields travel in a top-level
+	// extra_body.google object with snake_case keys — the REST example sends
+	// "extra_body": {"google": {"thinking_config": {"thinking_level": "low",
+	// "include_thoughts": true}}}, and the SDK examples' extra_body={'extra_body':
+	// {...}} serialises to the same shape. The gemini family's
+	// generationConfig.thinkingConfig.* rows are native-API vocabulary and are
+	// skipped on this stack (gatedStack; familyNativeVendor below).
+	// https://ai.google.dev/gemini-api/docs/openai
+	// Rows the page does not support, on purpose:
+	//   reasoning.disable — the only documented off switch is reasoning_effort
+	//     "none" on Gemini 2.5 (not 2.5 Pro); Gemini 3 cannot turn thinking off.
+	//     A stack-wide row would be wrong for every current model, so "none"
+	//     stays an enum value of reasoning.effort with the caveat in its hint.
+	//   response_format.json — only the SDK parse helpers (Pydantic /
+	//     zodResponseFormat, which send type json_schema) are documented.
+	//   web_search.enable — the extra_body table lists the google_search tool
+	//     for the Images endpoint only (gemini-3-pro-image-preview), not for
+	//     chat completions.
+	//   cache.prompt — extra_body.google.cached_content names a pre-created
+	//     cache resource, not a per-request caching switch.
+	"gemini": {
+		system.IntentReasoningEffort:      {Kind: bodyParam, Param: "reasoning_effort", ParamType: "enum", EnumValues: []string{"none", "minimal", "low", "medium", "high"}, Hint: "Gemini 3: thinking_level (minimal reads as low on 3.1 Pro); Gemini 2.5: thinking_budget 1024 / 1024 / 8192 / 24576; none only on Gemini 2.5 Flash / Flash-Lite (rejected on 2.5 Pro and Gemini 3); not combinable with extra_body.google.thinking_config"},
+		system.IntentReasoningBudget:      {Kind: bodyParam, Param: "extra_body.google.thinking_config.thinking_budget", ParamType: "number", Hint: "Gemini 2.5 only (Gemini 3 takes thinking_level minimal|low|medium|high in the same object); not combinable with reasoning_effort"},
+		system.IntentReasoningFormat:      {Kind: bodyParam, Param: "extra_body.google.thinking_config.include_thoughts", ParamType: "boolean", Hint: "true returns thought summaries with the message; Gemini 3 also returns thought signatures to resend on later turns"},
+		system.IntentResponseFormatSchema: {Kind: bodyParam, Param: "response_format", ParamType: "object", Hint: `{"type":"json_schema","json_schema":{"name":...,"schema":{...}}} as the SDK parse helpers send it`},
+		system.IntentStreamIncludeUsage:   {Kind: bodyParam, Param: "stream_options.include_usage", ParamType: "boolean", Value: true},
+	},
 }
 
 // https://docs.ollama.com/api/openai-compatibility
@@ -220,6 +250,12 @@ var stackParameters = map[string][]string{
 	"anthropic": {"model", "messages", "system", "max_tokens", "stream", "temperature", "top_p", "top_k", "stop_sequences", "tools", "tool_choice", "metadata"},
 	// https://platform.openai.com/docs/api-reference/chat/create
 	"openai": openaiChatParameters,
+	// Only the request keys the compatibility page itself uses on chat
+	// completions: it publishes no exhaustive list ("Current limitations"), and
+	// silently ignored keys (the page says so for images) are not evidence.
+	// extra_body is the documented carrier of the Gemini-only fields.
+	// https://ai.google.dev/gemini-api/docs/openai
+	"gemini": {"model", "messages", "stream", "stream_options", "n", "tools", "tool_choice", "reasoning_effort", "response_format", "service_tier", "extra_body"},
 }
 
 var openaiChatParameters = []string{"model", "messages", "temperature", "top_p", "n", "stream", "stream_options", "stop", "max_tokens", "max_completion_tokens", "presence_penalty", "frequency_penalty", "logit_bias", "logprobs", "top_logprobs", "user", "seed", "response_format", "tools", "tool_choice", "parallel_tool_calls", "reasoning_effort"}
@@ -236,5 +272,9 @@ func StackFor(stack string) string {
 var gatewayStacks = map[string]bool{"venice": true, "openrouter": true, "litellm": true, "anthropic": true, "openai": true}
 
 // The stack whose own API a family's body-param defaults describe. gemini
-// is absent: no gemini preset exists.
+// is absent on purpose: the family's generationConfig.thinkingConfig.* rows
+// are the native generateContent API, while the gemini preset is the
+// OpenAI-compatible endpoint (thinking knobs under
+// extra_body.google.thinking_config), so gatedStack skips the family rows
+// there and the stack table supplies the compatible ones.
 var familyNativeVendor = map[string]string{"claude": "anthropic", "o-series": "openai"}

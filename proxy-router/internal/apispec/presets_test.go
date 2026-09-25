@@ -1,6 +1,7 @@
 package apispec
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
@@ -99,6 +100,76 @@ func TestStackWebSearchBindings(t *testing.T) {
 			require.Nil(t, table[system.IntentWebSearchCitations], "%s: only venice documents a citations switch", stack)
 		}
 	}
+}
+
+// Every row is literal to https://ai.google.dev/gemini-api/docs/openai (the
+// compatibility endpoint), never to the native generateContent API.
+func TestGeminiPresetTables(t *testing.T) {
+	table := stackBindings["gemini"]
+	require.Len(t, table, 5)
+
+	effort := table[system.IntentReasoningEffort]
+	require.Equal(t, system.BindingKindBodyParam, effort.Kind)
+	require.Equal(t, "reasoning_effort", effort.Param)
+	require.Equal(t, []string{"none", "minimal", "low", "medium", "high"}, effort.EnumValues)
+	require.Contains(t, effort.Hint, "2.5 Pro", "none is documented for Gemini 2.5 only, never 2.5 Pro or Gemini 3")
+
+	budget := table[system.IntentReasoningBudget]
+	require.Equal(t, system.BindingKindBodyParam, budget.Kind)
+	require.Equal(t, "extra_body.google.thinking_config.thinking_budget", budget.Param)
+	require.Equal(t, "number", budget.ParamType)
+
+	format := table[system.IntentReasoningFormat]
+	require.Equal(t, system.BindingKindBodyParam, format.Kind)
+	require.Equal(t, "extra_body.google.thinking_config.include_thoughts", format.Param)
+	require.Equal(t, "boolean", format.ParamType)
+
+	schema := table[system.IntentResponseFormatSchema]
+	require.Equal(t, "response_format", schema.Param)
+	require.Equal(t, "object", schema.ParamType)
+
+	usage := table[system.IntentStreamIncludeUsage]
+	require.Equal(t, "stream_options.include_usage", usage.Param)
+	require.Equal(t, true, usage.Value)
+
+	for _, intent := range []string{system.IntentReasoningDisable, system.IntentReasoningEnable, system.IntentResponseFormatJSON, system.IntentWebSearchEnable, system.IntentWebSearchCitations, system.IntentCachePrompt, system.IntentSamplingTopK, system.IntentToolsParallel} {
+		require.Nil(t, table[intent], "%s is not documented on the compatibility endpoint", intent)
+	}
+	for intent, b := range table {
+		require.False(t, strings.HasPrefix(b.Param, "generationConfig."), "%s: native generateContent vocabulary on the compatible endpoint", intent)
+	}
+
+	require.Equal(t, []string{"model", "messages", "stream", "stream_options", "n", "tools", "tool_choice", "reasoning_effort", "response_format", "service_tier", "extra_body"}, stackParameters["gemini"])
+	require.Equal(t, "openai", config.StackTransport["gemini"])
+	require.NotContains(t, familyNativeVendor, "gemini", "the gemini family's rows are native-API vocabulary; the stack table carries the compatible ones")
+	require.True(t, gatedStack("gemini"))
+}
+
+func TestBuildGeminiPreset(t *testing.T) {
+	api := Build(config.ModelConfig{ModelName: "gemini-2.5-flash", ApiType: "openai", ApiStack: "gemini", ApiURL: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"})
+	require.NotNil(t, api)
+	require.Equal(t, "gemini", api.Stack)
+	require.Equal(t, system.ApiSpecSourceDeclared, api.Source)
+	require.Equal(t, "gemini", api.ModelFamily)
+	require.Equal(t, "", api.Via)
+	require.NotNil(t, api.Thinking)
+	require.Equal(t, system.ThinkingModeTunable, api.Thinking.Mode)
+
+	require.Len(t, api.Bindings, 5)
+	require.Equal(t, "reasoning_effort", api.Bindings[system.IntentReasoningEffort].Param)
+	require.Equal(t, "extra_body.google.thinking_config.thinking_budget", api.Bindings[system.IntentReasoningBudget].Param)
+	require.Equal(t, "extra_body.google.thinking_config.include_thoughts", api.Bindings[system.IntentReasoningFormat].Param)
+	require.Equal(t, "response_format", api.Bindings[system.IntentResponseFormatSchema].Param)
+	require.Equal(t, true, api.Bindings[system.IntentStreamIncludeUsage].Value)
+	require.Nil(t, api.Bindings[system.IntentReasoningDisable], "the family's generationConfig.thinkingConfig.thinkingBudget = 0 row must not reach the compatible endpoint")
+	for intent, b := range api.Bindings {
+		require.False(t, strings.HasPrefix(b.Param, "generationConfig."), "%s: family generationConfig binding leaked onto the compatible endpoint", intent)
+	}
+	require.Equal(t, stackParameters["gemini"], api.Parameters)
+	require.Nil(t, api.Bindings[system.IntentWebSearchEnable])
+
+	api.Bindings[system.IntentReasoningEffort].Param = "mutated"
+	require.Equal(t, "reasoning_effort", stackBindings["gemini"][system.IntentReasoningEffort].Param, "composed specs never alias the table")
 }
 
 func TestComposeVeniceWebSearchGatedOnFact(t *testing.T) {

@@ -30,8 +30,8 @@ func TestModelConfigModelFamilyAndApiStackAreOptional(t *testing.T) {
 }
 
 func TestStackTransportTable(t *testing.T) {
-	require.Len(t, StackTransport, 9)
-	for _, stack := range []string{"openai", "vllm", "sglang", "llamacpp", "ollama", "venice", "openrouter", "litellm"} {
+	require.Len(t, StackTransport, 10)
+	for _, stack := range []string{"openai", "vllm", "sglang", "llamacpp", "ollama", "venice", "openrouter", "litellm", "gemini"} {
 		require.Equal(t, "openai", StackTransport[stack], stack)
 	}
 	require.Equal(t, "claudeai", StackTransport["anthropic"])
@@ -65,6 +65,53 @@ func TestValidateApiStackRejectsTransportMismatch(t *testing.T) {
 	require.EqualError(t, err, `model 0x01: apiStack "vllm" requires apiType "openai", got "claudeai"`)
 	err = ValidateApiStack("0x02", ModelConfig{ApiType: "openai", ApiStack: "anthropic"})
 	require.EqualError(t, err, `model 0x02: apiStack "anthropic" requires apiType "claudeai", got "openai"`)
+}
+
+// Gemini's OpenAI-compatible endpoint speaks the openai transport; claudeai is
+// a mismatch exactly like for every other openai preset.
+func TestValidateApiStackGemini(t *testing.T) {
+	require.NoError(t, ValidateApiStack("0x01", ModelConfig{ApiType: "openai", ApiStack: "gemini"}))
+	err := ValidateApiStack("0x02", ModelConfig{ApiType: "claudeai", ApiStack: "gemini"})
+	require.EqualError(t, err, `model 0x02: apiStack "gemini" requires apiType "openai", got "claudeai"`)
+}
+
+// The schema enum is what editors validate against; it must name exactly the
+// presets the loader accepts.
+func TestSchemaApiStackEnumMatchesStackTransport(t *testing.T) {
+	raw, err := os.ReadFile("models-config-schema.json")
+	require.NoError(t, err)
+	var schema struct {
+		Properties struct {
+			Models struct {
+				Items struct {
+					Properties struct {
+						ApiStack struct {
+							Enum []string `json:"enum"`
+						} `json:"apiStack"`
+					} `json:"properties"`
+				} `json:"items"`
+			} `json:"models"`
+		} `json:"properties"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &schema))
+	want := make([]string, 0, len(StackTransport))
+	for stack := range StackTransport {
+		want = append(want, stack)
+	}
+	require.ElementsMatch(t, want, schema.Properties.Models.Items.Properties.ApiStack.Enum)
+}
+
+func TestInitV2GeminiPresetTransport(t *testing.T) {
+	const url = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+	l := newLoaderFromContent(t, `{"models":[
+		{"modelId":"0x01","modelName":"gemini-2.5-flash","apiType":"openai","apiStack":"gemini","apiUrl":"`+url+`"},
+		{"modelId":"0x02","modelName":"gemini-2.5-flash","apiType":"claudeai","apiStack":"gemini","apiUrl":"`+url+`"}]}`)
+	require.NoError(t, l.Init())
+	ids, _ := l.GetAll()
+	require.Len(t, ids, 2)
+	require.Equal(t, "gemini", l.ModelConfigFromID("0x01").ApiStack)
+	require.Equal(t, "", l.ModelConfigFromID("0x02").ApiStack, "claudeai transport: apiStack dropped, model kept")
+	require.Equal(t, "gemini-2.5-flash", l.ModelConfigFromID("0x02").ModelName)
 }
 
 func TestValidateApiStackEmptyIsAcceptedForEveryLegacyApiType(t *testing.T) {
