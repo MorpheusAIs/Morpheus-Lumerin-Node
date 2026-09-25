@@ -646,20 +646,20 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 // verify runs the verifier and the capability probes (design contract §5)
 // for a model whose probe just passed, when the flags allow: once per TTL
 // per (model, spec), each request paced by probeDelay, and never against a
-// hosted vendor or gateway unless MODEL_API_PROBE_HOSTED. The spec the
-// probes are chosen from carries the runtime evidence already established,
-// so a binding an earlier sweep saw rejected is not sent again; the
-// once-per-TTL key hashes the detection result itself, which is stable
-// across sweeps. A run cut short by the context records nothing, so the
-// next sweep retries.
+// hosted vendor, a gateway, an upstream reached through one (Via) or a
+// backend detection could not name (a hosted vendor behind an unrecognised
+// host is the likely case) unless MODEL_API_PROBE_HOSTED; the unknown stack
+// is among the tools-probe targets of contract §5 b, so the switch reaches
+// it. The spec the probes are chosen from carries the runtime evidence
+// already established, so a binding an earlier sweep saw rejected is not
+// sent again; the once-per-TTL key hashes the detection result itself,
+// which is stable across sweeps. A run cut short by the context records
+// nothing, so the next sweep retries.
 func (c *Checker) verify(ctx context.Context, modelID common.Hash, cfg config.ModelConfig, api *system.ModelApiSpec, adapter aiengine.AIEngineStream) {
 	if !c.deps.VerifyBindings && !c.deps.ProbeCapabilities {
 		return
 	}
-	if api.Stack == "" || api.Via != "" {
-		return
-	}
-	if apispec.IsHostedOrGatewayStack(api.Stack) && !c.deps.ProbeHosted {
+	if (api.Stack == "" || api.Via != "" || apispec.IsHostedOrGatewayStack(api.Stack)) && !c.deps.ProbeHosted {
 		return
 	}
 	id := modelID.Hex()
@@ -698,13 +698,18 @@ func (c *Checker) verify(ctx context.Context, modelID common.Hash, cfg config.Mo
 		return true
 	}
 
-	disableVerified := false
+	// The completion with the binding applied is the direct observation of
+	// reasoning.disable; once it answered (verified, refuted or rejected) the
+	// render check would only add a weaker verdict on the same intent, and a
+	// render that differs must not publish verified: true beside the
+	// always_on a refutation established.
+	disableDecided := false
 	if c.deps.VerifyBindings {
 		if apiprobe.ReasoningDisableBinding(spec) != nil {
 			if !run(func(ctx context.Context) apiprobe.Verdict { return v.VerifyReasoningDisable(ctx, spec) }) {
 				return
 			}
-			disableVerified = verdicts[len(verdicts)-1].Outcome == apiprobe.OutcomeAccepted
+			disableDecided = verdicts[len(verdicts)-1].Outcome != apiprobe.OutcomeUnknown
 		}
 		if spec.Capabilities == nil || spec.Capabilities.Tools == nil {
 			if !run(v.ProbeTools) {
@@ -724,9 +729,9 @@ func (c *Checker) verify(ctx context.Context, modelID common.Hash, cfg config.Mo
 			}
 		}
 		// The render check proves the template honours the kwarg without a
-		// completion; redundant once the completion with the kwarg applied
-		// already came back without reasoning content.
-		if _, _, ok := apiprobe.TemplateToggle(spec); ok && spec.Stack == "vllm" && !disableVerified {
+		// completion; it runs only while the completion probe left the
+		// binding undecided.
+		if _, _, ok := apiprobe.TemplateToggle(spec); ok && spec.Stack == "vllm" && !disableDecided {
 			if !run(func(ctx context.Context) apiprobe.Verdict { return v.RenderThinkingToggle(ctx, spec) }) {
 				return
 			}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -33,6 +34,16 @@ const (
 	ProbeImage            = "image"
 	ProbeRender           = "render"
 )
+
+// toolChoiceAutoSource names the observation behind a refused tool probe:
+// vLLM's "auto" tool choice error is a server setting
+// (--enable-auto-tool-choice), not a model fact, so the evidence entry
+// (verify:tool_choice_auto@<at>) says which it saw.
+const toolChoiceAutoSource = "tool_choice_auto"
+
+// thinkingDefaultOn is system.ThinkingSpec.Default's value for a template
+// that thinks unless told otherwise.
+const thinkingDefaultOn = "on"
 
 // Bounds of the render request, the same as apidetect's endpoint probes:
 // 2 s per request, 2 MiB of body.
@@ -183,6 +194,28 @@ func TemplateToggle(spec *system.ModelApiSpec) (key string, value any, ok bool) 
 	return key, b.Value, true
 }
 
+// templateEnableValue is the value the toggle key takes with reasoning on:
+// the reasoning.enable binding's when it is a template_kwarg on the same
+// key, the negation of a boolean disable value otherwise (the family table
+// pairs them that way). nil when no second value is known (thinking_budget
+// 0 has no enable counterpart) or the two would be equal.
+func templateEnableValue(spec *system.ModelApiSpec, key string, disable any) any {
+	var enable any
+	if b := spec.Bindings[system.IntentReasoningEnable]; b != nil && b.Kind == system.BindingKindTemplateKwarg && b.Param == "chat_template_kwargs."+key {
+		enable = b.Value
+	} else if off, ok := disable.(bool); ok {
+		enable = !off
+	}
+	if enable == nil || reflect.DeepEqual(enable, disable) {
+		return nil
+	}
+	return enable
+}
+
+func thinksByDefault(spec *system.ModelApiSpec) bool {
+	return spec != nil && spec.Thinking != nil && spec.Thinking.Default == thinkingDefaultOn
+}
+
 // send makes one adapter request and reports the status it saw: the
 // response metadata's when the adapter fills it, the error callback's
 // otherwise, and 200 for a plain success of an adapter that reports
@@ -205,6 +238,10 @@ func (v *Verifier) send(ctx context.Context, req *gcs.OpenAICompletionRequestExt
 
 func is2xx(status int) bool { return status >= 200 && status < 300 }
 func is4xx(status int) bool { return status >= 400 && status < 500 }
+
+// httpReason labels a status this package draws no verdict from (a 3xx the
+// redirect policy stopped, a 5xx) so the trace names what the backend sent.
+func httpReason(status int) string { return "HTTP " + strconv.Itoa(status) }
 
 func (v *Verifier) unknown(probe, reason string, err error) Verdict {
 	return Verdict{Probe: probe, Outcome: OutcomeUnknown, Reason: reason, At: v.now(), Err: err}
@@ -248,7 +285,7 @@ func (v *Verifier) VerifyReasoningDisable(ctx context.Context, spec *system.Mode
 			out.Reason = "HTTP 4xx naming no parameter"
 		}
 	default:
-		out.Reason = "HTTP 5xx"
+		out.Reason = httpReason(status)
 	}
 	return out
 }
@@ -304,22 +341,31 @@ func (v *Verifier) acceptance(ctx context.Context, probe string, req *gcs.OpenAI
 			out.RejectedParams, _ = ParseRejectedParams(meta.ErrorBody)
 		}
 	default:
-		out.Reason = "HTTP 5xx"
+		out.Reason = httpReason(status)
 	}
 	return out
 }
 
-// RenderThinkingToggle asks vLLM to render the chat template with and
-// without the template reasoning.disable kwarg (POST
-// /v1/chat/completions/render, no generation). Different token_ids prove
-// the template honours the kwarg: the reasoning.disable and reasoning.enable
-// template bindings are verified. Identical token_ids refute them. Only the
-// vllm stack serves the endpoint.
+// RenderThinkingToggle asks vLLM to render the chat template (POST
+// /v1/chat/completions/render, no generation) with the template
+// reasoning.disable kwarg at its off value and at its on value. Different
+// token_ids prove the template honours the kwarg: the reasoning.disable and
+// reasoning.enable template bindings are verified. Identical token_ids
+// refute them: a template that reads the kwarg renders thinking on and off
+// differently. The two values are compared with each other, not against a
+// render without the kwarg, because a template whose default already is
+// the off value (Gemma 4: enable_thinking off unless set) renders the plain
+// and the disabled prompt identically although the kwarg is honoured. With
+// only the off value known the plain render stands in for the on value, and
+// identical token_ids then refute the binding only when the template is
+// known to think by default (Thinking.Default "on"); otherwise they prove
+// nothing and no verdict is published. Only the vllm stack serves the
+// endpoint.
 func (v *Verifier) RenderThinkingToggle(ctx context.Context, spec *system.ModelApiSpec) Verdict {
 	if v.Stack != "vllm" {
 		return v.unknown(ProbeRender, "render endpoint is vLLM's", nil)
 	}
-	key, value, ok := TemplateToggle(spec)
+	key, off, ok := TemplateToggle(spec)
 	if !ok {
 		return v.unknown(ProbeRender, "no template_kwarg reasoning.disable binding", nil)
 	}
@@ -328,18 +374,23 @@ func (v *Verifier) RenderThinkingToggle(ctx context.Context, spec *system.ModelA
 		return v.unknown(ProbeRender, "apiUrl names no host", nil)
 	}
 	model := v.ModelName
-	plain, err := RenderRequestBody(model, v.prompt(), nil)
+	disabled, err := RenderRequestBody(model, v.prompt(), map[string]any{key: off})
 	if err != nil {
 		return v.unknown(ProbeRender, "cannot build request", err)
 	}
-	toggled, err := RenderRequestBody(model, v.prompt(), map[string]any{key: value})
+	var onKwargs map[string]any
+	on := templateEnableValue(spec, key, off)
+	if on != nil {
+		onKwargs = map[string]any{key: on}
+	}
+	enabled, err := RenderRequestBody(model, v.prompt(), onKwargs)
 	if err != nil {
 		return v.unknown(ProbeRender, "cannot build request", err)
 	}
 
 	out := Verdict{Probe: ProbeRender, At: v.now()}
 	var tokens [2][]int64
-	for i, body := range [][]byte{plain, toggled} {
+	for i, body := range [][]byte{disabled, enabled} {
 		if !v.pace(ctx) {
 			out.Reason = "cancelled"
 			out.Err = ctx.Err()
@@ -370,11 +421,15 @@ func (v *Verifier) RenderThinkingToggle(ctx context.Context, spec *system.ModelA
 			out.Reason = "HTTP 4xx naming no parameter"
 			return out
 		default:
-			out.Reason = "HTTP 5xx"
+			out.Reason = httpReason(status)
 			return out
 		}
 	}
 	if equalTokens(tokens[0], tokens[1]) {
+		if on == nil && !thinksByDefault(spec) {
+			out.Reason = "rendered prompt unchanged; the template's default is not known to think"
+			return out
+		}
 		out.Outcome = OutcomeRefuted
 		out.Reason = "rendered prompt unchanged"
 		return out
@@ -424,13 +479,23 @@ func equalTokens(a, b []int64) bool {
 // Fold writes the verdicts into rt as MergeRuntime reads them: binding
 // verdicts into Verified (a refuted reasoning.disable also marks reasoning
 // seen with the disable applied, which upgrades thinking to always_on),
-// rejections into RejectedParams, the tool verdict into ToolsSupported, and
-// the accepted capability probes into CapabilityFacts under
+// rejections into RejectedParams, the tool verdict into ToolsSupported
+// (verify:tools@<at> when accepted, verify:tool_choice_auto@<at> for the
+// refusal), and the accepted capability probes into CapabilityFacts under
 // verify:<probe>@<at>. Unknown and refused capability verdicts publish
-// nothing.
+// nothing. The completion with the binding applied is the direct
+// observation of reasoning.disable; a render verdict only proves the
+// template changed, so it never overrides a completion verdict on that
+// intent, whatever the order of the verdicts.
 func Fold(rt *apispec.Runtime, verdicts ...Verdict) {
 	if rt == nil {
 		return
+	}
+	disableDecided := false
+	for _, v := range verdicts {
+		if v.Probe == ProbeReasoningDisable && (v.Outcome == OutcomeAccepted || v.Outcome == OutcomeRefuted) {
+			disableDecided = true
+		}
 	}
 	verified := func(intent string, ok bool, v Verdict) {
 		if rt.Verified == nil {
@@ -458,20 +523,24 @@ func Fold(rt *apispec.Runtime, verdicts ...Verdict) {
 				rt.ReasoningDisabledInRequest = true
 			}
 		case ProbeRender:
-			switch v.Outcome {
-			case OutcomeAccepted:
-				verified(system.IntentReasoningDisable, true, v)
-				verified(system.IntentReasoningEnable, true, v)
-			case OutcomeRefuted:
-				verified(system.IntentReasoningDisable, false, v)
-				verified(system.IntentReasoningEnable, false, v)
+			if v.Outcome != OutcomeAccepted && v.Outcome != OutcomeRefuted {
+				continue
 			}
+			ok := v.Outcome == OutcomeAccepted
+			if !disableDecided {
+				verified(system.IntentReasoningDisable, ok, v)
+			}
+			verified(system.IntentReasoningEnable, ok, v)
 		case ProbeTools:
 			switch v.Outcome {
-			case OutcomeAccepted, OutcomeRefused:
-				supported := v.Outcome == OutcomeAccepted
+			case OutcomeAccepted:
+				supported := true
 				rt.ToolsSupported = &supported
 				rt.ToolsSource = VerifySource(ProbeTools, v.At)
+			case OutcomeRefused:
+				supported := false
+				rt.ToolsSupported = &supported
+				rt.ToolsSource = VerifySource(toolChoiceAutoSource, v.At)
 			}
 		case ProbeJSONSchema:
 			if v.Outcome == OutcomeAccepted {

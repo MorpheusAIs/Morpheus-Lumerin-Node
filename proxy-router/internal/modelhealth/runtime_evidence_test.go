@@ -578,13 +578,18 @@ func (h *verifyHarness) sweep(t *testing.T) system.ModelHealthReport {
 	return reportByID(t, h.checker.GetReports(), modelLLM)
 }
 
-// kinds names each recorded request by the probe that shaped it.
+// kinds names each recorded request by the probe that shaped it; a render
+// carries the toggle at its on or off value, or no kwarg at all.
 func kinds(reqs []probeRequest) []string {
 	var out []string
 	for _, r := range reqs {
 		switch {
 		case strings.HasSuffix(r.path, "/render") && r.has("chat_template_kwargs"):
-			out = append(out, "render+kwarg")
+			if kwargValueIs(r, true) {
+				out = append(out, "render:on")
+			} else {
+				out = append(out, "render:off")
+			}
 		case strings.HasSuffix(r.path, "/render"):
 			out = append(out, "render")
 		case r.has("tool_choice"):
@@ -602,6 +607,18 @@ func kinds(reqs []probeRequest) []string {
 		}
 	}
 	return out
+}
+
+// kwargValueIs reports whether the request's chat_template_kwargs carries
+// the value under any key.
+func kwargValueIs(r probeRequest, value any) bool {
+	kwargs, _ := r.body["chat_template_kwargs"].(map[string]any)
+	for _, v := range kwargs {
+		if v == value {
+			return true
+		}
+	}
+	return false
 }
 
 func detectedQwen3Both() *system.ModelApiSpec {
@@ -742,10 +759,13 @@ func TestVerifyToolsVerdicts(t *testing.T) {
 		llm := h.sweep(t)
 		require.Equal(t, []string{"health", "tools"}, kinds(h.backend.recorded()), "no reasoning binding: only the tool probe")
 		require.False(t, *llm.Api.Capabilities.Tools)
-		require.Equal(t, "verify:tools@1700000000", llm.Api.Evidence["capabilities.tools"])
+		require.Equal(t, "verify:tool_choice_auto@1700000000", llm.Api.Evidence["capabilities.tools"], "the evidence names the server-side refusal, not a model fact")
 	})
 
-	t.Run("another 4xx publishes nothing", func(t *testing.T) {
+	t.Run("another 4xx publishes nothing and is not asked again before the TTL", func(t *testing.T) {
+		// The health response carries no model, no reasoning and no gateway
+		// header, so the run leaves no harvested fact and no verdict: the
+		// once-per-TTL gate must survive on its own.
 		h := newVerifyHarness(t, detectedVLLMNoFamily(), verifyFlags{verify: true})
 		h.backend.setScript(func(r probeRequest) (int, string, bool) {
 			if r.has("tool_choice") {
@@ -757,6 +777,18 @@ func TestVerifyToolsVerdicts(t *testing.T) {
 		require.Equal(t, []string{"health", "tools"}, kinds(h.backend.recorded()))
 		require.Nil(t, llm.Api.Capabilities)
 		require.Empty(t, llm.Api.Evidence)
+		first := llm.Api.DeclaredAt
+
+		h.clock = h.clock.Add(time.Minute)
+		llm = h.sweep(t)
+		require.Equal(t, []string{"health", "tools", "health"}, kinds(h.backend.recorded()), "within the TTL the health probe goes alone")
+		require.Nil(t, llm.Api.Capabilities)
+		require.Empty(t, llm.Api.Evidence)
+		require.Equal(t, first, llm.Api.DeclaredAt)
+
+		h.clock = h.clock.Add(61 * time.Minute)
+		h.sweep(t)
+		require.Equal(t, []string{"health", "tools", "health", "health", "tools"}, kinds(h.backend.recorded()), "past the TTL the probe is sent again")
 	})
 
 	t.Run("known tools are not probed", func(t *testing.T) {
@@ -770,12 +802,14 @@ func TestVerifyToolsVerdicts(t *testing.T) {
 	})
 }
 
+// renderScript renders a template that thinks by default: the off value
+// changes the prompt when differ is set, the on value never does.
 func renderScript(differ bool) func(r probeRequest) (int, string, bool) {
 	return func(r probeRequest) (int, string, bool) {
 		if !strings.HasSuffix(r.path, "/render") {
 			return 0, "", false
 		}
-		if differ && r.has("chat_template_kwargs") {
+		if differ && kwargValueIs(r, false) {
 			return http.StatusOK, `{"request_id":"r2","token_ids":[1,2,3,9]}`, true
 		}
 		return http.StatusOK, `{"request_id":"r1","token_ids":[1,2,3]}`, true
@@ -788,7 +822,7 @@ func TestProbeCapabilities(t *testing.T) {
 		h.backend.setScript(renderScript(true))
 		llm := h.sweep(t)
 		reqs := h.backend.recorded()
-		require.Equal(t, []string{"health", "json_schema", "image", "render", "render+kwarg"}, kinds(reqs))
+		require.Equal(t, []string{"health", "json_schema", "image", "render:off", "render:on"}, kinds(reqs))
 		require.Len(t, h.sleeps, 4, "both render requests are paced")
 		require.Equal(t, chatPath+"/render", reqs[3].path)
 		require.Equal(t, "my-alias", reqs[3].body["model"])
@@ -819,7 +853,7 @@ func TestProbeCapabilities(t *testing.T) {
 			return render(r)
 		})
 		llm := h.sweep(t)
-		require.Equal(t, []string{"health", "json_schema", "image", "render", "render+kwarg"}, kinds(h.backend.recorded()))
+		require.Equal(t, []string{"health", "json_schema", "image", "render:off", "render:on"}, kinds(h.backend.recorded()))
 		require.Nil(t, llm.Api.Capabilities, "a refused list-valued probe publishes nothing")
 		for _, intent := range []string{system.IntentReasoningDisable, system.IntentReasoningEnable} {
 			require.False(t, *llm.Api.Bindings[intent].Verified, intent)
@@ -846,6 +880,26 @@ func TestProbeCapabilities(t *testing.T) {
 		require.True(t, *llm.Api.Bindings[system.IntentReasoningDisable].Verified)
 		require.Nil(t, llm.Api.Bindings[system.IntentReasoningEnable].Verified, "the completion probe says nothing about the enable binding")
 	})
+
+	t.Run("a refuted completion is not overridden by a differing render", func(t *testing.T) {
+		h := newVerifyHarness(t, detectedQwen3Both(), verifyFlags{verify: true, caps: true})
+		render := renderScript(true)
+		h.backend.setScript(func(r probeRequest) (int, string, bool) {
+			if r.path == chatPath && r.has("chat_template_kwargs") {
+				return http.StatusOK, reasoningCompletion, true
+			}
+			return render(r)
+		})
+		llm := h.sweep(t)
+		require.Equal(t, []string{"health", "reasoning.disable", "tools", "json_schema", "image"}, kinds(h.backend.recorded()), "the completion decided the binding; no render")
+		b := llm.Api.Bindings[system.IntentReasoningDisable]
+		require.NotNil(t, b.Verified)
+		require.False(t, *b.Verified)
+		require.Equal(t, "verify:reasoning_content_still_present@1700000000", llm.Api.Evidence[system.EvidenceKeyBinding(system.IntentReasoningDisable)])
+		require.Equal(t, system.ThinkingModeAlwaysOn, llm.Api.Thinking.Mode)
+		require.Equal(t, "verify:reasoning_seen_with_disable@1700000000", llm.Api.Evidence["capabilities.reasoning"])
+		require.Nil(t, llm.Api.Bindings[system.IntentReasoningEnable].Verified)
+	})
 }
 
 func TestVerifyHostedGuard(t *testing.T) {
@@ -853,13 +907,23 @@ func TestVerifyHostedGuard(t *testing.T) {
 		return &system.ModelApiSpec{Stack: stack, Via: via, Source: system.ApiSpecSourceDetected,
 			Bindings: map[string]*system.ParamBinding{system.IntentReasoningDisable: {Kind: system.BindingKindBodyParam, Param: "reasoning.enabled", ParamType: "boolean", Value: false}}}
 	}
-	for _, spec := range []*system.ModelApiSpec{hosted("openrouter", ""), hosted("venice", ""), hosted("litellm", ""), hosted("anthropic", ""), hosted("openai", ""), hosted("groq", ""), hosted("hf-router", ""), hosted("", ""), hosted("vllm", "litellm")} {
+	gated := []*system.ModelApiSpec{hosted("openrouter", ""), hosted("venice", ""), hosted("litellm", ""), hosted("anthropic", ""), hosted("openai", ""), hosted("groq", ""), hosted("hf-router", ""), hosted("", ""), hosted("vllm", "litellm")}
+	for _, spec := range gated {
 		name := spec.Stack + "/" + spec.Via
 		t.Run(name+" is skipped", func(t *testing.T) {
 			h := newVerifyHarness(t, spec, verifyFlags{verify: true, caps: true})
 			h.sweep(t)
 			require.Equal(t, []string{"health"}, kinds(h.backend.recorded()))
 			require.Empty(t, h.sleeps)
+		})
+	}
+	for _, spec := range gated {
+		name := spec.Stack + "/" + spec.Via
+		t.Run(name+" is probed with the switch", func(t *testing.T) {
+			h := newVerifyHarness(t, spec, verifyFlags{verify: true, hosted: true})
+			llm := h.sweep(t)
+			require.Equal(t, []string{"health", "reasoning.disable", "tools"}, kinds(h.backend.recorded()))
+			require.True(t, *llm.Api.Bindings[system.IntentReasoningDisable].Verified)
 		})
 	}
 
@@ -872,11 +936,6 @@ func TestVerifyHostedGuard(t *testing.T) {
 		require.True(t, *llm.Api.Bindings[system.IntentReasoningDisable].Verified)
 	})
 
-	t.Run("a gateway upstream is never probed even with the switch", func(t *testing.T) {
-		h := newVerifyHarness(t, hosted("vllm", "litellm"), verifyFlags{verify: true, hosted: true})
-		h.sweep(t)
-		require.Equal(t, []string{"health"}, kinds(h.backend.recorded()))
-	})
 }
 
 func TestVerifyOnlyAfterHealthyProbe(t *testing.T) {

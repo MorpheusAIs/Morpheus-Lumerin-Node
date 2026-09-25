@@ -118,7 +118,11 @@ func (s *runtimeStore) harvest(modelID string, meta *aiengine.ResponseMeta) (rt 
 		entry.verifiedAt = time.Time{}
 		entry.verifyKey = ""
 	}
-	if len(entry.seen) == 0 && !hasVerifierFacts(&entry.verify) {
+	// A recorded verifier run keeps the entry even when it established no
+	// fact: verifiedAt is the once-per-TTL gate (verifyDue), and dropping it
+	// here would resend every probe on the next sweep for a backend whose
+	// health response carries nothing to harvest.
+	if len(entry.seen) == 0 && entry.verifiedAt.IsZero() {
 		delete(s.byModel, modelID)
 		return apispec.Runtime{}, false
 	}
@@ -234,12 +238,6 @@ func (s *runtimeStore) forget(modelID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.byModel, modelID)
-}
-
-// hasVerifierFacts reports whether the verify block carries facts; those
-// expire with verifiedAt, not fact by fact.
-func hasVerifierFacts(rt *apispec.Runtime) bool {
-	return len(rt.Verified) > 0 || rt.ToolsSupported != nil || !rt.CapabilityFacts.Empty() || len(rt.RejectedParams) > 0 || rt.ReasoningDisabledInRequest
 }
 
 func copyFact(dst, src *apispec.Runtime, fact runtimeFact) {

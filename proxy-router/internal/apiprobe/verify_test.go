@@ -227,7 +227,19 @@ func TestProbeJSONSchemaAndImage(t *testing.T) {
 	})
 }
 
+// renderScript renders a template whose default is thinking on: the plain
+// prompt and the enable_thinking:true prompt are the same, the
+// enable_thinking:false prompt differs when differ is set.
 func renderScript(differ bool, status int, errBody string) func(string, map[string]any) (int, string) {
+	return renderByKwargs(status, errBody, func(kwargs map[string]any) string {
+		if differ && kwargs != nil && kwargs["enable_thinking"] == false {
+			return `{"request_id":"r2","token_ids":[1,2,3,9],"sampling_params":{}}`
+		}
+		return `{"request_id":"r1","token_ids":[1,2,3],"sampling_params":{}}`
+	})
+}
+
+func renderByKwargs(status int, errBody string, render func(kwargs map[string]any) string) func(string, map[string]any) (int, string) {
 	return func(path string, body map[string]any) (int, string) {
 		if !strings.HasSuffix(path, "/render") {
 			return 404, `{"error":"not the render endpoint"}`
@@ -235,11 +247,32 @@ func renderScript(differ bool, status int, errBody string) func(string, map[stri
 		if status != 200 {
 			return status, errBody
 		}
-		if _, toggled := body["chat_template_kwargs"]; toggled && differ {
-			return 200, `{"request_id":"r2","token_ids":[1,2,3,9],"sampling_params":{}}`
-		}
-		return 200, `{"request_id":"r1","token_ids":[1,2,3],"sampling_params":{}}`
+		kwargs, _ := body["chat_template_kwargs"].(map[string]any)
+		return 200, render(kwargs)
 	}
+}
+
+const (
+	renderedOff = `{"request_id":"off","token_ids":[1,2,3,9],"sampling_params":{}}`
+	renderedOn  = `{"request_id":"on","token_ids":[1,2,3],"sampling_params":{}}`
+)
+
+// gemma4Spec is a template whose default is thinking off: the plain render
+// and the enable_thinking:false render are identical.
+func gemma4Spec() *system.ModelApiSpec {
+	spec := qwen3Spec()
+	spec.ModelFamily = "gemma"
+	spec.Thinking.Default = "off"
+	return spec
+}
+
+// budgetSpec has a disable value with no enable counterpart
+// (thinking_budget 0).
+func budgetSpec(thinkingDefault string) *system.ModelApiSpec {
+	return &system.ModelApiSpec{Stack: "vllm", Thinking: &system.ThinkingSpec{Mode: system.ThinkingModeControllable, Default: thinkingDefault},
+		Bindings: map[string]*system.ParamBinding{
+			system.IntentReasoningDisable: {Kind: system.BindingKindTemplateKwarg, Param: "chat_template_kwargs.thinking_budget", ParamType: "number", Value: 0},
+		}}
 }
 
 func TestRenderThinkingToggle(t *testing.T) {
@@ -257,8 +290,8 @@ func TestRenderThinkingToggle(t *testing.T) {
 			require.Equal(t, "qwen3-8b", r.body["model"])
 			require.Equal(t, float64(1), r.body["max_tokens"])
 		}
-		require.Nil(t, reqs[0].body["chat_template_kwargs"])
-		require.Equal(t, map[string]any{"enable_thinking": false}, reqs[1].body["chat_template_kwargs"])
+		require.Equal(t, map[string]any{"enable_thinking": false}, reqs[0].body["chat_template_kwargs"], "the off value first")
+		require.Equal(t, map[string]any{"enable_thinking": true}, reqs[1].body["chat_template_kwargs"], "then the on value")
 	})
 
 	t.Run("identical prompts refute them", func(t *testing.T) {
@@ -266,6 +299,66 @@ func TestRenderThinkingToggle(t *testing.T) {
 		v := b.verifier("vllm").RenderThinkingToggle(context.Background(), qwen3Spec())
 		require.Equal(t, OutcomeRefuted, v.Outcome)
 		require.Equal(t, "rendered_prompt_unchanged", ReasonSlug(v.Reason))
+	})
+
+	t.Run("a default-off template is verified although plain equals disabled", func(t *testing.T) {
+		b := newScriptedBackend(t, renderByKwargs(200, "", func(kwargs map[string]any) string {
+			if kwargs != nil && kwargs["enable_thinking"] == true {
+				return renderedOn
+			}
+			return renderedOff
+		}))
+		v := b.verifier("vllm").RenderThinkingToggle(context.Background(), gemma4Spec())
+		require.Equal(t, OutcomeAccepted, v.Outcome, v.Reason)
+		reqs := b.recorded()
+		require.Len(t, reqs, 2)
+		require.NotNil(t, reqs[0].body["chat_template_kwargs"], "no plain render: it equals the disabled one here")
+		require.NotNil(t, reqs[1].body["chat_template_kwargs"])
+	})
+
+	t.Run("the enable value is the reasoning.enable binding's, not a negation", func(t *testing.T) {
+		spec := qwen3Spec()
+		spec.Bindings[system.IntentReasoningDisable] = &system.ParamBinding{Kind: system.BindingKindTemplateKwarg, Param: "chat_template_kwargs.thinking", ParamType: "string", Value: "off"}
+		spec.Bindings[system.IntentReasoningEnable] = &system.ParamBinding{Kind: system.BindingKindTemplateKwarg, Param: "chat_template_kwargs.thinking", ParamType: "string", Value: "on"}
+		b := newScriptedBackend(t, renderByKwargs(200, "", func(kwargs map[string]any) string {
+			if kwargs["thinking"] == "on" {
+				return renderedOn
+			}
+			return renderedOff
+		}))
+		v := b.verifier("vllm").RenderThinkingToggle(context.Background(), spec)
+		require.Equal(t, OutcomeAccepted, v.Outcome, v.Reason)
+		reqs := b.recorded()
+		require.Equal(t, map[string]any{"thinking": "off"}, reqs[0].body["chat_template_kwargs"])
+		require.Equal(t, map[string]any{"thinking": "on"}, reqs[1].body["chat_template_kwargs"])
+	})
+
+	t.Run("one value only: unchanged proves nothing unless the template thinks by default", func(t *testing.T) {
+		unchanged := renderByKwargs(200, "", func(map[string]any) string { return renderedOn })
+		b := newScriptedBackend(t, unchanged)
+		v := b.verifier("vllm").RenderThinkingToggle(context.Background(), budgetSpec(""))
+		require.Equal(t, OutcomeUnknown, v.Outcome, v.Reason)
+		require.Equal(t, 2, v.Requests)
+		reqs := b.recorded()
+		require.Equal(t, map[string]any{"thinking_budget": float64(0)}, reqs[0].body["chat_template_kwargs"])
+		require.Nil(t, reqs[1].body["chat_template_kwargs"], "the plain render stands in for the on value")
+
+		b = newScriptedBackend(t, unchanged)
+		v = b.verifier("vllm").RenderThinkingToggle(context.Background(), budgetSpec("off"))
+		require.Equal(t, OutcomeUnknown, v.Outcome, "off by default: the disabled render is expected to match the plain one")
+
+		b = newScriptedBackend(t, unchanged)
+		v = b.verifier("vllm").RenderThinkingToggle(context.Background(), budgetSpec("on"))
+		require.Equal(t, OutcomeRefuted, v.Outcome, "on by default: the budget should have changed the prompt")
+
+		b = newScriptedBackend(t, renderByKwargs(200, "", func(kwargs map[string]any) string {
+			if kwargs == nil {
+				return renderedOn
+			}
+			return renderedOff
+		}))
+		v = b.verifier("vllm").RenderThinkingToggle(context.Background(), budgetSpec(""))
+		require.Equal(t, OutcomeAccepted, v.Outcome, "a differing render verifies whatever the default")
 	})
 
 	t.Run("a 4xx naming the parameter rejects", func(t *testing.T) {
@@ -313,6 +406,7 @@ func TestRenderThinkingToggle(t *testing.T) {
 		verdict := v.RenderThinkingToggle(context.Background(), qwen3Spec())
 		require.Equal(t, OutcomeUnknown, verdict.Outcome)
 		require.Equal(t, http.StatusTemporaryRedirect, verdict.Status)
+		require.Equal(t, "HTTP 307", verdict.Reason, "the trace names the status the redirect policy stopped at")
 	})
 
 	t.Run("the body is bounded", func(t *testing.T) {
@@ -379,7 +473,7 @@ func TestFold(t *testing.T) {
 		require.Empty(t, rt.Verified)
 	})
 
-	t.Run("refused tools publish false; refused capability probes publish nothing", func(t *testing.T) {
+	t.Run("refused tools publish false under the refusal's own source; refused capability probes publish nothing", func(t *testing.T) {
 		var rt apispec.Runtime
 		Fold(&rt,
 			Verdict{Probe: ProbeTools, Outcome: OutcomeRefused, At: at},
@@ -387,7 +481,28 @@ func TestFold(t *testing.T) {
 			Verdict{Probe: ProbeImage, Outcome: OutcomeUnknown, At: at},
 		)
 		require.False(t, *rt.ToolsSupported)
+		require.Equal(t, "verify:tool_choice_auto@1700000000", rt.ToolsSource)
 		require.True(t, rt.CapabilityFacts.Empty())
+	})
+
+	t.Run("a render verdict never overrides the completion's reasoning.disable verdict", func(t *testing.T) {
+		var rt apispec.Runtime
+		Fold(&rt,
+			Verdict{Probe: ProbeReasoningDisable, Outcome: OutcomeRefuted, Reason: "reasoning content still present", At: at},
+			Verdict{Probe: ProbeRender, Outcome: OutcomeAccepted, Reason: "differs", At: at},
+		)
+		require.False(t, rt.Verified[system.IntentReasoningDisable].Verified)
+		require.Equal(t, "reasoning content still present", rt.Verified[system.IntentReasoningDisable].Reason)
+		require.True(t, rt.Verified[system.IntentReasoningEnable].Verified, "the render still speaks for the enable binding")
+		require.True(t, rt.ReasoningDisabledInRequest)
+
+		rt = apispec.Runtime{}
+		Fold(&rt,
+			Verdict{Probe: ProbeRender, Outcome: OutcomeRefuted, Reason: "rendered prompt unchanged", At: at},
+			Verdict{Probe: ProbeReasoningDisable, Outcome: OutcomeAccepted, Reason: "ok", At: at},
+		)
+		require.True(t, rt.Verified[system.IntentReasoningDisable].Verified, "order does not matter")
+		require.False(t, rt.Verified[system.IntentReasoningEnable].Verified)
 	})
 
 	t.Run("render verifies both template bindings", func(t *testing.T) {
