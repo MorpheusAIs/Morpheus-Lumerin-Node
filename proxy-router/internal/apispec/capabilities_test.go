@@ -433,9 +433,7 @@ func TestComposeRule7ThinkingDefault(t *testing.T) {
 
 func withVeniceWebSearchBinding(t *testing.T) {
 	t.Helper()
-	require.Nil(t, stackBindings["venice"][system.IntentWebSearchEnable], "the table has no web_search entry yet; this test injects one")
-	stackBindings["venice"][system.IntentWebSearchEnable] = &system.ParamBinding{Kind: bodyParam, Param: "venice_parameters.enable_web_search", ParamType: "string", Value: "on"}
-	t.Cleanup(func() { delete(stackBindings["venice"], system.IntentWebSearchEnable) })
+	require.Equal(t, "venice_parameters.enable_web_search", stackBindings["venice"][system.IntentWebSearchEnable].Param, "the gate is exercised against the documented venice row")
 }
 
 func TestComposeRule8WebSearchGatesTableBindings(t *testing.T) {

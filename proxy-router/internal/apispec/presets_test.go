@@ -35,7 +35,7 @@ func TestStackTablesMatchConfigPresets(t *testing.T) {
 
 func assertWellFormed(t *testing.T, where string, b map[string]*system.ParamBinding) {
 	t.Helper()
-	kinds := map[string]bool{system.BindingKindBodyParam: true, system.BindingKindTemplateKwarg: true, system.BindingKindSystemPrompt: true, system.BindingKindNativeBodyParam: true}
+	kinds := map[string]bool{system.BindingKindBodyParam: true, system.BindingKindTemplateKwarg: true, system.BindingKindSystemPrompt: true, system.BindingKindNativeBodyParam: true, system.BindingKindToolEntry: true}
 	types := map[string]bool{"boolean": true, "number": true, "enum": true, "string": true, "object": true, "array": true}
 	for intent, pb := range b {
 		require.NotNil(t, pb, "%s/%s", where, intent)
@@ -59,7 +59,71 @@ func assertWellFormed(t *testing.T, where string, b map[string]*system.ParamBind
 		if pb.Kind == system.BindingKindNativeBodyParam {
 			require.NotEmpty(t, pb.Hint, "%s/%s native binding needs an endpoint hint", where, intent)
 		}
+		if pb.Kind == system.BindingKindToolEntry {
+			require.Equal(t, "tools", pb.Param, "%s/%s tool_entry appends to tools[]", where, intent)
+			require.IsType(t, map[string]any{}, pb.Value, "%s/%s tool_entry value is the tool object", where, intent)
+		}
 	}
+}
+
+// Plan §6.D / contract §3 rule 8: one documented request shape per hosted
+// vendor; the local engines have no web-search knob.
+func TestStackWebSearchBindings(t *testing.T) {
+	rows := map[string]*system.ParamBinding{
+		"venice":     {Kind: system.BindingKindBodyParam, Param: "venice_parameters.enable_web_search", ParamType: "string", Value: "on"},
+		"openrouter": {Kind: system.BindingKindBodyParam, Param: "plugins", ParamType: "array", Value: []any{map[string]any{"id": "web"}}},
+		"litellm":    {Kind: system.BindingKindBodyParam, Param: "web_search_options", ParamType: "object", Value: map[string]any{}},
+		"anthropic":  {Kind: system.BindingKindToolEntry, Param: "tools", ParamType: "object", Value: map[string]any{"type": "web_search_20250305", "name": "web_search"}},
+		"openai":     {Kind: system.BindingKindBodyParam, Param: "web_search_options", ParamType: "object", Value: map[string]any{}},
+	}
+	for stack, want := range rows {
+		got := stackBindings[stack][system.IntentWebSearchEnable]
+		require.NotNil(t, got, stack)
+		require.Equal(t, want.Kind, got.Kind, stack)
+		require.Equal(t, want.Param, got.Param, stack)
+		require.Equal(t, want.ParamType, got.ParamType, stack)
+		require.Equal(t, want.Value, got.Value, stack)
+		require.NotEmpty(t, got.Hint, "%s: the row's caveats live in the hint", stack)
+	}
+	citations := stackBindings["venice"][system.IntentWebSearchCitations]
+	require.NotNil(t, citations)
+	require.Equal(t, system.BindingKindBodyParam, citations.Kind)
+	require.Equal(t, "venice_parameters.enable_web_citations", citations.Param)
+	require.Equal(t, "boolean", citations.ParamType)
+	require.Equal(t, true, citations.Value)
+	for stack, table := range stackBindings {
+		if _, hosted := rows[stack]; hosted {
+			continue
+		}
+		require.Nil(t, table[system.IntentWebSearchEnable], "%s has no web-search knob", stack)
+		require.Nil(t, table[system.IntentWebSearchCitations], "%s has no web-search knob", stack)
+	}
+	for stack, table := range stackBindings {
+		if stack == "venice" {
+			continue
+		}
+		require.Nil(t, table[system.IntentWebSearchCitations], "only venice documents a citations switch")
+	}
+}
+
+func TestComposeVeniceWebSearchGatedOnFact(t *testing.T) {
+	const source = "venice:/models.model_spec.capabilities.supportsWebSearch"
+	var f CapabilityFacts
+	f.SetWebSearch(true, source)
+	api := Compose(Evidence{Stack: "venice", ModelName: "llama-3.3-70b", Caps: f})
+	require.Equal(t, "venice_parameters.enable_web_search", api.Bindings[system.IntentWebSearchEnable].Param)
+	require.Equal(t, "on", api.Bindings[system.IntentWebSearchEnable].Value)
+	require.Equal(t, "venice_parameters.enable_web_citations", api.Bindings[system.IntentWebSearchCitations].Param)
+	require.Equal(t, source, api.Evidence["bindings.web_search.enable"])
+	require.Equal(t, source, api.Evidence["bindings.web_search.citations"])
+	require.Equal(t, source, api.Evidence[system.EvidenceKeyCapability(CapFieldWebSearch)])
+	require.True(t, *api.Capabilities.WebSearch)
+
+	api = Compose(Evidence{Stack: "venice", ModelName: "llama-3.3-70b"})
+	require.Nil(t, api.Bindings[system.IntentWebSearchEnable])
+	require.Nil(t, api.Bindings[system.IntentWebSearchCitations])
+	require.NotContains(t, api.Evidence, "bindings.web_search.enable")
+	require.NotNil(t, api.Bindings[system.IntentSamplingTopK], "only web_search.* is evidence-gated")
 }
 
 func TestAllTablesWellFormed(t *testing.T) {

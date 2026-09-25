@@ -13,6 +13,7 @@ import (
 const (
 	bodyParam   = system.BindingKindBodyParam
 	nativeParam = system.BindingKindNativeBodyParam
+	toolEntry   = system.BindingKindToolEntry
 )
 
 type bindingSet = map[string]*system.ParamBinding
@@ -91,6 +92,7 @@ var stackBindings = map[string]bindingSet{
 	// https://openrouter.ai/docs/use-cases/reasoning-tokens
 	// https://openrouter.ai/docs/features/structured-outputs
 	// https://openrouter.ai/docs/features/prompt-caching
+	// https://openrouter.ai/docs/features/web-search
 	"openrouter": {
 		system.IntentReasoningDisable:          {Kind: bodyParam, Param: "reasoning.effort", ParamType: "string", Value: "none", Hint: "models with reasoning.mandatory reject it; reasoning.exclude only hides output"},
 		system.IntentReasoningEnable:           {Kind: bodyParam, Param: "reasoning.enabled", ParamType: "boolean", Value: true},
@@ -106,9 +108,11 @@ var stackBindings = map[string]bindingSet{
 		system.IntentStreamIncludeUsage:        {Kind: bodyParam, Param: "stream_options.include_usage", ParamType: "boolean", Value: true, Hint: "usage is always included in the last chunk"},
 		system.IntentCachePrompt:               {Kind: bodyParam, Param: "cache_control", ParamType: "object", Value: map[string]any{"type": "ephemeral"}, Hint: "top-level applies to the last cacheable block; also per content block"},
 		system.IntentToolsParallel:             {Kind: bodyParam, Param: "parallel_tool_calls", ParamType: "boolean"},
+		system.IntentWebSearchEnable:           {Kind: bodyParam, Param: "plugins", ParamType: "array", Value: []any{map[string]any{"id": "web"}}, Hint: "equivalent to the :online model suffix; web_search_options only where supported_parameters lists it"},
 	},
 
 	// https://docs.venice.ai/api-reference/endpoint/chat/completions
+	// (venice_parameters.enable_web_search / enable_web_citations)
 	"venice": {
 		system.IntentReasoningDisable:          {Kind: bodyParam, Param: "venice_parameters.disable_thinking", ParamType: "boolean", Value: true, Hint: "adds /no_think and strips the thinking block"},
 		system.IntentReasoningEffort:           {Kind: bodyParam, Param: "reasoning_effort", ParamType: "enum", EnumValues: []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}, Hint: "top-level takes precedence over reasoning.effort"},
@@ -120,12 +124,15 @@ var stackBindings = map[string]bindingSet{
 		system.IntentResponseFormatSchema:      {Kind: bodyParam, Param: "response_format", ParamType: "object", Hint: `{"type":"json_schema","json_schema":{...}}`},
 		system.IntentStreamIncludeUsage:        {Kind: bodyParam, Param: "stream_options.include_usage", ParamType: "boolean", Value: true},
 		system.IntentToolsParallel:             {Kind: bodyParam, Param: "parallel_tool_calls", ParamType: "boolean"},
+		system.IntentWebSearchEnable:           {Kind: bodyParam, Param: "venice_parameters.enable_web_search", ParamType: "string", Value: "on", Hint: "auto|on|off; also as a model-name suffix"},
+		system.IntentWebSearchCitations:        {Kind: bodyParam, Param: "venice_parameters.enable_web_citations", ParamType: "boolean", Value: true},
 	},
 
 	// Reasoning knobs are provider-neutral on LiteLLM, so they sit at stack level.
 	// https://docs.litellm.ai/docs/completion/input
 	// https://docs.litellm.ai/docs/reasoning_content
 	// https://docs.litellm.ai/docs/providers/anthropic
+	// https://docs.litellm.ai/docs/completion/web_search
 	"litellm": {
 		system.IntentReasoningDisable:     {Kind: bodyParam, Param: "reasoning_effort", ParamType: "string", Value: "none"},
 		system.IntentReasoningEnable:      {Kind: bodyParam, Param: "reasoning_effort", ParamType: "string", Value: "medium", Hint: "any level other than none enables; Anthropic/Bedrock/Vertex upstreams also accept thinking {type: enabled, budget_tokens >= 1024}"},
@@ -135,6 +142,7 @@ var stackBindings = map[string]bindingSet{
 		system.IntentResponseFormatSchema: {Kind: bodyParam, Param: "response_format", ParamType: "object", Hint: "translated per provider; enforced client-side only with enable_json_schema_validation"},
 		system.IntentStreamIncludeUsage:   {Kind: bodyParam, Param: "stream_options.include_usage", ParamType: "boolean", Value: true},
 		system.IntentToolsParallel:        {Kind: bodyParam, Param: "parallel_tool_calls", ParamType: "boolean"},
+		system.IntentWebSearchEnable:      {Kind: bodyParam, Param: "web_search_options", ParamType: "object", Value: map[string]any{}, Hint: "forwarded to providers that support it (supports_web_search)"},
 	},
 
 	// Reasoning toggles come from the claude family defaults.
@@ -142,11 +150,19 @@ var stackBindings = map[string]bindingSet{
 	// https://platform.claude.com/docs/en/build-with-claude/thinking
 	// https://platform.claude.com/docs/en/build-with-claude/effort
 	// https://platform.claude.com/docs/en/build-with-claude/structured-outputs
+	// https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool
 	"anthropic": {
 		system.IntentReasoningFormat:      {Kind: bodyParam, Param: "thinking.display", ParamType: "enum", EnumValues: []string{"summarized", "omitted", "updates"}, Hint: "invalid with thinking.type disabled; updates needs a beta header"},
 		system.IntentResponseFormatSchema: {Kind: bodyParam, Param: "output_config.format", ParamType: "object", Hint: `{"type":"json_schema","schema":{...,"additionalProperties":false}}; no schema-less JSON mode`},
 		system.IntentSamplingTopK:         {Kind: bodyParam, Param: "top_k", ParamType: "number", Hint: "rejected on newest models; incompatible with thinking on older ones"},
 		system.IntentCachePrompt:          {Kind: bodyParam, Param: "cache_control", ParamType: "object", Value: map[string]any{"type": "ephemeral"}, Hint: "top-level applies to the last cacheable block; ttl 5m|1h"},
+		system.IntentWebSearchEnable:      {Kind: toolEntry, Param: "tools", ParamType: "object", Value: map[string]any{"type": "web_search_20250305", "name": "web_search"}, Hint: "server tool; max_uses/allowed_domains options; 400 when the organisation disabled it"},
+	},
+
+	// Reasoning toggles come from the o-series family defaults.
+	// https://platform.openai.com/docs/guides/tools-web-search
+	"openai": {
+		system.IntentWebSearchEnable: {Kind: bodyParam, Param: "web_search_options", ParamType: "object", Value: map[string]any{}, Hint: "only on search models such as gpt-5-search-api; Responses API uses the web_search tool"},
 	},
 }
 
