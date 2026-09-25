@@ -38,6 +38,9 @@ test-unit:
 test-integration:
 	go test -v ./test/...
 
+# --parseDependency is intentionally omitted: with swag v1.16.3 it walks go-ethereum
+# and fails on "cannot find type definition: structs.TxRes"; external types are
+# covered by the .swaggo overrides.
 swagger:
 	swag fmt -g ./internal/handlers/httphandlers/http.go && swag init -g ./internal/handlers/httphandlers/http.go --parseInternal
 
