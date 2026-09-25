@@ -137,6 +137,10 @@ func bindingsForFamily(family, modelName string) (alwaysOn bool, b bindingSet) {
 		return false, kwargBoolBindings("enable_thinking")
 	case "deepseek-v3.1", "granite":
 		return false, kwargBoolBindings("thinking")
+	// phi-4-reasoning: the card documents a two-section response, a <think>
+	// reasoning block followed by the solution, requested by the system
+	// prompt its chat template applies, and no switch that turns it off
+	// (https://huggingface.co/microsoft/Phi-4-reasoning).
 	case "qwq", "deepseek-r1", "phi-4-reasoning":
 		return true, nil
 	case "gpt-oss":
