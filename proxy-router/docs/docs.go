@@ -5644,7 +5644,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "mode": {
-                    "description": "always_on (cannot be disabled) | controllable (reasoning.disable/enable bindings) | tunable (effort/budget bindings only)",
+                    "description": "always_on: cannot be disabled (a reasoning.disable binding may remain only with verified: false, the verifier's refutation) | controllable: reasoning.disable/enable bindings | tunable: effort/budget bindings only",
                     "type": "string"
                 }
             }
