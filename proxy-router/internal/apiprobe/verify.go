@@ -126,10 +126,13 @@ type Verifier struct {
 // probes: 2 s, and no redirect to another host or from https to http, since
 // the request carries the key.
 func NewRenderClient() *http.Client {
-	return &http.Client{Timeout: RenderTimeout, CheckRedirect: refuseCrossHostRedirect}
+	return &http.Client{Timeout: RenderTimeout, CheckRedirect: RefuseCrossHostRedirect}
 }
 
-func refuseCrossHostRedirect(req *http.Request, via []*http.Request) error {
+// RefuseCrossHostRedirect is the CheckRedirect policy for a request that
+// carries the model's key: a redirect to another host:port, or from https
+// down to http, is not followed.
+func RefuseCrossHostRedirect(req *http.Request, via []*http.Request) error {
 	if len(via) >= 10 {
 		return errors.New("stopped after 10 redirects")
 	}

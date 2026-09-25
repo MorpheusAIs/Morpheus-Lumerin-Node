@@ -259,7 +259,10 @@ type verifyResult struct {
 // render verdict is weaker than the completion's on the same intent).
 func verify(ctx context.Context, cfg config.ModelConfig, api *system.ModelApiSpec, timeout time.Duration, log lib.ILogger) (verifyResult, error) {
 	rec := &recordingTransport{next: http.DefaultTransport}
-	adapter, ok := aiengine.ApiAdapterFactory(cfg.ApiType, cfg.ModelName, cfg.ApiURL, cfg.ApiKey, cfg.Parameters, timeout, log, &http.Client{Transport: rec})
+	// The adapter bounds each request by its context; the key-carrying
+	// completion probes get the render client's redirect policy.
+	client := &http.Client{Transport: rec, CheckRedirect: apiprobe.RefuseCrossHostRedirect}
+	adapter, ok := aiengine.ApiAdapterFactory(cfg.ApiType, cfg.ModelName, cfg.ApiURL, cfg.ApiKey, cfg.Parameters, timeout, log, client)
 	if !ok {
 		return verifyResult{}, fmt.Errorf("no adapter for apiType %q", cfg.ApiType)
 	}
