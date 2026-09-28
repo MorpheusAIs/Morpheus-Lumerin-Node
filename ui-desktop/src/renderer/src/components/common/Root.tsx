@@ -8,7 +8,6 @@ import { LoadingState } from 'src/main/orchestrator.types';
 type RootProps = {
   // From connect() mapStateToProps
   isSessionActive: boolean;
-  hasEnoughData: boolean;
   isAuthBypassed: boolean;
   sellerDefaultCurrency: string;
   servicesState: LoadingState;
@@ -22,20 +21,42 @@ type RootProps = {
   OnboardingComponent: React.ComponentType<{
     onOnboardingCompleted: (data: unknown) => Promise<void>;
   }>;
-  LoadingComponent: React.ComponentType;
   RouterComponent: React.ComponentType;
   LoginComponent: React.ComponentType<{
     onLoginSubmit: (data: { password: string }) => Promise<void>;
   }>;
 };
 
-class Root extends React.Component<RootProps> {
+export class Root extends React.Component<RootProps> {
   static contextType = ToastsContext;
   declare context: React.ContextType<typeof ToastsContext>;
 
   state = {
     startupComplete: false,
     onboardingComplete: null,
+  };
+
+  startAuthenticatedSession = async (password: string): Promise<void> => {
+    // Make the login acknowledgement carry the wallet identity. Relying only
+    // on a separate `open-wallet` event allowed late bootstrap hydration to
+    // erase it, while a second proxy request would make offline login slow.
+    const walletState = await this.props.client.onLoginSubmit({ password });
+    if (walletState?.requiresOnboarding === true) {
+      this.setState({ onboardingComplete: false });
+      return;
+    }
+    const address = walletState?.address;
+    if (!address) {
+      throw new Error(
+        'Wallet login did not return an active address. Please try again.',
+      );
+    }
+
+    this.props.dispatch({
+      type: 'open-wallet',
+      payload: { address, isActive: true },
+    });
+    this.props.dispatch({ type: 'session-started' });
   };
 
   componentDidMount() {
@@ -47,19 +68,30 @@ class Root extends React.Component<RootProps> {
           payload: { ...persistedState, config },
         });
         this.setState({ onboardingComplete });
+        return onboardingComplete;
       })
-      .then(() => {
-        if (this.props.isAuthBypassed) {
+      .then((onboardingComplete) => {
+        if (onboardingComplete && this.props.isAuthBypassed) {
           // TODO: replace dummy password
-          this.props.client
-            .onLoginSubmit({ password: 'password' })
-            .then(() => this.props.dispatch({ type: 'session-started' }))
-            .catch((_e) => {
-              this.context.toast('error', 'Bypass auth failed');
-            });
+          return this.startAuthenticatedSession('password').catch((_e) => {
+            this.context.toast('error', 'Bypass auth failed');
+          });
         }
+        return undefined;
       })
-      .then(() => this.props.client.getDefaultCurrencySetting())
+      // The display currency is cosmetic. A missed/failed settings response
+      // must not turn into "Failed to startup wallet" after the wallet and
+      // proxy-router have already initialized successfully.
+      .then(() =>
+        this.props.client.getDefaultCurrencySetting().catch((error) => {
+          // eslint-disable-next-line no-console
+          console.warn(
+            'Could not load the saved display currency; using the default.',
+            error,
+          );
+          return null;
+        }),
+      )
       .then((defaultCurr) => {
         this.props.dispatch({
           type: 'set-seller-currency',
@@ -71,7 +103,7 @@ class Root extends React.Component<RootProps> {
         console.error('root component error', e.message);
         this.context.toast(
           'error',
-          'Failed to startup wallet. Please wait a few minutes and try again',
+          'Failed to initialize Morpheus. Your wallet is unchanged; restart the app and try again.',
         );
       });
   }
@@ -86,44 +118,30 @@ class Root extends React.Component<RootProps> {
   }
 
   onOnboardingCompleted = (data) => {
-    return (
-      this.props.client
-        .onOnboardingCompleted({
-          proxyUrl: this.props.config.chain.localProxyRouterUrl,
-          ...data,
-        })
-        .then((error) => {
-          if (error) {
-            this.context.toast('error', error);
-            return;
-          }
-          this.setState({ onboardingComplete: true });
-          this.props.dispatch({ type: 'session-started' });
-        })
-        // eslint-disable-next-line no-console
-        .catch((_e) => {
-          this.context.toast(
-            'error',
-            'Failed to finish onboarding. Please wait a few minutes and try again',
+    return this.props.client
+      .onOnboardingCompleted({
+        proxyUrl: this.props.config.chain.localProxyRouterUrl,
+        ...data,
+      })
+      .then((error) => {
+        if (error)
+          throw new Error(
+            error?.error?.message || error?.message || String(error),
           );
-        })
-    );
+        this.setState({ onboardingComplete: true });
+        this.props.dispatch({ type: 'session-started' });
+      });
   };
 
-  onLoginSubmit = ({ password }) =>
-    this.props.client
-      .onLoginSubmit({ password })
-      .then(() => this.props.dispatch({ type: 'session-started' }));
+  onLoginSubmit = ({ password }) => this.startAuthenticatedSession(password);
 
   render() {
     const {
       StartupComponent,
       OnboardingComponent,
-      LoadingComponent,
       RouterComponent,
       isSessionActive,
       LoginComponent,
-      hasEnoughData,
     } = this.props;
 
     const { onboardingComplete, startupComplete } = this.state;
@@ -152,17 +170,17 @@ class Root extends React.Component<RootProps> {
       return <LoginComponent onLoginSubmit={this.onLoginSubmit} />;
     }
 
-    if (hasEnoughData) {
-      return <RouterComponent />;
-    }
-
-    return <LoadingComponent />;
+    // Service readiness and authentication are the only global gates. Wallet
+    // balances, exchange rates, sessions, and model catalogs belong to their
+    // individual tabs and load through their own cached queries. Holding the
+    // whole application behind those optional network reads made navigation
+    // appear frozen whenever one public API was slow or unavailable.
+    return <RouterComponent />;
   }
 }
 
 const mapStateToProps = (state) => ({
   isSessionActive: selectors.isSessionActive(state),
-  hasEnoughData: selectors.hasEnoughData(state),
   isAuthBypassed: selectors.getIsAuthBypassed(state),
   sellerDefaultCurrency: selectors.getSellerDefaultCurrency(state),
   servicesState: selectors.getServices(state),

@@ -76,11 +76,41 @@ const mergeTransactions = (stateTxs, payloadTxs) => {
 
 const reducer = handleActions(
   {
-    'initial-state-received': (state, { payload }) => ({
-      ...state,
-      ...get(payload, 'wallet', initialState),
-      token: get(payload, 'wallet.token', initialState.token)
-    }),
+    'initial-state-received': (state, { payload }) => {
+      const runtimeWallet = {
+        ...initialState,
+        ...state,
+        token: {
+          ...initialState.token,
+          ...state.token
+        }
+      };
+
+      // Runtime wallet events are authoritative. A duplicate/late bootstrap
+      // response must never replace an already-open wallet with a stale disk
+      // snapshot (in particular the empty snapshot written by older builds).
+      if (state.address) {
+        return runtimeWallet;
+      }
+
+      // Renderer state is persisted under the root `chain` key. Keep support
+      // for the legacy flat shape so existing profiles from either format can
+      // still hydrate normally before login.
+      const persistedWallet = get(
+        payload,
+        'chain.wallet',
+        get(payload, 'wallet', initialState)
+      );
+
+      return {
+        ...runtimeWallet,
+        ...persistedWallet,
+        token: {
+          ...runtimeWallet.token,
+          ...get(persistedWallet, 'token', {})
+        }
+      };
+    },
 
     'create-wallet': (state, { payload }) => ({
       ...state,

@@ -2,13 +2,8 @@ import withChangePasswordState from '../store/hocs/withChangePasswordState';
 import styled from 'styled-components';
 import React, { useEffect, useContext } from 'react';
 
-import {
-  PasswordStrengthMeter,
-  LightLayout,
-  TextInput,
-  BaseBtn,
-  Sp
-} from './common';
+import { LightLayout, TextInput, BaseBtn, Sp } from './common';
+import PasswordStrengthMeter from './common/PasswordStrengthMeter';
 import { ToastsContext } from '../components/toasts';
 
 const Container = styled.div`
@@ -25,16 +20,16 @@ const PasswordMessage = styled.div`
   font-weight: 600;
   line-height: 1.5;
   margin-top: 3.2rem;
-  color: ${p => p.theme.colors.dark};
+  color: ${(p) => p.theme.colors.dark};
 `;
 
 const Green = styled.div`
   display: inline-block;
-  color: ${p => p.theme.colors.success};
+  color: ${(p) => p.theme.colors.success};
 `;
 
 const ErrorMessage = styled.div`
-  color: ${p => p.theme.colors.danger};
+  color: ${(p) => p.theme.colors.danger};
   font-size: 1.2rem;
   margin-top: 2.4rem;
   margin-bottom: -3.9rem;
@@ -46,8 +41,8 @@ const StyledBtn = styled(BaseBtn)`
   font-size: 1.5rem;
   border-radius: 5px;
   padding: 0 0.6rem;
-  background-color: ${p => p.theme.colors.primary};
-  color: ${p => p.theme.colors.light};
+  background-color: ${(p) => p.theme.colors.primary};
+  color: ${(p) => p.theme.colors.light};
 
   @media (min-width: 1040px) {
     width: 35%;
@@ -66,11 +61,11 @@ function ChangePassword({
   history,
   status,
   errors,
-  error
+  error,
 }) {
   const context = useContext(ToastsContext);
 
-  const handleSubmitAndNavigate = e => {
+  const handleSubmitAndNavigate = (e) => {
     e.preventDefault();
     onSubmit();
   };

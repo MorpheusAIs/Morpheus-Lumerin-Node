@@ -1,10 +1,12 @@
 package walletapi
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/wallet"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 	"github.com/gin-gonic/gin"
 )
@@ -27,6 +29,7 @@ func (s *WalletController) RegisterRoutes(r interfaces.Router) {
 	r.GET("/wallet", s.authConfig.CheckAuth("get_wallet"), s.GetWallet)
 	r.POST("/wallet/privateKey", s.authConfig.CheckAuth("set_wallet"), s.SetupWalletPrivateKey)
 	r.POST("/wallet/mnemonic", s.authConfig.CheckAuth("set_wallet"), s.SetupWalletMnemonic)
+	r.POST("/wallet/derivationPath", s.authConfig.CheckAuth("set_wallet"), s.SetDerivationPath)
 	r.DELETE("/wallet", s.authConfig.CheckAuth("remove_wallet"), s.DeleteWallet)
 }
 
@@ -50,7 +53,66 @@ func (s *WalletController) GetWallet(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	ctx.JSON(http.StatusOK, WalletRes{Address: addr})
+
+	// Kind/derivationPath are advisory: a client that cannot read them still
+	// gets the address, so this stays backwards compatible.
+	kind, derivationPath, kindErr := s.service.GetKind()
+	if kindErr != nil {
+		ctx.JSON(http.StatusOK, WalletRes{Address: addr})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, WalletRes{
+		Address:        addr,
+		Kind:           kind,
+		DerivationPath: derivationPath,
+	})
+}
+
+// SetDerivationPath godoc
+//
+//	@Summary		Switch HD account
+//	@Description	Re-derives the active key from the stored mnemonic using a new derivation path. A bare index ("0", "1") is relative to m/44'/60'/0'/0. Fails if the wallet was imported as a raw private key.
+//	@Tags			wallet
+//	@Produce		json
+//	@Param			derivationPath	body		SetDerivationPathReqBody	true	"Derivation path or account index"
+//	@Success		200				{object}	WalletRes
+//	@Security		BasicAuth
+//	@Router			/wallet/derivationPath [post]
+func (s *WalletController) SetDerivationPath(ctx *gin.Context) {
+	var req SetDerivationPathReqBody
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := s.service.SetDerivationPath(req.DerivationPath); err != nil {
+		// A wallet with no mnemonic is a client mistake (it should have read
+		// `kind` from GET /wallet first), not a server fault.
+		if errors.Is(err, wallet.ErrNoMnemonic) || errors.Is(err, wallet.ErrBadDerivationPath) {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	prKey, err := s.service.GetPrivateKey()
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	addr, err := lib.PrivKeyBytesToAddr(prKey)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, WalletRes{
+		Address:        addr,
+		Kind:           wallet.WalletKindMnemonic,
+		DerivationPath: req.DerivationPath,
+	})
 }
 
 // SetupWalletPrivateKey godoc

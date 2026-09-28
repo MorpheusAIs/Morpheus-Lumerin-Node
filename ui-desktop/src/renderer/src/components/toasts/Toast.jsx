@@ -12,39 +12,61 @@ const Separator = styled.div`
 const Container = styled.div`
   z-index: 20;
   border-top-style: solid;
-  border-top-width: 4px;
+  border-top-width: 2px;
   border-top-color: ${({ type, theme }) =>
     type === 'success'
       ? theme.colors.success
       : type === 'error'
-      ? theme.colors.danger
-      : theme.colors.primary};
-  background-color: #454545;
-  border-radius: 4px;
+        ? theme.colors.danger
+        : theme.colors.primary};
+  background-color: var(--surface-raised, #10271e);
+  border-radius: 12px;
   padding: 8px 16px 12px;
   position: relative;
-  box-shadow: 0 4px 12px -1px rgba(0, 0, 0, 0.35),
+  box-shadow:
+    0 4px 12px -1px rgba(0, 0, 0, 0.35),
     0 1px 3px 2px rgba(0, 0, 0, 0.1);
 `;
 
 const DismissBtn = styled.button`
   position: absolute;
-  top: 0;
-  right: 0;
-  background: transparent;
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  /* This was a bare 0.6-opacity glyph flush against the corner of a dark
+     panel, which read as decoration rather than a control — so error toasts
+     felt unclosable. Give it a visible chip and a real hit target. */
+  background: rgba(255, 255, 255, 0.1);
   outline: none;
   cursor: pointer;
   color: white;
   border: none;
-  padding: 16px;
+  padding: 0;
   line-height: 1;
   font-size: 16px;
   margin: 0;
-  opacity: 0.6;
+  opacity: 0.85;
   z-index: 1;
+  transition: opacity 120ms ease, background 120ms ease;
+
+  svg {
+    width: 14px;
+    height: 14px;
+  }
 
   &:hover {
     opacity: 1;
+    background: rgba(255, 255, 255, 0.22);
+  }
+
+  &:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.7);
+    outline-offset: 2px;
   }
 `;
 
@@ -57,7 +79,8 @@ const Scroller = styled.div`
 const Message = styled.div`
   color: white;
   font-size: 13px;
-  line-height: 1.25;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
   padding: 12px 32px 12px 0;
 `;
 
@@ -72,16 +95,15 @@ const ShowMoreBtn = styled.button`
   margin: 0;
   padding: 12px 0;
   opacity: 0.9;
-  text-transform: uppercase;
   font-weight: 600;
-  letter-spacing: 2px;
+  letter-spacing: 0;
 
   &:hover {
     opacity: 1;
   }
 `;
 
-const FADE_SPRING = { type: 'spring', stiffness: 60, damping: 5 };
+const FADE_SPRING = { duration: 0.15, ease: 'easeOut' };
 
 export default class Toast extends React.Component {
   static propTypes = {
@@ -89,7 +111,7 @@ export default class Toast extends React.Component {
     onShowMore: PropTypes.func.isRequired,
     onDismiss: PropTypes.func.isRequired,
     messages: PropTypes.arrayOf(PropTypes.string).isRequired,
-    type: PropTypes.oneOf(['info', 'success', 'error']).isRequired
+    type: PropTypes.oneOf(['info', 'success', 'error']).isRequired,
   };
 
   state = { showMore: false };
@@ -116,13 +138,18 @@ export default class Toast extends React.Component {
     return (
       <Separator>
         <Container type={type}>
-          <DismissBtn type="button" onClick={this.handleDismiss}>
+          <DismissBtn
+            type="button"
+            title="Dismiss"
+            aria-label="Dismiss notification"
+            onClick={this.handleDismiss}
+          >
             <CloseIcon />
           </DismissBtn>
 
           <Scroller>
             <AnimatePresence initial={false}>
-              {shownMessages.map(msg => (
+              {shownMessages.map((msg) => (
                 <motion.div
                   key={msg}
                   initial={{ opacity: 0 }}
@@ -130,7 +157,9 @@ export default class Toast extends React.Component {
                   exit={{ opacity: 0 }}
                   transition={FADE_SPRING}
                 >
-                  <Message>{msg}</Message>
+                  <Message role={type === 'error' ? 'alert' : 'status'}>
+                    {msg}
+                  </Message>
                 </motion.div>
               ))}
               {hiddenMessages.length > 0 && (

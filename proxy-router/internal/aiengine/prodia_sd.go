@@ -76,7 +76,7 @@ func (s *ProdiaSD) Prompt(ctx context.Context, prompt *gcs.OpenAICompletionReque
 
 	bodyStr := string(response)
 	if strings.Contains(bodyStr, "Invalid Generation Parameters") {
-		return lib.WrapError(ErrImageGenerationRequest, fmt.Errorf(bodyStr))
+		return lib.WrapError(ErrImageGenerationRequest, fmt.Errorf("%s", bodyStr))
 	}
 
 	result := ProdiaGenerationResult{}

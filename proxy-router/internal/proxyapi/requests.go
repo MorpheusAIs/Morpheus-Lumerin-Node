@@ -2,6 +2,8 @@ package proxyapi
 
 import (
 	"encoding/json"
+	"fmt"
+	"strings"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
@@ -34,10 +36,26 @@ type PromptReq struct {
 }
 
 type PromptHead struct {
-	SessionID lib.Hash `header:"session_id"   validate:"hex32"`
-	ModelID   lib.Hash `header:"model_id"     validate:"hex32"`
-	ChatID    lib.Hash `header:"chat_id"      validate:"hex32"`
-	RequestID string   `header:"x-request-id"`
+	SessionID   lib.Hash `header:"session_id"   validate:"hex32"`
+	ModelID     lib.Hash `header:"model_id"     validate:"hex32"`
+	ChatID      lib.Hash `header:"chat_id"      validate:"hex32"`
+	RequestID   string   `header:"x-request-id"`
+	HistoryMode string   `header:"x-morpheus-history"`
+}
+
+// promptHistoryPolicy applies a request-local history override. "on" and
+// "default" deliberately preserve the server configuration; a caller can opt
+// out of history for one request, but cannot enable history disabled by the
+// server operator.
+func promptHistoryPolicy(value string, storeDefault, forwardDefault bool) (store, forward bool, err error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "on", "default":
+		return storeDefault, forwardDefault, nil
+	case "off":
+		return false, false, nil
+	default:
+		return false, false, fmt.Errorf("x-morpheus-history must be one of: off, on, default")
+	}
 }
 
 type AgentPromptHead struct {

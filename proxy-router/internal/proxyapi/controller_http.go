@@ -49,16 +49,16 @@ type BackendAttestationStatusProvider interface {
 }
 
 type ProxyController struct {
-	service                   *ProxyServiceSender
-	aiEngine                  AIEngine
-	chatStorage               gsc.ChatStorageInterface
-	storeChatContext          bool
-	forwardChatContext        bool
-	log                       lib.ILogger
-	authConfig                system.HTTPAuthConfig
-	ipfsManager               *IpfsManager
-	dockerManager             *DockerManager
-	backendAttestationStatus  BackendAttestationStatusProvider
+	service                  *ProxyServiceSender
+	aiEngine                 AIEngine
+	chatStorage              gsc.ChatStorageInterface
+	storeChatContext         bool
+	forwardChatContext       bool
+	log                      lib.ILogger
+	authConfig               system.HTTPAuthConfig
+	ipfsManager              *IpfsManager
+	dockerManager            *DockerManager
+	backendAttestationStatus BackendAttestationStatusProvider
 }
 
 func NewProxyController(service *ProxyServiceSender, aiEngine AIEngine, chatStorage gsc.ChatStorageInterface, storeChatContext, forwardChatContext bool, authConfig system.HTTPAuthConfig, ipfsManager *IpfsManager, log lib.ILogger) *ProxyController {
@@ -184,11 +184,12 @@ func (s *ProxyController) InitiateSession(ctx *gin.Context) {
 //	@Description	Send prompt to a local or remote model based on session id in header
 //	@Tags			chat
 //	@Produce		text/event-stream
-//	@Param			session_id	header		string											false	"Session ID"	format(hex32)
-//	@Param			model_id	header		string											false	"Model ID"		format(hex32)
-//	@Param			chat_id		header		string											false	"Chat ID"		format(hex32)
-//	@Param			prompt		body		proxyapi.ChatCompletionRequestSwaggerExample	true	"Prompt"
-//	@Success		200			{object}	string
+//	@Param			session_id			header		string											false	"Session ID"																																		format(hex32)
+//	@Param			model_id			header		string											false	"Model ID"																																			format(hex32)
+//	@Param			chat_id				header		string											false	"Chat ID"																																			format(hex32)
+//	@Param			x-morpheus-history	header		string											false	"Request-local chat history mode. 'off' disables storing and forwarding context for this request; 'on' and 'default' preserve the server policy."	Enums(default,on,off)
+//	@Param			prompt				body		proxyapi.ChatCompletionRequestSwaggerExample	true	"Prompt"
+//	@Success		200					{object}	string
 //	@Security		BasicAuth
 //
 //	@Router			/v1/chat/completions [post]
@@ -199,6 +200,16 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 	)
 
 	if err := ctx.ShouldBindHeader(&head); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	storeChatContext, forwardChatContext, err := promptHistoryPolicy(
+		head.HistoryMode,
+		c.storeChatContext,
+		c.forwardChatContext,
+	)
+	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -225,7 +236,7 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 		}
 	}
 
-	adapter, err := c.aiEngine.GetAdapter(ctx, chatID.Hash, head.ModelID.Hash, head.SessionID.Hash, c.storeChatContext, c.forwardChatContext)
+	adapter, err := c.aiEngine.GetAdapter(ctx, chatID.Hash, head.ModelID.Hash, head.SessionID.Hash, storeChatContext, forwardChatContext)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -696,6 +707,14 @@ func (c *ProxyController) StreamDownloadFile(ctx *gin.Context) {
 			percentage = float64(downloaded) / float64(total) * 100
 		}
 
+		// The progress reader reports every 32 KiB. Only serialize and flush an
+		// SSE update at MiB boundaries (plus the final update), otherwise large
+		// model downloads can generate millions of events and overwhelm the
+		// desktop IPC bridge even though the file transfer itself is healthy.
+		if downloaded != total && downloaded%1048576 != 0 {
+			return nil
+		}
+
 		event := DownloadProgressEvent{
 			Status:      "downloading",
 			Downloaded:  downloaded,
@@ -720,12 +739,6 @@ func (c *ProxyController) StreamDownloadFile(ctx *gin.Context) {
 			}
 
 			ctx.Writer.Flush()
-
-			// Don't spam too many updates
-			if downloaded < total && downloaded%1048576 != 0 { // Send at least every 1MB
-				// Skip some updates for better performance
-				return nil
-			}
 
 			return nil
 		}

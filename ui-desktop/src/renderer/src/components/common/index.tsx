@@ -3,7 +3,6 @@ import { Label } from './TextInput.styles';
 import TextInput from './TextInput';
 import DisplayValue from './DisplayValue';
 import AmountFields from './AmountFields';
-import PasswordStrengthMeter from './PasswordStrengthMeter';
 import LastUpdated from './LastUpdated';
 import { ItemFilter } from './ItemFilter';
 import LightLayout from './LightLayout';
@@ -14,6 +13,7 @@ import GasEditor from './GasEditor';
 import Selector from './Selector';
 import { GlobalTooltips, Tooltip } from './Tooltips';
 import Modal from './Modal';
+import ExplorerLink, { explorerHost } from './ExplorerLink';
 import Tabs from './Tabs';
 import Text from './Text';
 import Flex from './Flex';
@@ -22,7 +22,6 @@ import Sp from './Spacing';
 export {
   DisplayValue,
   AmountFields,
-  PasswordStrengthMeter,
   LastUpdated,
   ItemFilter,
   LightLayout,
@@ -36,6 +35,8 @@ export {
   Tooltip,
   FieldBtn,
   BaseBtn,
+  ExplorerLink,
+  explorerHost,
   Label,
   Modal,
   Tabs,

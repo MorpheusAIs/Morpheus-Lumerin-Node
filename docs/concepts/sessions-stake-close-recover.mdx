@@ -3,7 +3,7 @@ title: "Sessions: stake, close, claim"
 description: "The complete lifecycle of a Morpheus session — open, stake, close, day-lock of the used stipend, and withdrawUserStakes. Why MOR is not 'gone' just because the session is open, and why used stake is not reusable the same UTC day."
 audience: ["consumer", "provider-full", "provider-resale", "developer"]
 product: ["proxy-router"]
-last_verified: "v7.9.0"
+last_verified: "2026-09-25"
 ---
 
 This is the most misunderstood part of Morpheus. The vast majority of "where is my MOR?" support questions resolve here. Read carefully.
@@ -82,6 +82,20 @@ The Morpheus consumer node (proxy-router) does **not** custody tokens — it jus
     Spendable MOR is back in your wallet — unused immediately after close, used portion after the day-lock + claim.
   </Step>
 </Steps>
+
+## How much MOR does an open lock?
+
+The amount `openSession` pulls is **not** `pricePerSecond × duration`. The contract converts stake into a daily stipend in proportion to your share of total MOR supply against today's emissions budget, then prices the session out of that stipend. The proxy-router therefore computes:
+
+```
+stake = ceil( supply × pricePerSecond × (duration + 1) ÷ todaysBudget )
+```
+
+- `supply` = total MOR supply, `todaysBudget` = the Inference contract's emissions budget for the current day. Their ratio is several hundred, which is why a session "worth" 0.1 MOR of compute locks tens of MOR of stake — all of it returns on close, minus the day-locked used slice.
+- The **+1 second and round-up** exist because the contract floors twice (stake → stipend, stipend → seconds); without headroom a stake computed for exactly `duration` could land one second short and revert with `SessionTooShort`. That is also why `sessionDuration: 300` (the contract minimum) used to fail on stock nodes and now works.
+- `directPayment: true` locks the **same** amount. Direct pay changes who pays the provider at close (your escrowed amount instead of the emissions pool), not how much is escrowed. Earlier releases staked only `price × duration` for direct pay, which bought about 1/300th of the requested time and always reverted.
+
+Ask the node for the exact figure before opening: [`GET /blockchain/models/:id/session/estimate`](/reference/api-endpoints#estimate-a-session-before-opening) returns `stake_wei` next to `session_cost_wei` and every input above. A companion gateway in [managed mode](/prosumers/companion-gateway-mode#gateway-stake-formula) uses a slightly different headroom rule (+0.01 %, explicit 300 s check).
 
 ## Consumer capital expectation (important)
 

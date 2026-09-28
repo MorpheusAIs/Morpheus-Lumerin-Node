@@ -11,7 +11,7 @@ This guide builds the proxy-router from source and walks through the API-only co
 
 ## Pre-requisites
 
-- An ERC-20 wallet on BASE with MOR + ETH (use a top-level, not derived, address). **Never share your private key.**
+- An ERC-20 wallet on BASE with MOR + ETH. If you import a mnemonic, pass the account index of the funded address (`derivationPath`, default `0`); `POST /wallet/derivationPath` switches it later. **Never share your private key.**
 - Basic Auth credentials for the local API. On first start the proxy-router writes `admin:<password>` to `.cookie` next to the binary — use those credentials in Swagger (**Authorize**) and in every curl below. See [API auth](/reference/api-auth).
 
 ## TL;DR

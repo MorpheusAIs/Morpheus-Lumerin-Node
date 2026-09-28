@@ -2,9 +2,9 @@ import React from 'react';
 import styled from 'styled-components';
 
 import { BaseBtn } from '../../common';
+import ExplorerLink from '../../common/ExplorerLink';
 import { abbreviateAddress } from '../../../utils';
 import { SuccessLayer } from './SuccessLayer';
-import { toUSD } from '../../../store/utils/syncAmounts';
 
 const SuccessImage = styled.div`
   margin: 0 auto;
@@ -82,10 +82,6 @@ const SubAmount = styled.div`
 `;
 
 export function SuccessForm(props) {
-  const LMRtoUSD = (val) => {
-    return toUSD(val, props.coinPrice);
-  };
-
   if (!props.activeTab) {
     return <></>;
   }
@@ -123,6 +119,18 @@ export function SuccessForm(props) {
           You have successfully transferred {props.symbol} to{' '}
           {abbreviateAddress(props.toAddress)}
         </FooterLabel>
+        {props.txHash && (
+          <FooterLabel>
+            <ExplorerLink
+              kind="transaction"
+              url={
+                props.txUrlResolver ? props.txUrlResolver(props.txHash) : null
+              }
+            >
+              {abbreviateAddress(props.txHash)}
+            </ExplorerLink>
+          </FooterLabel>
+        )}
         <DoneBtn data-modal={null} onClick={onDone}>
           Done
         </DoneBtn>

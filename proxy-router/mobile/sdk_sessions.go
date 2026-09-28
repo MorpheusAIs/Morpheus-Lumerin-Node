@@ -37,13 +37,13 @@ func (s *SDK) OpenSessionOmitting(ctx context.Context, modelID string, durationS
 // OpenSessionByBid opens a session against a specific bid ID.
 // Unlike OpenSession, there is no multi-provider failover — the chosen bid is
 // the only attempt. Prefer OpenSession / OpenSessionOmitting for normal UX.
-func (s *SDK) OpenSessionByBid(ctx context.Context, bidID string, durationSec int64) (string, error) {
+func (s *SDK) OpenSessionByBid(ctx context.Context, bidID string, durationSec int64, directPayment bool) (string, error) {
 	if err := s.checkClosed(); err != nil {
 		return "", err
 	}
 	id := common.HexToHash(bidID)
 	dur := big.NewInt(durationSec)
-	txHash, err := s.blockchain.OpenSessionByBidId(ctx, id, dur, "")
+	txHash, err := s.blockchain.OpenSessionByBidId(ctx, id, dur, directPayment, "")
 	if err != nil {
 		return "", err
 	}

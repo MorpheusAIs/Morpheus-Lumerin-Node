@@ -39,3 +39,15 @@ func (w *EnvWallet) DeleteWallet() error {
 func (w *EnvWallet) PrivateKeyUpdated() <-chan struct{} {
 	return w.updatedCh
 }
+
+// GetKind reports an env-backed wallet. There is no mnemonic and nothing the
+// client can change, so the derivation path is always empty.
+func (w *EnvWallet) GetKind() (string, string, error) {
+	return WalletKindEnv, "", nil
+}
+
+// SetDerivationPath is not supported: the key comes from WALLET_PRIVATE_KEY and
+// cannot be changed at runtime.
+func (w *EnvWallet) SetDerivationPath(derivationPath string) error {
+	return ErrEnvWalletSet
+}

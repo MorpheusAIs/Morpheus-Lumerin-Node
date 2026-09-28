@@ -12,16 +12,27 @@ type FieldBtnProps = BaseBtnProps & {
 export const BaseBtn = styled.button.attrs<BaseBtnProps>(({ submit }) => ({
   type: submit ? 'submit' : 'button',
 }))<BaseBtnProps>`
-  display: ${({ block }) => (block ? 'block' : 'inline-block')};
+  display: ${({ block }) => (block ? 'flex' : 'inline-flex')};
+  align-items: center;
+  justify-content: center;
+  gap: 0.8rem;
+  min-width: 0;
+  max-width: 100%;
   width: ${({ block }) => (block ? '100%' : 'auto')};
   font: inherit;
   text-align: center;
   border: none;
   cursor: pointer;
-  transition: 0.3s;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  transition:
+    background-color 150ms ease-out,
+    border-color 150ms ease-out,
+    color 150ms ease-out,
+    box-shadow 150ms ease-out;
   background-color: transparent;
   padding: 0;
-  color: ${p => p.theme.colors.light};
+  color: ${(p) => p.theme.colors.light};
   outline: none;
 
   &[data-disabled='true'],
@@ -32,31 +43,33 @@ export const BaseBtn = styled.button.attrs<BaseBtnProps>(({ submit }) => ({
 `;
 
 export const Btn = styled(BaseBtn)`
-  line-height: 2.5rem;
-  font-size: 2rem;
-  font-weight: 500;
-  color: black;
-  border-radius: 5px;
-  background-color: ${p => p.theme.colors.morMain};
-  box-shadow: inset 0 3px 0 0 rgba(255, 255, 255, 0.1);
-  padding: 1.6rem 2rem;
+  min-height: 4.4rem;
+  line-height: 1.4;
+  font-size: 1.4rem;
+  font-weight: 650;
+  color: #032117;
+  border-radius: 10px;
+  background-color: var(--accent, ${(p) => p.theme.colors.morMain});
+  padding: 1.1rem 1.6rem;
 
   &:not([disabled], [data-disabled]):hover,
-  &:not([disabled], [data-disabled]):focus,
+  &:not([disabled], [data-disabled]):focus-visible {
+    background-color: #48e4ae;
+  }
+
   &:not([disabled], [data-disabled]):active {
-    box-shadow: 0 2px 8px 0 ${p => p.theme.colors.darkShade};
+    background-color: #12b77e;
   }
 `;
 
 export const FieldBtn = styled(BaseBtn)<FieldBtnProps>`
-  float: ${p => (p.float ? 'right' : 'none')};
+  float: ${(p) => (p.float ? 'right' : 'none')};
   line-height: 1.8rem;
-  opacity: 0.5;
+  color: var(--text-muted, #9ab4a7);
   font-size: 1.4rem;
   font-weight: 600;
-  letter-spacing: 1.4px;
-  text-shadow: 0 1px 1px ${p => p.theme.colors.darkShade};
-  margin-top: ${p => (p.float ? '0.4rem' : 0)};
+  letter-spacing: 0;
+  margin-top: ${(p) => (p.float ? '0.4rem' : 0)};
   white-space: nowrap;
 
   &:hover {

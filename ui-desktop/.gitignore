@@ -2,9 +2,10 @@
 /build/
 /dist/
 /out/
+/buildResources/.generated/
 
 .DS_Store
 *.log*
+*.tsbuildinfo
 /.env
 /services/
-

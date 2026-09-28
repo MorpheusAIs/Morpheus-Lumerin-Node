@@ -218,7 +218,7 @@ func (s *SDK) GetRatedBidsJSON(ctx context.Context, modelID string) (string, err
 func (s *SDK) EstimateOpenSessionStakeJSON(ctx context.Context, modelID string, durationSec int64, directPayment bool) (string, error) {
 	id := common.HexToHash(modelID)
 	dur := big.NewInt(durationSec)
-	est, err := s.blockchain.EstimateOpenSessionStake(ctx, id, dur, directPayment)
+	est, err := s.blockchain.EstimateOpenSessionStake(ctx, id, common.Hash{}, dur, directPayment)
 	if err != nil {
 		return "", err
 	}

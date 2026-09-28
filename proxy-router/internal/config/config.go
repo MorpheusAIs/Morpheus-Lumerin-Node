@@ -220,6 +220,11 @@ func (cfg *Config) SetDefaults() {
 	if cfg.Proxy.CNodePNodeTimeout == 0 {
 		cfg.Proxy.CNodePNodeTimeout = 90 * time.Second
 	}
+	// A provider that accepts the connection and then goes silent should fail
+	// with an error the user can act on, not hang forever. Note that an empty
+	// or zero LLM_TIMEOUT / CNODE_PNODE_TIMEOUT does NOT disable the deadline:
+	// the zero-value checks above put the default back. Operators who run a
+	// genuinely slow reasoning model raise the value instead.
 	if cfg.Proxy.CNodePNodeMaxRetries == 0 {
 		cfg.Proxy.CNodePNodeMaxRetries = 3
 	}

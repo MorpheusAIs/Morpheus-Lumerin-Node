@@ -13,7 +13,7 @@ For a packaged install (no compilation), use the [Consumer quickstart](/consumer
 </Note>
 
 <Warning>
-**Wallet:** if you start with an existing MetaMask wallet, use a **tier-1** (top-level) address, not a derived/secondary one. MorpheusUI's mnemonic-recover flow does not work properly with secondary addresses derived under the same mnemonic.
+**Wallet:** if you import an existing MetaMask mnemonic, MorpheusUI derives **account index 0** by default. If your funded address is "Account 2" or later, set the matching index (Account N = index N−1) in the import screen, or add it afterwards from the wallet switcher (MorpheusUI 7.12+). Importing the private key directly sidesteps this.
 </Warning>
 
 ## Dependencies

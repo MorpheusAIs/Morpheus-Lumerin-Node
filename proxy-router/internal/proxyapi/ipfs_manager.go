@@ -342,7 +342,7 @@ func (i *IpfsManager) GetFileWithProgress(ctx context.Context, metadataCIDStr st
 				os.Remove(destinationPath)
 				return ctx.Err()
 			}
-			
+
 			n, err := fileNode.Read(buf)
 			if n > 0 {
 				_, writeErr := destFile.Write(buf[:n])
@@ -367,7 +367,7 @@ func (r *ProgressReader) Read(p []byte) (int, error) {
 	if r.Ctx != nil && r.Ctx.Err() != nil {
 		return 0, r.Ctx.Err()
 	}
-	
+
 	n, err := r.Reader.Read(p)
 	if n > 0 {
 		r.Downloaded += int64(n)
@@ -377,11 +377,11 @@ func (r *ProgressReader) Read(p []byte) (int, error) {
 			}
 		}
 	}
-	
+
 	if r.Ctx != nil && r.Ctx.Err() != nil {
 		return n, r.Ctx.Err()
 	}
-	
+
 	return n, err
 }
 
@@ -433,12 +433,13 @@ func (i *IpfsManager) GetPinnedFiles(ctx context.Context) ([]PinnedFileMetadata,
 			continue
 		}
 
-		fileCtx, _ := context.WithTimeout(ctx, 2*time.Second)
+		fileCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 
 		// Try to get and parse the pinned file as metadata
 		node, err := i.node.Unixfs().Get(fileCtx, pin.Path())
 
 		if err != nil {
+			cancel()
 			i.log.Debug("Failed to get pinned file:", err)
 			continue
 		}
@@ -446,6 +447,7 @@ func (i *IpfsManager) GetPinnedFiles(ctx context.Context) ([]PinnedFileMetadata,
 		file, ok := node.(files.File)
 		if !ok {
 			node.Close()
+			cancel()
 			continue
 		}
 
@@ -454,6 +456,7 @@ func (i *IpfsManager) GetPinnedFiles(ctx context.Context) ([]PinnedFileMetadata,
 		limitReader := io.LimitReader(file, 8192) // 8KB limit
 		metadataBytes, err := io.ReadAll(limitReader)
 		file.Close()
+		cancel()
 
 		if err != nil {
 			i.log.Debug("Failed to read pinned file:", err)
@@ -479,7 +482,6 @@ func (i *IpfsManager) GetPinnedFiles(ctx context.Context) ([]PinnedFileMetadata,
 
 		// Add the metadata CID itself
 		metadata.MetadataCID = pin.Path().RootCid().String()
-		metadata.FileCID = metadata.FileCID
 
 		metadataList = append(metadataList, metadata)
 	}

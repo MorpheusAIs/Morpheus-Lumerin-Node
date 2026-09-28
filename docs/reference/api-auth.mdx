@@ -3,7 +3,7 @@ title: "API authentication"
 description: "How the proxy-router authenticates HTTP API callers: the .cookie file, proxy.conf, rpcauth/rpcwhitelist, and the /auth/users endpoints."
 audience: ["consumer", "prosumer", "provider-full", "provider-resale", "developer"]
 product: ["proxy-router"]
-last_verified: "2026-09-23"
+last_verified: "2026-09-25"
 source: "docs/02.5-api-auth.md"
 ---
 
@@ -137,9 +137,15 @@ open_session
 close_session
 get_budget
 get_supply
+get_wallet
+set_wallet
+remove_wallet
 system_config
+model_health_refresh
 add_user
 remove_user
+agent_requests
+request_allowance
 initiate_session
 chat
 embeddings
@@ -152,7 +158,22 @@ get_agent_tools
 call_agent_tool
 get_chat_history
 edit_chat_history
+ipfs_version
+ipfs_add
+ipfs_get
+ipfs_pin
+ipfs_unpin
+ipfs_pinned
+docker_version
+docker_build
+docker_manage
 ```
+
+Notes on a few of these:
+
+- `get_bids` also gates `GET /blockchain/models/prices` and `GET /blockchain/models/:id/session/estimate`; `get_sessions` gates `GET /blockchain/sessions/duration`.
+- `set_wallet` covers `POST /wallet/privateKey`, `POST /wallet/mnemonic`, and `POST /wallet/derivationPath` (HD account switching). `get_wallet` is `GET /wallet`; `remove_wallet` is `DELETE /wallet`.
+- `system_config` covers `GET /config`, `POST /config/ethNode`, and `POST /config/models/reload`.
 
 ## Agent spending allowances
 

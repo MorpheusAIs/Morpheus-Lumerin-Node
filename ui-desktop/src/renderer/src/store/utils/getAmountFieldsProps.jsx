@@ -1,3 +1,5 @@
+import { PENDING_RATE_PLACEHOLDER } from './syncAmounts';
+
 /**
  * Returns appropriate values and placeholders for coin/LMR - USD fields
  *
@@ -9,6 +11,8 @@
 export function getAmountFieldsProps({ lmrAmount, coinAmount, usdAmount }) {
   const ERROR_VALUE_PLACEHOLDER = 'Invalid amount';
   const SMALL_VALUE_PLACEHOLDER = '< 0.01';
+  // A pending rate must not populate an input the user is about to submit.
+  const isPending = (value) => value === PENDING_RATE_PLACEHOLDER;
 
   return {
     lmrPlaceholder:
@@ -21,8 +25,17 @@ export function getAmountFieldsProps({ lmrAmount, coinAmount, usdAmount }) {
         : usdAmount === SMALL_VALUE_PLACEHOLDER
         ? SMALL_VALUE_PLACEHOLDER
         : '0.00',
-    coinAmount: coinAmount === ERROR_VALUE_PLACEHOLDER ? '' : coinAmount,
-    lmrAmount: lmrAmount === ERROR_VALUE_PLACEHOLDER ? '' : lmrAmount,
-    usdAmount: usdAmount === ERROR_VALUE_PLACEHOLDER ? '0' : usdAmount
+    coinAmount:
+      coinAmount === ERROR_VALUE_PLACEHOLDER || isPending(coinAmount)
+        ? ''
+        : coinAmount,
+    lmrAmount:
+      lmrAmount === ERROR_VALUE_PLACEHOLDER || isPending(lmrAmount)
+        ? ''
+        : lmrAmount,
+    usdAmount:
+      usdAmount === ERROR_VALUE_PLACEHOLDER || isPending(usdAmount)
+        ? '0'
+        : usdAmount
   };
 }

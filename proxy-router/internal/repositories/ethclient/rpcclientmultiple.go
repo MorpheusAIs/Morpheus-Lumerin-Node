@@ -189,6 +189,14 @@ func shouldRetryRPCError(err error) bool {
 		if httpErr.StatusCode == 408 || httpErr.StatusCode == 425 {
 			return true
 		}
+		// A public JSON-RPC URL can disappear or stop serving JSON-RPC while
+		// the remaining configured endpoints are still healthy. In particular,
+		// base.lava.build began returning 410 Gone in September 2026. Treat
+		// endpoint-not-found/gone and HTTP method rejection as endpoint failures
+		// so one retired free service cannot shut down the whole router.
+		if httpErr.StatusCode == 404 || httpErr.StatusCode == 405 || httpErr.StatusCode == 410 {
+			return true
+		}
 		// 401/403: Cloudflare / WAF / “open in browser” pages — useless for JSON-RPC; try next endpoint
 		if httpErr.StatusCode == 403 || httpErr.StatusCode == 401 {
 			return true
@@ -248,6 +256,21 @@ func shouldRetryRPCError(err error) bool {
 		return true
 	}
 	if strings.Contains(msg, "-32601") {
+		return true
+	}
+	// Read-only public endpoints accept queries but refuse to broadcast
+	// transactions. https://mainnet.base.org — first in the public list for
+	// chain 8453 — answers eth_sendRawTransaction with exactly
+	// "method is not allowed on this endpoint", which was not matched here, so
+	// the client never rotated and every write failed even though later
+	// endpoints in the list would have accepted it. Opening a session was
+	// impossible out of the box without setting ETH_NODE_ADDRESS.
+	if strings.Contains(msg, "method is not allowed") ||
+		strings.Contains(msg, "method not allowed") ||
+		strings.Contains(msg, "not allowed on this endpoint") ||
+		strings.Contains(msg, "method is not available") ||
+		strings.Contains(msg, "method not found") ||
+		strings.Contains(msg, "unsupported method") {
 		return true
 	}
 	if strings.Contains(msg, "timeout") ||

@@ -67,16 +67,34 @@ export const ImportFlow = (props) => {
   const [isSelectingAddress, setIsSelectingAddress] = useState(false);
   const [addresses, setAddresses] = useState([]);
   const [derivationIndex, setDerivationIndex] = useState(0);
+  const [isLoadingAddresses, setIsLoadingAddresses] = useState(false);
+  const [addressError, setAddressError] = useState('');
 
   const handleSetMnemonic = async (e) => {
-    setIsSelectingAddress(true);
+    if (isLoadingAddresses) return;
+    e.preventDefault();
     e.stopPropagation();
-    const addresses = await props.onSuggestAddress();
-    setAddresses(addresses);
+    setIsLoadingAddresses(true);
+    setAddressError('');
+    try {
+      const nextAddresses = await props.onSuggestAddress();
+      if (!Array.isArray(nextAddresses) || !nextAddresses.length)
+        throw new Error(
+          'No addresses were returned. Check your recovery phrase and try again.',
+        );
+      setAddresses(nextAddresses);
+      setIsSelectingAddress(true);
+    } catch (error) {
+      setAddressError(
+        error?.message || 'Could not load wallet addresses. Try again.',
+      );
+    } finally {
+      setIsLoadingAddresses(false);
+    }
   };
 
   return (
-    <AltLayout title="Access to wallet" data-testid="onboarding-container">
+    <AltLayout title="Import your wallet" data-testid="onboarding-container">
       <AltLayoutNarrow>
         {isSelectingAddress ? (
           <>
@@ -88,13 +106,14 @@ export const ImportFlow = (props) => {
 
             <AltLayoutNarrow>
               <Message>
-                Select one of 10 accounts derivied from mnemonic
+                Select the account you want to use from this recovery phrase.
               </Message>
             </AltLayoutNarrow>
             <Sp mt={3}>
               <Select
                 style={{ width: '100%' }}
                 id={'derivationPath'}
+                aria-label="Wallet address"
                 error={props.errors.derivationPath}
                 value={derivationIndex || 0}
                 onChange={(e) => setDerivationIndex(e.target.value)}
@@ -116,9 +135,24 @@ export const ImportFlow = (props) => {
               Import your wallet using a private key or mnemonic
             </DisclaimerWarning>
             <Sp mt={2} mb={2}>
-              <Select onChange={(e) => setMode(e.target.value)}>
-                <option key={'mnemonic'} value={'mnemonic'} selected={true}>
-                  Mnemonic
+              <Select
+                aria-label="Import method"
+                value={mode}
+                disabled={isLoadingAddresses}
+                onChange={(e) => {
+                  setMode(e.target.value);
+                  setAddressError('');
+                  props.onInputChange({
+                    id:
+                      e.target.value === 'key'
+                        ? 'userMnemonic'
+                        : 'userPrivateKey',
+                    value: '',
+                  });
+                }}
+              >
+                <option key={'mnemonic'} value={'mnemonic'}>
+                  Recovery phrase
                 </option>
                 <option key={'key'} value={'key'}>
                   Private Key
@@ -137,6 +171,7 @@ export const ImportFlow = (props) => {
                 <Sp mt={3}>
                   <TextInput
                     data-testid="mnemonic-field"
+                    disabled={isLoadingAddresses}
                     autoFocus
                     onChange={props.onInputChange}
                     onPaste={(e) => {
@@ -160,6 +195,9 @@ export const ImportFlow = (props) => {
                 <Sp mt={3}>
                   <TextInput
                     data-testid="pKey-field"
+                    type="password"
+                    autoComplete="off"
+                    spellCheck={false}
                     autoFocus
                     onChange={props.onInputChange}
                     onPaste={(e) => {
@@ -170,7 +208,6 @@ export const ImportFlow = (props) => {
                     label="Import Private Key"
                     error={props.errors.userPrivateKey}
                     value={props.userPrivateKey || ''}
-                    rows={2}
                     id={'userPrivateKey'}
                   />
                 </Sp>
@@ -180,10 +217,12 @@ export const ImportFlow = (props) => {
         )}
 
         {/* Select address - generate addresses - use */}
+        {addressError && <p role="alert">{addressError}</p>}
         {mode == 'mnemonic' ? (
           <Sp mt={6}>
             <Btn
               data-testid="accept-terms-btn"
+              disabled={isLoadingAddresses}
               autoFocus
               onClick={(e) =>
                 !isSelectingAddress
@@ -192,7 +231,11 @@ export const ImportFlow = (props) => {
               }
               block
             >
-              {!isSelectingAddress ? 'Select Address' : 'Confirm'}
+              {isLoadingAddresses
+                ? 'Loading addresses…'
+                : !isSelectingAddress
+                  ? 'Select address'
+                  : 'Continue'}
             </Btn>
           </Sp>
         ) : (
