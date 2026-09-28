@@ -2995,6 +2995,7 @@ jobs:
         with:
           path: ./ui-desktop/dist/mac-arm64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.dmg
           name: mac-arm64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.dmg
+          if-no-files-found: error
 
   UI-Ubuntu-22-x64:
     name: Build Morpheus UI Ubuntu x64 Image
@@ -3059,6 +3060,7 @@ jobs:
         with:
           path: ./ui-desktop/dist/linux-x86_64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.AppImage
           name: linux-x86_64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.AppImage
+          if-no-files-found: error
 
   UI-Ubuntu-22-arm64:
     name: Build Morpheus UI Ubuntu arm64 Image
@@ -3123,6 +3125,7 @@ jobs:
         with:
           path: ./ui-desktop/dist/linux-arm64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.AppImage
           name: linux-arm64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.AppImage
+          if-no-files-found: error
 
   UI-macOS-15-intel-x64:
     name: Build Morpheus UI macOS-x64 Image
@@ -3188,6 +3191,7 @@ jobs:
         with:
           path: ./ui-desktop/dist/mac-x64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.dmg
           name: mac-x64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.dmg
+          if-no-files-found: error
 
   UI-Windows-avx2-x64:
     name: Build Morpheus UI Windows Image
@@ -3274,6 +3278,7 @@ jobs:
         with:
           path: ./ui-desktop/dist/win-x64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.exe
           name: win-x64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.exe
+          if-no-files-found: error
 
   UI-Release:
     name: Upload UI-Desktop Release
