@@ -2957,7 +2957,7 @@ jobs:
       - name: Setup node
         uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: "yarn"
           cache-dependency-path: ui-desktop/yarn.lock
 
@@ -3022,7 +3022,7 @@ jobs:
       - name: Setup node
         uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: "yarn"
           cache-dependency-path: ui-desktop/yarn.lock
 
@@ -3086,7 +3086,7 @@ jobs:
       - name: Setup node
         uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: "yarn"
           cache-dependency-path: ui-desktop/yarn.lock
 
@@ -3150,7 +3150,7 @@ jobs:
       - name: Setup node
         uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: "yarn"
           cache-dependency-path: ui-desktop/yarn.lock
 
@@ -3215,7 +3215,7 @@ jobs:
       - name: Setup node
         uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: "yarn"
           cache-dependency-path: ui-desktop/yarn.lock
 
