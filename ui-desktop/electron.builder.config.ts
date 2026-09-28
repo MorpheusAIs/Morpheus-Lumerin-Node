@@ -63,9 +63,10 @@ const config: Configuration = {
     target: ['portable']
   },
   portable: {
-    // Product name and version first, so a downloaded file still says what it
-    // is and which release it came from once it is out of the dist folder.
-    artifactName: '${productName}-${version}-${os}-${arch}.${ext}'
+    // GitHub release contract — must match .github/workflows/build.yml upload
+    // paths (e.g. win-x64-morpheus-app-<ver>.exe). ${name} is package.json
+    // "morpheus-app". Installed productName stays MorpheusUI.
+    artifactName: '${os}-${arch}-${name}-${version}.${ext}'
   },
   mac: {
     executableName: 'MorpheusUI',
@@ -80,18 +81,14 @@ const config: Configuration = {
     },
     target: ['dmg'],
     notarize: false,
-    // Product name and version first, so a downloaded file still says what it
-    // is and which release it came from once it is out of the dist folder.
-    artifactName: '${productName}-${version}-${os}-${arch}.${ext}'
+    artifactName: '${os}-${arch}-${name}-${version}.${ext}'
   },
   linux: {
     target: ['AppImage'],
     maintainer: 'mor.org',
     category: 'Utility',
     executableName: 'MorpheusUI',
-    // Product name and version first, so a downloaded file still says what it
-    // is and which release it came from once it is out of the dist folder.
-    artifactName: '${productName}-${version}-${os}-${arch}.${ext}'
+    artifactName: '${os}-${arch}-${name}-${version}.${ext}'
   },
   npmRebuild: false,
   publish: {
