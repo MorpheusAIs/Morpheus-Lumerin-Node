@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"sync"
 	"testing"
 	"time"
 
@@ -78,6 +79,8 @@ type mockDeps struct {
 	adapter    aiengine.AIEngineStream
 	adapterErr error
 	teeStatus  TeeStatusProvider
+	configs    map[common.Hash]config.ModelConfig
+	apiDetect  ApiDetector
 }
 
 // mockTeeStatus returns canned backend attestation snapshots per model and
@@ -129,6 +132,9 @@ func (m *mockDeps) GetModelNameAndTags(ctx context.Context, modelID common.Hash)
 
 func (m *mockDeps) GetAll() ([]common.Hash, []config.ModelConfig) {
 	configs := make([]config.ModelConfig, len(m.modelIDs))
+	for i, id := range m.modelIDs {
+		configs[i] = m.configs[id]
+	}
 	return m.modelIDs, configs
 }
 
@@ -201,6 +207,7 @@ func newTestChecker(deps *mockDeps) *Checker {
 		Models:       deps,
 		ModelConfigs: deps,
 		TeeStatus:    deps.teeStatus,
+		ApiDetect:    deps.apiDetect,
 	}, time.Hour, time.Second, 0, 0, lib.NewTestLogger())
 }
 
@@ -854,4 +861,286 @@ func TestCheckAllBidsError(t *testing.T) {
 	// no reports should be written when the bid lookup fails, so stale
 	// results from a previous successful run are preserved
 	require.Empty(t, checker.GetReports())
+}
+
+func TestCheckModelAttachesDeclaredApiSpec(t *testing.T) {
+	deps := &mockDeps{
+		bids:     []*structs.Bid{bidFor(modelLLM)},
+		tags:     map[common.Hash][]string{modelLLM: {"llm"}},
+		modelIDs: []common.Hash{modelLLM, modelNoBid},
+		adapter:  &mathSolvingAdapter{},
+		configs: map[common.Hash]config.ModelConfig{
+			modelLLM:   {ModelName: "qwen3-32b", ApiType: "openai", ApiStack: "vllm", ApiURL: "http://llm:8000/v1/chat/completions"},
+			modelNoBid: {ModelName: "llama-3.1-8b", ApiType: "openai", ApiStack: "ollama", ApiURL: "http://ollama:11434/v1/chat/completions"},
+		},
+	}
+
+	checker := newTestChecker(deps)
+	checker.checkAll(context.Background(), common.Address{})
+	reports := checker.GetReports()
+
+	llm := reportByID(t, reports, modelLLM)
+	require.NotNil(t, llm.Api)
+	require.Equal(t, "vllm", llm.Api.Stack)
+	require.Equal(t, "qwen3", llm.Api.ModelFamily)
+	require.Equal(t, "chat_template_kwargs.enable_thinking", llm.Api.Bindings[system.IntentReasoningDisable].Param)
+	require.NotZero(t, llm.Api.DeclaredAt)
+
+	noBid := reportByID(t, reports, modelNoBid)
+	require.Equal(t, system.ModelHealthStatusNoBid, noBid.Status)
+	require.NotNil(t, noBid.Api)
+	require.Equal(t, "ollama", noBid.Api.Stack)
+}
+
+func TestCheckModelWithoutApiStackHasNoApiSpec(t *testing.T) {
+	deps := &mockDeps{
+		bids:     []*structs.Bid{bidFor(modelLLM)},
+		tags:     map[common.Hash][]string{modelLLM: {"llm"}},
+		modelIDs: []common.Hash{modelLLM},
+		adapter:  &mathSolvingAdapter{},
+		configs: map[common.Hash]config.ModelConfig{
+			modelLLM: {ModelName: "qwen3-32b", ApiType: "openai", ApiURL: "http://llm:8000/v1/chat/completions"},
+		},
+	}
+
+	checker := newTestChecker(deps)
+	checker.checkAll(context.Background(), common.Address{})
+
+	llm := reportByID(t, checker.GetReports(), modelLLM)
+	require.NotEqual(t, system.ModelHealthStatusNoBid, llm.Status, "the model is still checked")
+	require.Nil(t, llm.Api, "report carries api only for models with apiStack")
+}
+
+func TestCheckModelDeclaredAtStableAcrossSweeps(t *testing.T) {
+	deps := &mockDeps{
+		bids:     []*structs.Bid{bidFor(modelLLM)},
+		tags:     map[common.Hash][]string{modelLLM: {"llm"}},
+		modelIDs: []common.Hash{modelLLM},
+		adapter:  &mathSolvingAdapter{},
+		configs: map[common.Hash]config.ModelConfig{
+			modelLLM: {ModelName: "qwen3-32b", ApiType: "openai", ApiStack: "vllm", ApiURL: "http://llm:8000/v1/chat/completions", ModelFamily: "qwen3"},
+		},
+	}
+
+	checker := newTestChecker(deps)
+	checker.checkAll(context.Background(), common.Address{})
+
+	first := reportByID(t, checker.GetReports(), modelLLM)
+	require.NotNil(t, first.Api)
+	require.NotZero(t, first.Api.DeclaredAt)
+
+	// Seeded directly: wall-clock granularity between sweeps is not reliable.
+	seeded := first
+	seededAPI := *first.Api
+	seededAPI.DeclaredAt = 12345
+	seeded.Api = &seededAPI
+	checker.setReport(seeded)
+
+	checker.checkAll(context.Background(), common.Address{})
+	second := reportByID(t, checker.GetReports(), modelLLM)
+	require.NotNil(t, second.Api)
+	require.Equal(t, int64(12345), second.Api.DeclaredAt, "unchanged spec must keep the previous DeclaredAt")
+
+	cfg := deps.configs[modelLLM]
+	cfg.ModelFamily = "deepseek-r1"
+	deps.configs[modelLLM] = cfg
+	checker.checkAll(context.Background(), common.Address{})
+	third := reportByID(t, checker.GetReports(), modelLLM)
+	require.NotNil(t, third.Api)
+	require.NotZero(t, third.Api.DeclaredAt)
+	require.NotEqual(t, int64(12345), third.Api.DeclaredAt, "changed spec must refresh DeclaredAt")
+}
+
+func TestCheckModelDeclaredSpecCarriesSource(t *testing.T) {
+	deps := &mockDeps{
+		bids:     []*structs.Bid{bidFor(modelLLM)},
+		tags:     map[common.Hash][]string{modelLLM: {"llm"}},
+		modelIDs: []common.Hash{modelLLM},
+		adapter:  &mathSolvingAdapter{},
+		configs:  map[common.Hash]config.ModelConfig{modelLLM: {ModelName: "qwen3-32b", ApiType: "openai", ApiStack: "vllm", ApiURL: "http://llm:8000/v1/chat/completions"}},
+	}
+	checker := newTestChecker(deps)
+	checker.checkAll(context.Background(), common.Address{})
+	llm := reportByID(t, checker.GetReports(), modelLLM)
+	require.NotNil(t, llm.Api)
+	require.Equal(t, system.ApiSpecSourceDeclared, llm.Api.Source)
+}
+
+type fakeDetector struct {
+	mu        sync.Mutex
+	calls     int
+	deadlines []time.Time
+	spec      *system.ModelApiSpec
+}
+
+func (f *fakeDetector) Detect(ctx context.Context, cfg config.ModelConfig) *system.ModelApiSpec {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls++
+	if dl, ok := ctx.Deadline(); ok {
+		f.deadlines = append(f.deadlines, dl)
+	}
+	return f.spec.Clone()
+}
+
+func detectedQwen3() *system.ModelApiSpec {
+	return &system.ModelApiSpec{Stack: "vllm", ModelFamily: "qwen3", Source: system.ApiSpecSourceDetected, Thinking: &system.ThinkingSpec{Mode: system.ThinkingModeControllable},
+		Bindings: map[string]*system.ParamBinding{system.IntentReasoningDisable: {Kind: system.BindingKindTemplateKwarg, Param: "chat_template_kwargs.enable_thinking", ParamType: "boolean", Value: false}}}
+}
+
+func TestCheckModelDetectsWhenNoApiStack(t *testing.T) {
+	det := &fakeDetector{spec: detectedQwen3()}
+	deps := &mockDeps{
+		bids: []*structs.Bid{bidFor(modelLLM)}, tags: map[common.Hash][]string{modelLLM: {"llm"}},
+		modelIDs: []common.Hash{modelLLM, modelNoBid}, adapter: &mathSolvingAdapter{}, apiDetect: det,
+		configs: map[common.Hash]config.ModelConfig{
+			modelLLM:   {ModelName: "qwen3-32b", ApiType: "openai", ApiURL: "http://llm:8000/v1/chat/completions"},
+			modelNoBid: {ModelName: "qwen3-8b", ApiType: "openai", ApiURL: "http://llm:8001/v1/chat/completions"},
+		},
+	}
+	checker := newTestChecker(deps)
+	checker.checkAll(context.Background(), common.Address{})
+	reports := checker.GetReports()
+	for _, id := range []common.Hash{modelLLM, modelNoBid} {
+		r := reportByID(t, reports, id)
+		require.NotNil(t, r.Api, id.Hex())
+		require.Equal(t, system.ApiSpecSourceDetected, r.Api.Source)
+		require.Equal(t, "qwen3", r.Api.ModelFamily)
+		require.NotZero(t, r.Api.DeclaredAt)
+	}
+	require.Equal(t, system.ModelHealthStatusNoBid, reportByID(t, reports, modelNoBid).Status)
+	require.Equal(t, 2, det.calls)
+}
+
+func TestCheckModelSkipsDetectorForNonChatTransport(t *testing.T) {
+	det := &fakeDetector{spec: detectedQwen3()}
+	deps := &mockDeps{
+		bids: []*structs.Bid{bidFor(modelLLM)}, tags: map[common.Hash][]string{modelLLM: {"llm"}},
+		modelIDs: []common.Hash{modelLLM, modelImage}, adapter: &mathSolvingAdapter{}, apiDetect: det,
+		configs: map[common.Hash]config.ModelConfig{
+			modelLLM:   {ModelName: "qwen3-32b", ApiType: "openai", ApiURL: "http://llm:8000/v1/chat/completions"},
+			modelImage: {ModelName: "sd-xl", ApiType: "prodia-v2", ApiURL: "https://inference.prodia.com/v2"},
+		},
+	}
+	checker := newTestChecker(deps)
+	checker.checkAll(context.Background(), common.Address{})
+	reports := checker.GetReports()
+
+	llm := reportByID(t, reports, modelLLM)
+	require.NotNil(t, llm.Api, "chat transport (openai) is still detected")
+	require.Equal(t, system.ApiSpecSourceDetected, llm.Api.Source)
+
+	image := reportByID(t, reports, modelImage)
+	require.Nil(t, image.Api, "non-chat transport (prodia-v2) must not be probed")
+
+	require.Equal(t, 1, det.calls, "the detector must be called only for the chat-transport model")
+}
+
+func TestCheckModelDeclaredStackSkipsDetector(t *testing.T) {
+	det := &fakeDetector{spec: detectedQwen3()}
+	deps := &mockDeps{
+		bids: []*structs.Bid{bidFor(modelLLM)}, tags: map[common.Hash][]string{modelLLM: {"llm"}},
+		modelIDs: []common.Hash{modelLLM}, adapter: &mathSolvingAdapter{}, apiDetect: det,
+		configs: map[common.Hash]config.ModelConfig{modelLLM: {ModelName: "deepseek-r1", ApiType: "openai", ApiStack: "sglang", ApiURL: "http://llm:8000/v1/chat/completions"}},
+	}
+	checker := newTestChecker(deps)
+	checker.checkAll(context.Background(), common.Address{})
+	llm := reportByID(t, checker.GetReports(), modelLLM)
+	require.Equal(t, "sglang", llm.Api.Stack)
+	require.Equal(t, system.ApiSpecSourceDeclared, llm.Api.Source)
+	require.Equal(t, 0, det.calls)
+}
+
+func TestCheckModelWithoutDetectorHasNoDetectedApi(t *testing.T) {
+	deps := &mockDeps{
+		bids: []*structs.Bid{bidFor(modelLLM)}, tags: map[common.Hash][]string{modelLLM: {"llm"}},
+		modelIDs: []common.Hash{modelLLM, modelNoBid}, adapter: &mathSolvingAdapter{},
+		configs: map[common.Hash]config.ModelConfig{
+			modelLLM:   {ModelName: "qwen3-32b", ApiType: "openai", ApiURL: "http://llm:8000/v1/chat/completions"},
+			modelNoBid: {ModelName: "qwen3-8b", ApiType: "openai", ApiStack: "vllm", ApiURL: "http://llm:8001/v1/chat/completions"},
+		},
+	}
+	checker := newTestChecker(deps)
+	checker.checkAll(context.Background(), common.Address{})
+	require.Nil(t, reportByID(t, checker.GetReports(), modelLLM).Api)
+	require.Equal(t, system.ApiSpecSourceDeclared, reportByID(t, checker.GetReports(), modelNoBid).Api.Source)
+}
+
+func TestCheckModelDetectorNilResultHasNoApi(t *testing.T) {
+	det := &fakeDetector{}
+	deps := &mockDeps{
+		bids: []*structs.Bid{bidFor(modelLLM)}, tags: map[common.Hash][]string{modelLLM: {"llm"}},
+		modelIDs: []common.Hash{modelLLM}, adapter: &mathSolvingAdapter{}, apiDetect: det,
+		configs: map[common.Hash]config.ModelConfig{modelLLM: {ModelName: "unknown-model-x", ApiType: "openai", ApiURL: "http://llm:8000/v1/chat/completions"}},
+	}
+	checker := newTestChecker(deps)
+	checker.checkAll(context.Background(), common.Address{})
+	require.Nil(t, reportByID(t, checker.GetReports(), modelLLM).Api)
+	require.Equal(t, 1, det.calls)
+}
+
+func TestCheckModelDetectBudgetIsCappedByTimeout(t *testing.T) {
+	newDeps := func(det *fakeDetector) *mockDeps {
+		return &mockDeps{
+			bids: []*structs.Bid{bidFor(modelLLM)}, tags: map[common.Hash][]string{modelLLM: {"llm"}},
+			modelIDs: []common.Hash{modelLLM}, adapter: &mathSolvingAdapter{}, apiDetect: det,
+			configs: map[common.Hash]config.ModelConfig{modelLLM: {ModelName: "qwen3-32b", ApiType: "openai", ApiURL: "http://llm:8000/v1/chat/completions"}},
+		}
+	}
+	det := &fakeDetector{spec: detectedQwen3()}
+	start := time.Now()
+	newTestChecker(newDeps(det)).checkAll(context.Background(), common.Address{})
+	require.Len(t, det.deadlines, 1)
+	require.WithinDuration(t, start.Add(time.Second), det.deadlines[0], 300*time.Millisecond)
+
+	det = &fakeDetector{spec: detectedQwen3()}
+	deps := newDeps(det)
+	checker := NewChecker(Deps{Adapters: deps, Bids: deps, Models: deps, ModelConfigs: deps, ApiDetect: det}, time.Hour, time.Hour, 0, 0, lib.NewTestLogger())
+	start = time.Now()
+	checker.checkAll(context.Background(), common.Address{})
+	require.Len(t, det.deadlines, 1)
+	require.WithinDuration(t, start.Add(detectBudget), det.deadlines[0], 300*time.Millisecond)
+}
+
+func TestCheckModelDetectBudgetFallsBackWhenTimeoutIsZero(t *testing.T) {
+	det := &fakeDetector{spec: detectedQwen3()}
+	deps := &mockDeps{
+		modelIDs:  []common.Hash{modelNoBid},
+		apiDetect: det,
+		configs:   map[common.Hash]config.ModelConfig{modelNoBid: {ModelName: "qwen3-32b", ApiType: "openai", ApiURL: "http://llm:8000/v1/chat/completions"}},
+	}
+	checker := NewChecker(Deps{Adapters: deps, Bids: deps, Models: deps, ModelConfigs: deps, ApiDetect: det}, time.Hour, 0, 0, 0, lib.NewTestLogger())
+	start := time.Now()
+	checker.checkAll(context.Background(), common.Address{})
+	require.Len(t, det.deadlines, 1)
+	require.WithinDuration(t, start.Add(detectBudget), det.deadlines[0], 300*time.Millisecond)
+}
+
+func TestCheckModelDetectedDeclaredAtStableAcrossSweeps(t *testing.T) {
+	det := &fakeDetector{spec: detectedQwen3()}
+	deps := &mockDeps{
+		bids: []*structs.Bid{bidFor(modelLLM)}, tags: map[common.Hash][]string{modelLLM: {"llm"}},
+		modelIDs: []common.Hash{modelLLM}, adapter: &mathSolvingAdapter{}, apiDetect: det,
+		configs: map[common.Hash]config.ModelConfig{modelLLM: {ModelName: "qwen3-32b", ApiType: "openai", ApiURL: "http://llm:8000/v1/chat/completions"}},
+	}
+	checker := newTestChecker(deps)
+	checker.checkAll(context.Background(), common.Address{})
+	first := reportByID(t, checker.GetReports(), modelLLM)
+	require.NotZero(t, first.Api.DeclaredAt)
+
+	seeded := first
+	seededAPI := *first.Api
+	seededAPI.DeclaredAt = 12345
+	seeded.Api = &seededAPI
+	checker.setReport(seeded)
+
+	checker.checkAll(context.Background(), common.Address{})
+	require.Equal(t, int64(12345), reportByID(t, checker.GetReports(), modelLLM).Api.DeclaredAt, "unchanged detected spec keeps DeclaredAt")
+
+	det.mu.Lock()
+	det.spec.ModelFamily = "deepseek-r1"
+	det.mu.Unlock()
+	checker.checkAll(context.Background(), common.Address{})
+	third := reportByID(t, checker.GetReports(), modelLLM)
+	require.NotEqual(t, int64(12345), third.Api.DeclaredAt, "changed detected spec refreshes DeclaredAt")
 }

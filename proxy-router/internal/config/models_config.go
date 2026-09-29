@@ -45,6 +45,8 @@ type ModelConfigLoader struct {
 type ModelConfig struct {
 	ModelName       string            `json:"modelName" validate:"required"`
 	ApiType         string            `json:"apiType" validate:"required"`
+	ApiStack        string            `json:"apiStack"`
+	ModelFamily     string            `json:"modelFamily"`
 	ApiURL          string            `json:"apiUrl" validate:"required,url"`
 	ApiKey          string            `json:"apiKey"`
 	ConcurrentSlots int               `json:"concurrentSlots" validate:"number"`
@@ -167,6 +169,7 @@ func (e *ModelConfigLoader) load() (ModelConfigs, error) {
 		}
 		cfgs := make(ModelConfigs, len(modelConfigsV2.Models))
 		for _, v := range modelConfigsV2.Models {
+			v.ApiStack = e.loadApiStack(v.ID, v.ModelConfig)
 			cfgs[v.ID] = v.ModelConfig
 			_ = e.Validate(context.Background(), common.HexToHash(v.ID), v.ModelConfig)
 		}
@@ -186,8 +189,22 @@ func (e *ModelConfigLoader) load() (ModelConfigs, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid models config: %w", err)
 	}
+	for id, cfg := range modelConfigs {
+		cfg.ApiStack = e.loadApiStack(id, cfg)
+		modelConfigs[id] = cfg
+	}
 
 	return modelConfigs, nil
+}
+
+// An invalid apiStack degrades only that model: main.go merely warns on an
+// Init error and would otherwise run with zero models.
+func (e *ModelConfigLoader) loadApiStack(modelID string, cfg ModelConfig) string {
+	if err := ValidateApiStack(modelID, cfg); err != nil {
+		e.log.Errorf("%s — apiStack ignored for this model; its backend API will be detected at runtime", err)
+		return ""
+	}
+	return NormalizeApiStack(cfg.ApiStack)
 }
 
 func (e *ModelConfigLoader) ModelConfigFromID(ID string) *ModelConfig {
