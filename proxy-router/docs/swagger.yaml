@@ -28,6 +28,8 @@ definitions:
     type: object
   aiengine.LocalModel:
     properties:
+      apiStack:
+        type: string
       apiType:
         type: string
       apiUrl:
@@ -1288,8 +1290,64 @@ definitions:
       version:
         type: string
     type: object
+  system.ModelApiSpec:
+    properties:
+      bindings:
+        additionalProperties:
+          $ref: '#/definitions/system.ParamBinding'
+        description: |-
+          Bindings maps canonical request intents to how this backend expresses
+          them; an absent intent cannot be expressed.
+        type: object
+      declaredAt:
+        type: integer
+      modelFamily:
+        description: ModelFamily is the canonical model family (qwen3, deepseek-r1,
+          claude, ...).
+        type: string
+      parameters:
+        description: |-
+          Parameters lists the request parameters the stack documents as accepted,
+          in its own vocabulary: OpenAI chat-completions names, or Anthropic
+          Messages names for anthropic. Behind LiteLLM, narrowed to what LiteLLM
+          supports for the model.
+        items:
+          type: string
+        type: array
+      source:
+        description: |-
+          Source is declared (models-config apiStack preset) or detected (runtime
+          probing of the backend's service endpoints).
+        type: string
+      stack:
+        description: |-
+          Stack is the serving stack or vendor: vllm | sglang | llamacpp | ollama |
+          venice | openrouter | litellm | anthropic | openai, or a detected engine or
+          hosted vendor without a bindings table (tgi, lmstudio, koboldcpp, groq,
+          together, ...). With Via set, Stack is the upstream behind the gateway and
+          Bindings use that upstream's vocabulary.
+        type: string
+      thinking:
+        allOf:
+        - $ref: '#/definitions/system.ThinkingSpec'
+        description: Thinking summarizes reasoning controllability; the knobs are
+          in Bindings.
+      via:
+        description: |-
+          Via is the gateway in front of Stack when detection identified the
+          upstream behind it; today only "litellm". Absent when the backend is
+          reached directly or the upstream is unknown (then Stack is the gateway).
+        type: string
+    type: object
   system.ModelHealthReport:
     properties:
+      api:
+        allOf:
+        - $ref: '#/definitions/system.ModelApiSpec'
+        description: |-
+          Api describes the API serving this model: stack, model family, thinking
+          control and request-param bindings. Never carries the backend URL, key or
+          hostname. Absent when nothing is known.
       bidId:
         type: string
       errorKind:
@@ -1332,6 +1390,27 @@ definitions:
           type: string
         type: array
     type: object
+  system.ParamBinding:
+    properties:
+      enumValues:
+        items:
+          type: string
+        type: array
+      hint:
+        type: string
+      kind:
+        type: string
+      param:
+        description: dotted path within the mechanism
+        type: string
+      paramType:
+        description: boolean | number | enum | string | object | array
+        type: string
+      value:
+        description: |-
+          Value is the fixed value realizing the intent; nil when the caller
+          supplies it.
+    type: object
   system.SetEthNodeURLReq:
     properties:
       urls:
@@ -1344,6 +1423,13 @@ definitions:
   system.StatusRes:
     properties:
       status:
+        type: string
+    type: object
+  system.ThinkingSpec:
+    properties:
+      mode:
+        description: always_on (cannot be disabled) | controllable (reasoning.disable/enable
+          bindings) | tunable (effort/budget bindings only)
         type: string
     type: object
   walletapi.SetDerivationPathReqBody:
