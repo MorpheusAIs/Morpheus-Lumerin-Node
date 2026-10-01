@@ -1,11 +1,14 @@
 package proxyapi
 
 import (
+	"context"
 	"crypto/ecdsa"
+	"errors"
 	"testing"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
 )
@@ -50,6 +53,54 @@ func TestSessionUserPubKeyRejectsMismatchedRecord(t *testing.T) {
 	_, _, err = c.sessionUserPubKey(victimAddr)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "does not match")
+}
+
+type fakeAuthResolver struct {
+	signers map[common.Address]common.Address
+	err     error
+}
+
+func (f fakeAuthResolver) AuthorizedSigner(_ context.Context, provider common.Address) (common.Address, error) {
+	if f.err != nil {
+		return common.Address{}, f.err
+	}
+	if s, ok := f.signers[provider]; ok {
+		return s, nil
+	}
+	return provider, nil // EOA signs as itself
+}
+
+func TestServesProvider(t *testing.T) {
+	me := common.HexToAddress("0x1111111111111111111111111111111111111111")
+	contract := common.HexToAddress("0xc0dec0dec0dec0dec0dec0dec0dec0dec0dec0de")
+	other := common.HexToAddress("0x2222222222222222222222222222222222222222")
+	ctx := context.Background()
+
+	// no resolver: only sessions opened directly against my address
+	c := &MORRPCController{providerAddr: me}
+	require.True(t, c.servesProvider(ctx, me))
+	require.False(t, c.servesProvider(ctx, contract))
+	require.False(t, c.servesProvider(ctx, other))
+
+	// resolver: contract whose owner() is me is served; foreign EOA/contract is not
+	c.SetProviderAuthResolver(fakeAuthResolver{signers: map[common.Address]common.Address{
+		contract: me,
+		other:    other,
+	}})
+	require.True(t, c.servesProvider(ctx, me))
+	require.True(t, c.servesProvider(ctx, contract))
+	require.False(t, c.servesProvider(ctx, other))
+
+	// resolver error fails closed for anything that is not my own address
+	c.SetProviderAuthResolver(fakeAuthResolver{err: errors.New("rpc down")})
+	require.True(t, c.servesProvider(ctx, me))
+	require.False(t, c.servesProvider(ctx, contract))
+
+	// unknown node key fails closed everywhere
+	z := &MORRPCController{}
+	z.SetProviderAuthResolver(fakeAuthResolver{signers: map[common.Address]common.Address{contract: common.Address{}}})
+	require.False(t, z.servesProvider(ctx, common.Address{}))
+	require.False(t, z.servesProvider(ctx, contract))
 }
 
 func TestSessionUserPubKeyMissingUser(t *testing.T) {

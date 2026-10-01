@@ -25,7 +25,8 @@ type MORRPCController struct {
 	sessionStorage *storages.SessionStorage
 	morRpc         *m.MORRPCMessage
 	prKey          lib.HexString
-	providerAddr   common.Address // wallet this node serves sessions for; derived from prKey
+	providerAddr   common.Address       // address of this node's signing key; derived from prKey
+	authResolver   ProviderAuthResolver // maps an on-chain provider to the key that signs for it
 	streamManager  *StreamingSessionManager
 	sessionSema    *SessionSemaphore // Limits to 1 concurrent request per session
 	modelHealth    system.ModelHealthReporter
@@ -56,6 +57,35 @@ func NewMORRPCController(service *ProxyReceiver, validator *validator.Validate, 
 	}
 
 	return c
+}
+
+// SetProviderAuthResolver enables serving sessions whose on-chain provider is a
+// contract (e.g. a custody contract) that authorizes this node's key via owner().
+// Without a resolver only sessions opened directly against this node's address
+// are accepted.
+func (s *MORRPCController) SetProviderAuthResolver(r ProviderAuthResolver) {
+	s.authResolver = r
+}
+
+// servesProvider reports whether this node is the legitimate server for sessions
+// opened against providerAddr: either the address is this node's key, or the
+// provider is a contract whose authorized signer is this node's key. Fails
+// closed on a zero/unknown node address or a resolver error.
+func (s *MORRPCController) servesProvider(ctx context.Context, providerAddr common.Address) bool {
+	if s.providerAddr == (common.Address{}) {
+		return false
+	}
+	if providerAddr == s.providerAddr {
+		return true
+	}
+	if s.authResolver == nil {
+		return false
+	}
+	signer, err := s.authResolver.AuthorizedSigner(ctx, providerAddr)
+	if err != nil {
+		return false
+	}
+	return signer == s.providerAddr
 }
 
 // sessionUserPubKey loads the stored public key for the session owner and
@@ -272,7 +302,7 @@ func (s *MORRPCController) sessionReport(ctx context.Context, msg m.RPCMessage, 
 	}
 	// Same provider binding as prompt/stream (isSessionValid); fail closed on
 	// a missing or foreign provider address.
-	if common.HexToAddress(session.ProviderAddr) != s.providerAddr {
+	if !s.servesProvider(ctx, common.HexToAddress(session.ProviderAddr)) {
 		err := fmt.Errorf("session not bound to this provider")
 		sourceLog.Error(err)
 		return err
@@ -625,8 +655,9 @@ func (s *MORRPCController) isSessionValid(ctx context.Context, sessionID common.
 		return nil, fmt.Errorf("session expired")
 	}
 
-	// A session is only usable on the provider it was opened with
-	if session.ProviderAddr() != s.providerAddr {
+	// A session is only usable on the provider it was opened with (directly,
+	// or via a contract provider that authorizes this node's key)
+	if !s.servesProvider(ctx, session.ProviderAddr()) {
 		return nil, fmt.Errorf("session not bound to this provider")
 	}
 	return session, nil

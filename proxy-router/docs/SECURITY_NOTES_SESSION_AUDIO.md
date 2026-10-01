@@ -22,7 +22,10 @@
   timestamp is not used for expiry.
 - A session is only usable on the provider it was opened with. `isSessionValid`
   (prompt/stream) checks the on-chain `ProviderAddr()`; `session.report` checks
-  the cached session's `ProviderAddr`. Both fail closed.
+  the cached session's `ProviderAddr`. The check (`servesProvider`) accepts the
+  node's own key address directly, and a contract provider whose on-chain
+  `owner()` is this node's key via the shared `ProviderAuthResolver` (cached
+  per provider). Fails closed on an unknown node key or resolver error.
 
 ## Audio stream sandbox (MORRPC)
 
