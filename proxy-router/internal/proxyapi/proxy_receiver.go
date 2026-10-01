@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"os"
 	"strings"
 	"time"
 
@@ -448,7 +447,10 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 			return handleError(err, "failed to process chat request", sourceLog)
 		}
 	} else if audioTranscriptionReq != nil && audioTranscriptionReq.FilePath != "" {
-		defer os.Remove(audioTranscriptionReq.FilePath)
+		if !IsManagedAudioPath(audioTranscriptionReq.FilePath) {
+			return handleError(fmt.Errorf("client-supplied FilePath refused"), "invalid audio file path", sourceLog)
+		}
+		defer func() { _ = SafeRemoveManagedAudioPath(audioTranscriptionReq.FilePath) }()
 	}
 
 	if s.backendVerifier != nil && session.IsTee() {
@@ -553,6 +555,18 @@ func (s *ProxyReceiver) SessionRequest(ctx context.Context, msgID string, reqID 
 	)
 	if err != nil {
 		err := lib.WrapError(fmt.Errorf("failed to create response"), err)
+		log.Error(err)
+		return nil, err
+	}
+
+	derivedAddr, err := lib.PubKeyBytesToAddr(req.Key)
+	if err != nil {
+		err := lib.WrapError(fmt.Errorf("invalid session key"), err)
+		log.Error(err)
+		return nil, err
+	}
+	if derivedAddr != req.User {
+		err := fmt.Errorf("session key does not match user wallet")
 		log.Error(err)
 		return nil, err
 	}

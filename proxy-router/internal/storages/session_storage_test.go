@@ -127,3 +127,22 @@ func TestActivityStorage_IgnoresLegacyArrayKey(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, activities)
 }
+
+func TestAddUserRefusesPubKeyOverwrite(t *testing.T) {
+	storage := NewTestStorage()
+	sessionStorage := NewSessionStorage(storage)
+
+	u1 := &User{Addr: "0xAbC", PubKey: "0x1111"}
+	require.NoError(t, sessionStorage.AddUser(u1))
+
+	// same key is idempotent
+	require.NoError(t, sessionStorage.AddUser(&User{Addr: "0xabc", PubKey: "0x1111"}))
+
+	err := sessionStorage.AddUser(&User{Addr: "0xabc", PubKey: "0x2222"})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "overwrite refused")
+
+	got, err := sessionStorage.GetUser("0xabc")
+	require.NoError(t, err)
+	require.Equal(t, "0x1111", got.PubKey)
+}

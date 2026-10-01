@@ -1,15 +1,40 @@
 package proxyapi
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"time"
+
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 )
 
 const (
 	AUDIO_STREAM_TIMEOUT_SECONDS = 1 * 60 * 60 // 1 hour timeout for audio streaming sessions
+	audioStreamDirName           = "morpheus-audio-streams"
 )
+
+// AudioStreamStorageDir is the fixed directory for server-created audio stream temp files.
+func AudioStreamStorageDir() string {
+	return filepath.Join(os.TempDir(), audioStreamDirName)
+}
+
+// IsManagedAudioPath reports whether path is under the audio stream storage dir.
+func IsManagedAudioPath(path string) bool {
+	return lib.PathUnderDir(path, AudioStreamStorageDir())
+}
+
+// SafeRemoveManagedAudioPath removes path only if it is under the managed audio dir.
+func SafeRemoveManagedAudioPath(path string) error {
+	if !IsManagedAudioPath(path) {
+		return fmt.Errorf("refuse remove on non-managed path")
+	}
+	return os.Remove(path)
+}
 
 // StreamingSession represents an active audio streaming session
 type StreamingSession struct {
@@ -26,20 +51,40 @@ type StreamingSession struct {
 
 // StreamingSessionManager manages active streaming sessions
 type StreamingSessionManager struct {
-	sessions map[string]*StreamingSession
+	sessions   map[string]*StreamingSession
+	storageDir string
+	mu         sync.Mutex
 }
 
 func NewStreamingSessionManager() *StreamingSessionManager {
 	return &StreamingSessionManager{
-		sessions: make(map[string]*StreamingSession),
+		sessions:   make(map[string]*StreamingSession),
+		storageDir: AudioStreamStorageDir(),
 	}
 }
 
-func (sm *StreamingSessionManager) CreateSession(streamID, sessionID string, totalChunks uint32, fileSize uint64, contentType string) (*StreamingSession, error) {
-	// Create temporary file for streaming chunks
-	tempFilePath, err := sm.createTempFile(streamID, contentType)
+func generateStreamID() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// CreateSession allocates a server-generated streamID and a CreateTemp file under storageDir.
+// Client-supplied stream IDs are not used for paths or map keys.
+func (sm *StreamingSessionManager) CreateSession(sessionID string, totalChunks uint32, fileSize uint64, contentType string) (*StreamingSession, error) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	streamID, err := generateStreamID()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create temp file: %s", err)
+		return nil, fmt.Errorf("failed to generate stream id: %w", err)
+	}
+
+	tempFilePath, err := sm.createTempFile(contentType)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temp file: %w", err)
 	}
 
 	session := &StreamingSession{
@@ -57,56 +102,73 @@ func (sm *StreamingSessionManager) CreateSession(streamID, sessionID string, tot
 	return session, nil
 }
 
-func (sm *StreamingSessionManager) createTempFile(streamID, contentType string) (string, error) {
-	// Create temporary file
-	tempDir := os.TempDir()
-	tempFilePath := filepath.Join(tempDir, fmt.Sprintf("%d_stream_%s", time.Now().UnixNano(), streamID))
-
-	// Detect file extension from content type
-	extension := getFileExtensionFromContentType(contentType)
-	if extension != "" {
-		tempFilePath += extension
+func (sm *StreamingSessionManager) createTempFile(contentType string) (string, error) {
+	if err := os.MkdirAll(sm.storageDir, 0o700); err != nil {
+		return "", err
 	}
 
-	// Create the file
-	file, err := os.Create(tempFilePath)
+	extension := getFileExtensionFromContentType(contentType)
+	pattern := "audiostream-*" + extension
+	f, err := os.CreateTemp(sm.storageDir, pattern)
 	if err != nil {
 		return "", err
 	}
-	file.Close() // Close immediately, we'll open it for appending when needed
+	name := f.Name()
+	if err := f.Close(); err != nil {
+		_ = os.Remove(name)
+		return "", err
+	}
 
-	return tempFilePath, nil
+	if !lib.PathUnderDir(name, sm.storageDir) {
+		_ = os.Remove(name)
+		return "", fmt.Errorf("temp path not under storage dir")
+	}
+	return name, nil
 }
 
 func (sm *StreamingSessionManager) GetSession(streamID string) (*StreamingSession, bool) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
 	session, exists := sm.sessions[streamID]
 	return session, exists
 }
 
 func (sm *StreamingSessionManager) RemoveSession(streamID string) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
 	if session, exists := sm.sessions[streamID]; exists {
-		// Clean up temporary file
 		if session.TempFilePath != "" {
-			os.Remove(session.TempFilePath)
+			_ = SafeRemoveManagedAudioPath(session.TempFilePath)
 		}
 		delete(sm.sessions, streamID)
 	}
 }
 
 func (sm *StreamingSessionManager) CleanupExpiredSessions() {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
 	now := time.Now()
 	for streamID, session := range sm.sessions {
 		if now.Sub(session.LastActivity).Seconds() > AUDIO_STREAM_TIMEOUT_SECONDS {
-			// Clean up temporary file
 			if session.TempFilePath != "" {
-				os.Remove(session.TempFilePath)
+				_ = SafeRemoveManagedAudioPath(session.TempFilePath)
 			}
 			delete(sm.sessions, streamID)
 		}
 	}
 }
 
-// getFileExtensionFromContentType returns the appropriate file extension for a given content type
+// SessionOwnsStream reports whether streamID is bound to sessionID (case-insensitive hex).
+func (sm *StreamingSessionManager) SessionOwnsStream(streamID, sessionID string) bool {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	session, exists := sm.sessions[streamID]
+	if !exists {
+		return false
+	}
+	return strings.EqualFold(session.SessionID, sessionID)
+}
+
 func getFileExtensionFromContentType(contentType string) string {
 	extensions := map[string]string{
 		"audio/mpeg":     ".mp3",

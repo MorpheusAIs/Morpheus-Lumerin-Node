@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
@@ -417,22 +418,17 @@ func (s *MORRPCController) sessionPromptStreamStart(ctx context.Context, msg m.R
 	// Clean up expired sessions
 	s.streamManager.CleanupExpiredSessions()
 
-	// Check if stream already exists
-	if _, exists := s.streamManager.GetSession(req.StreamID); exists {
-		return fmt.Errorf("stream with ID %s already exists", req.StreamID)
-	}
-
-	// Create streaming session
-	_, err = s.streamManager.CreateSession(req.StreamID, req.SessionID.Hex(), req.TotalChunks, req.FileSize, req.ContentType)
+	// Server-generated streamID; client streamID is not used for paths or map keys.
+	streamSession, err := s.streamManager.CreateSession(req.SessionID.Hex(), req.TotalChunks, req.FileSize, req.ContentType)
 	if err != nil {
 		return fmt.Errorf("failed to create streaming session: %s", err)
 	}
 
 	sourceLog.Debugf("started audio streaming session %s for session %s, total chunks: %d, file size: %d",
-		req.StreamID, req.SessionID.Hex(), req.TotalChunks, req.FileSize)
+		streamSession.StreamID, req.SessionID.Hex(), req.TotalChunks, req.FileSize)
 
-	// Send success response
-	res, err := s.morRpc.SessionPromptStreamStartResponse(req.StreamID, "started", s.prKey, msg.ID)
+	// Send success response with server-issued streamID
+	res, err := s.morRpc.SessionPromptStreamStartResponse(streamSession.StreamID, "started", s.prKey, msg.ID)
 	if err != nil {
 		sourceLog.Error(err)
 		return err
@@ -486,6 +482,9 @@ func (s *MORRPCController) sessionPromptStreamChunk(ctx context.Context, msg m.R
 	streamSession, exists := s.streamManager.GetSession(req.StreamID)
 	if !exists {
 		return fmt.Errorf("streaming session %s not found", req.StreamID)
+	}
+	if !strings.EqualFold(streamSession.SessionID, req.SessionID.Hex()) {
+		return fmt.Errorf("stream not bound to session")
 	}
 
 	// Validate chunk index
@@ -573,6 +572,9 @@ func (s *MORRPCController) sessionPromptStreamEnd(ctx context.Context, msg m.RPC
 	if !exists {
 		return fmt.Errorf("streaming session %s not found", req.StreamID)
 	}
+	if !strings.EqualFold(streamSession.SessionID, req.SessionID.Hex()) {
+		return fmt.Errorf("stream not bound to session")
+	}
 
 	// Validate all chunks received
 	if streamSession.ChunkCount != streamSession.TotalChunks {
@@ -652,7 +654,7 @@ func (s *MORRPCController) isSessionValid(ctx context.Context, sessionID common.
 		return nil, fmt.Errorf("session cannot be loaded %s", err)
 	}
 
-	isSessionExpired := session.EndsAt().Uint64()*1000 < uint64(reqTimestamp)
+	isSessionExpired := sessionExpiredByServerTime(session.EndsAt().Uint64(), uint64(time.Now().UnixMilli()))
 	if isSessionExpired {
 		return nil, fmt.Errorf("session expired")
 	}
