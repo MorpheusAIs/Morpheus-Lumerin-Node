@@ -11,28 +11,130 @@ import (
 
 func TestCreateSessionUsesCreateTempUnderStorageDir(t *testing.T) {
 	sm := NewStreamingSessionManager()
-	session, err := sm.CreateSession("0xabc", 2, 100, "audio/mpeg")
+	session, err := sm.CreateSession("abc123", "0xSESSION", 2, 100, "audio/mpeg")
 	require.NoError(t, err)
-	require.NotEmpty(t, session.StreamID)
+	require.Equal(t, "abc123", session.StreamID)
 	require.True(t, IsManagedAudioPath(session.TempFilePath))
 	require.True(t, strings.HasPrefix(filepath.Base(session.TempFilePath), "audiostream-"))
-	// client-looking id must not appear in path
-	require.NotContains(t, session.TempFilePath, "0xabc")
+	require.True(t, strings.HasSuffix(session.TempFilePath, ".mp3"))
+	// client id must not appear in the path
+	require.NotContains(t, filepath.Base(session.TempFilePath), "abc123")
 	require.FileExists(t, session.TempFilePath)
-	sm.RemoveSession(session.StreamID)
+	sm.RemoveSession(session.StreamID, "0xSESSION")
 	_, err = os.Stat(session.TempFilePath)
 	require.True(t, os.IsNotExist(err))
 }
 
-func TestCreateSessionGeneratesUniqueStreamIDs(t *testing.T) {
+func TestCreateSessionRejectsUnsafeStreamIDs(t *testing.T) {
 	sm := NewStreamingSessionManager()
-	a, err := sm.CreateSession("0x1", 1, 1, "audio/wav")
+	dd := string([]byte{46, 46})
+	bad := []string{
+		"",
+		dd + "/x",
+		"a/b",
+		"a\\b",
+		"a b",
+		"a.b",
+		strings.Repeat("a", 65),
+	}
+	for _, id := range bad {
+		_, err := sm.CreateSession(id, "0xS", 1, 1, "audio/wav")
+		require.Error(t, err, "id %q should be rejected", id)
+	}
+	// what the consumer actually sends: 32 lowercase hex chars
+	ok, err := sm.CreateSession("0123456789abcdef0123456789abcdef", "0xS", 1, 1, "audio/wav")
 	require.NoError(t, err)
-	b, err := sm.CreateSession("0x1", 1, 1, "audio/wav")
+	sm.RemoveSession(ok.StreamID, "0xS")
+}
+
+func TestCreateSessionRejectsDuplicateWithinSession(t *testing.T) {
+	sm := NewStreamingSessionManager()
+	a, err := sm.CreateSession("same", "0xS", 1, 1, "audio/wav")
 	require.NoError(t, err)
-	require.NotEqual(t, a.StreamID, b.StreamID)
-	sm.RemoveSession(a.StreamID)
-	sm.RemoveSession(b.StreamID)
+	_, err = sm.CreateSession("same", "0xS", 1, 1, "audio/wav")
+	require.Error(t, err)
+	// same client id under a different session is a different stream
+	b, err := sm.CreateSession("same", "0xOTHER", 1, 1, "audio/wav")
+	require.NoError(t, err)
+	require.NotEqual(t, a.TempFilePath, b.TempFilePath)
+	sm.RemoveSession("same", "0xS")
+	sm.RemoveSession("same", "0xOTHER")
+}
+
+func TestGetSessionIsScopedToOwningSession(t *testing.T) {
+	sm := NewStreamingSessionManager()
+	s, err := sm.CreateSession("abc", "0xSESSION", 1, 1, "audio/mpeg")
+	require.NoError(t, err)
+	_, ok := sm.GetSession(s.StreamID, "0xSESSION")
+	require.True(t, ok)
+	_, ok = sm.GetSession(s.StreamID, "0xsession") // hex case-insensitive
+	require.True(t, ok)
+	_, ok = sm.GetSession(s.StreamID, "0xOTHER")
+	require.False(t, ok)
+	// another session cannot remove it either
+	sm.RemoveSession(s.StreamID, "0xOTHER")
+	require.FileExists(t, s.TempFilePath)
+	sm.RemoveSession(s.StreamID, "0xSESSION")
+}
+
+func TestCreateSessionEnforcesBounds(t *testing.T) {
+	sm := NewStreamingSessionManager()
+	_, err := sm.CreateSession("a", "0xS", 0, 1, "audio/wav")
+	require.Error(t, err)
+	_, err = sm.CreateSession("a", "0xS", MAX_AUDIO_STREAM_TOTAL_CHUNKS+1, 1, "audio/wav")
+	require.Error(t, err)
+	_, err = sm.CreateSession("a", "0xS", 1, 0, "audio/wav")
+	require.Error(t, err)
+	_, err = sm.CreateSession("a", "0xS", 1, MAX_AUDIO_STREAM_FILE_SIZE+1, "audio/wav")
+	require.Error(t, err)
+
+	for i := 0; i < MAX_AUDIO_STREAMS_PER_SESSION; i++ {
+		_, err := sm.CreateSession("s"+string(rune('a'+i)), "0xS", 1, 1, "audio/wav")
+		require.NoError(t, err)
+	}
+	_, err = sm.CreateSession("overflow", "0xS", 1, 1, "audio/wav")
+	require.Error(t, err)
+	for i := 0; i < MAX_AUDIO_STREAMS_PER_SESSION; i++ {
+		sm.RemoveSession("s"+string(rune('a'+i)), "0xS")
+	}
+}
+
+func TestAppendChunkEnforcesOrderAndSize(t *testing.T) {
+	sm := NewStreamingSessionManager()
+	s, err := sm.CreateSession("abc", "0xS", 2, 10, "audio/wav")
+	require.NoError(t, err)
+	defer sm.RemoveSession("abc", "0xS")
+
+	// wrong session
+	_, err = sm.AppendChunk("abc", "0xOTHER", 0, []byte("12345"))
+	require.Error(t, err)
+
+	// out of order
+	_, err = sm.AppendChunk("abc", "0xS", 1, []byte("12345"))
+	require.Error(t, err)
+
+	// ok
+	s, err = sm.AppendChunk("abc", "0xS", 0, []byte("12345"))
+	require.NoError(t, err)
+	require.Equal(t, uint32(1), s.ChunkCount)
+	require.Equal(t, uint64(5), s.BytesWritten)
+
+	// exceeds declared size
+	_, err = sm.AppendChunk("abc", "0xS", 1, []byte("123456"))
+	require.Error(t, err)
+
+	// fits exactly
+	s, err = sm.AppendChunk("abc", "0xS", 1, []byte("12345"))
+	require.NoError(t, err)
+	require.Equal(t, uint32(2), s.ChunkCount)
+
+	// no more chunks accepted
+	_, err = sm.AppendChunk("abc", "0xS", 2, []byte("x"))
+	require.Error(t, err)
+
+	data, err := os.ReadFile(s.TempFilePath)
+	require.NoError(t, err)
+	require.Equal(t, "1234512345", string(data))
 }
 
 func TestSafeRemoveManagedAudioPathRefusesClientPath(t *testing.T) {
@@ -43,12 +145,10 @@ func TestSafeRemoveManagedAudioPathRefusesClientPath(t *testing.T) {
 	require.FileExists(t, outside)
 }
 
-func TestSessionOwnsStream(t *testing.T) {
-	sm := NewStreamingSessionManager()
-	s, err := sm.CreateSession("0xSESSION", 1, 1, "audio/mpeg")
-	require.NoError(t, err)
-	require.True(t, sm.SessionOwnsStream(s.StreamID, "0xSESSION"))
-	require.True(t, sm.SessionOwnsStream(s.StreamID, "0xsession"))
-	require.False(t, sm.SessionOwnsStream(s.StreamID, "0xOTHER"))
-	sm.RemoveSession(s.StreamID)
+func TestSafeAudioExtension(t *testing.T) {
+	require.Equal(t, ".mp3", safeAudioExtension("Voice Memo.MP3"))
+	require.Equal(t, ".wav", safeAudioExtension("/some/where/clip.wav"))
+	require.Equal(t, "", safeAudioExtension("evil.sh"))
+	require.Equal(t, "", safeAudioExtension("noext"))
+	require.Equal(t, "", safeAudioExtension(""))
 }

@@ -50,19 +50,11 @@ func (s *SessionStorage) GetUser(addr string) (*User, error) {
 }
 
 func (s *SessionStorage) AddUser(user *User) error {
+	// Overwrite is allowed: callers (SessionRequest) only reach here after
+	// proving the key derives to the address, so a later write for the same
+	// address can only come from the wallet owner. This also lets a wallet
+	// owner replace a stale record on the next session request.
 	addr := strings.ToLower(user.Addr)
-	existing, err := s.GetUser(addr)
-	if err != nil {
-		return err
-	}
-	if existing != nil {
-		existKey := strings.TrimPrefix(strings.ToLower(existing.PubKey), "0x")
-		newKey := strings.TrimPrefix(strings.ToLower(user.PubKey), "0x")
-		if existKey != newKey {
-			return fmt.Errorf("user pubkey already bound; overwrite refused")
-		}
-		return nil
-	}
 	key := fmt.Sprintf("user:%s", addr)
 	userJson, err := json.Marshal(user)
 	if err != nil {

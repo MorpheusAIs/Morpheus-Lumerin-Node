@@ -128,7 +128,7 @@ func TestActivityStorage_IgnoresLegacyArrayKey(t *testing.T) {
 	require.Empty(t, activities)
 }
 
-func TestAddUserRefusesPubKeyOverwrite(t *testing.T) {
+func TestAddUserOverwriteReplacesStaleRecord(t *testing.T) {
 	storage := NewTestStorage()
 	sessionStorage := NewSessionStorage(storage)
 
@@ -138,11 +138,11 @@ func TestAddUserRefusesPubKeyOverwrite(t *testing.T) {
 	// same key is idempotent
 	require.NoError(t, sessionStorage.AddUser(&User{Addr: "0xabc", PubKey: "0x1111"}))
 
-	err := sessionStorage.AddUser(&User{Addr: "0xabc", PubKey: "0x2222"})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "overwrite refused")
+	// ownership is proven by the caller before AddUser; a later write wins so
+	// a wallet owner can replace a stale record
+	require.NoError(t, sessionStorage.AddUser(&User{Addr: "0xabc", PubKey: "0x2222"}))
 
 	got, err := sessionStorage.GetUser("0xabc")
 	require.NoError(t, err)
-	require.Equal(t, "0x1111", got.PubKey)
+	require.Equal(t, "0x2222", got.PubKey)
 }

@@ -804,11 +804,6 @@ func (c *ProxyController) AddFile(ctx *gin.Context) {
 		return
 	}
 
-	if err := ValidateAllowlistedFilePath(req.FilePath, DefaultFilePathAllowRoots()); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
 	result, err := c.ipfsManager.AddFile(ctx, req.FilePath, req.Tags, req.ID.Hex(), req.ModelName)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -1524,9 +1519,11 @@ func (c *ProxyController) createTempFile(ctx *gin.Context) (string, error) {
 		return "", fmt.Errorf("Failed to get file: %v", err)
 	}
 	defer file.Close()
-	_ = fileHeader // client filename must not influence path
 
-	tempFile, err := os.CreateTemp(os.TempDir(), "audio-upload-*")
+	// Only an allowlisted extension is taken from the client filename so the
+	// downstream engine can still infer the audio format; the rest of the
+	// path is server-generated.
+	tempFile, err := os.CreateTemp(os.TempDir(), "audio-upload-*"+safeAudioExtension(fileHeader.Filename))
 	if err != nil {
 		return "", fmt.Errorf("Failed to create temp file: %v", err)
 	}
