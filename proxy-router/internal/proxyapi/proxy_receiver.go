@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"os"
 	"strings"
 	"time"
 
@@ -448,7 +447,10 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 			return handleError(err, "failed to process chat request", sourceLog)
 		}
 	} else if audioTranscriptionReq != nil && audioTranscriptionReq.FilePath != "" {
-		defer os.Remove(audioTranscriptionReq.FilePath)
+		if !IsManagedAudioPath(audioTranscriptionReq.FilePath) {
+			return handleError(fmt.Errorf("client-supplied FilePath refused"), "invalid audio file path", sourceLog)
+		}
+		defer func() { _ = SafeRemoveManagedAudioPath(audioTranscriptionReq.FilePath) }()
 	}
 
 	if s.backendVerifier != nil && session.IsTee() {
@@ -557,12 +559,26 @@ func (s *ProxyReceiver) SessionRequest(ctx context.Context, msgID string, reqID 
 		return nil, err
 	}
 
+	derivedAddr, err := lib.PubKeyBytesToAddr(req.Key)
+	if err != nil {
+		err := lib.WrapError(fmt.Errorf("invalid session key"), err)
+		log.Error(err)
+		return nil, err
+	}
+	if derivedAddr != req.User {
+		err := fmt.Errorf("session key does not match user wallet")
+		log.Error(err)
+		return nil, err
+	}
+
 	user := storages.User{
 		Addr:   req.User.Hex(),
 		PubKey: req.Key.Hex(),
 	}
 
-	err = s.sessionStorage.AddUser(&user)
+	// Bound write: the store re-checks key<->wallet so the invariant does not
+	// depend on this call site alone.
+	err = s.sessionStorage.AddUserBound(&user)
 	if err != nil {
 		err := lib.WrapError(fmt.Errorf("failed store user"), err)
 		log.Error(err)

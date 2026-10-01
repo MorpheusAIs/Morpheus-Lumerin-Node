@@ -85,6 +85,7 @@ type Proxy struct {
 	sessionExpiryHandler *blockchainapi.SessionExpiryHandler
 	backendVerifier      proxyapi.BackendTEEVerifier
 	modelHealthChecker   *modelhealth.Checker
+	authResolver         proxyapi.ProviderAuthResolver
 
 	state         lib.AtomicValue[ProxyState]
 	tsk           *lib.Task
@@ -111,6 +112,12 @@ func NewProxyCtl(eventListerer *blockchainapi.EventsListener, wallet interfaces.
 		modelHealthChecker:   modelHealthChecker,
 		serverStarted:        make(chan struct{}),
 	}
+}
+
+// SetProviderAuthResolver lets the inbound MORRPC controller serve sessions for
+// a contract provider that authorizes this node's key via owner().
+func (p *Proxy) SetProviderAuthResolver(r proxyapi.ProviderAuthResolver) {
+	p.authResolver = r
 }
 
 func (p *Proxy) Run(ctx context.Context) error {
@@ -222,6 +229,9 @@ func (p *Proxy) run(ctx context.Context, prKey lib.HexString) error {
 		proxyReceiver.SetModelHealthTracker(p.modelHealthChecker)
 	}
 	morTcpHandler := proxyapi.NewMORRPCController(proxyReceiver, p.validator, p.sessionRepo, p.sessionStorage, prKey, modelHealthReporter)
+	if p.authResolver != nil {
+		morTcpHandler.SetProviderAuthResolver(p.authResolver)
+	}
 	tcpHandler := tcphandlers.NewTCPHandler(
 		p.tcpLog, morTcpHandler,
 	)

@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
@@ -26,6 +25,8 @@ type MORRPCController struct {
 	sessionStorage *storages.SessionStorage
 	morRpc         *m.MORRPCMessage
 	prKey          lib.HexString
+	providerAddr   common.Address       // address of this node's signing key; derived from prKey
+	authResolver   ProviderAuthResolver // maps an on-chain provider to the key that signs for it
 	streamManager  *StreamingSessionManager
 	sessionSema    *SessionSemaphore // Limits to 1 concurrent request per session
 	modelHealth    system.ModelHealthReporter
@@ -38,6 +39,10 @@ var (
 )
 
 func NewMORRPCController(service *ProxyReceiver, validator *validator.Validate, sessionRepo *sessionrepo.SessionRepositoryCached, sessionStorage *storages.SessionStorage, prKey lib.HexString, modelHealth system.ModelHealthReporter) *MORRPCController {
+	// Best effort: an unparseable key leaves providerAddr zero, which no
+	// on-chain session can match, so the provider-binding check fails closed.
+	providerAddr, _ := lib.PrivKeyBytesToAddr(prKey)
+
 	c := &MORRPCController{
 		service:        service,
 		validator:      validator,
@@ -45,12 +50,71 @@ func NewMORRPCController(service *ProxyReceiver, validator *validator.Validate, 
 		sessionRepo:    sessionRepo,
 		morRpc:         m.NewMorRpc(),
 		prKey:          prKey,
+		providerAddr:   providerAddr,
 		streamManager:  NewStreamingSessionManager(),
 		sessionSema:    NewSessionSemaphore(),
 		modelHealth:    modelHealth,
 	}
 
 	return c
+}
+
+// SetProviderAuthResolver enables serving sessions whose on-chain provider is a
+// contract (e.g. a custody contract) that authorizes this node's key via owner().
+// Without a resolver only sessions opened directly against this node's address
+// are accepted.
+func (s *MORRPCController) SetProviderAuthResolver(r ProviderAuthResolver) {
+	s.authResolver = r
+}
+
+// servesProvider reports whether this node is the legitimate server for sessions
+// opened against providerAddr: either the address is this node's key, or the
+// provider is a contract whose authorized signer is this node's key. Fails
+// closed on a zero/unknown node address or a resolver error.
+func (s *MORRPCController) servesProvider(ctx context.Context, providerAddr common.Address) bool {
+	if s.providerAddr == (common.Address{}) {
+		return false
+	}
+	if providerAddr == s.providerAddr {
+		return true
+	}
+	if s.authResolver == nil {
+		return false
+	}
+	signer, err := s.authResolver.AuthorizedSigner(ctx, providerAddr)
+	if err != nil {
+		return false
+	}
+	return signer == s.providerAddr
+}
+
+// sessionUserPubKey loads the stored public key for the session owner and
+// requires that it actually derives to that wallet address. The stored record
+// is treated as a cache, not as a trust anchor: a stale or mismatched entry
+// cannot authenticate requests for a session it does not own.
+func (s *MORRPCController) sessionUserPubKey(userAddr common.Address) (*storages.User, lib.HexString, error) {
+	user, err := s.sessionStorage.GetUser(userAddr.Hex())
+	if err != nil {
+		return nil, nil, fmt.Errorf("error reading user: %w", err)
+	}
+	if user == nil {
+		return nil, nil, fmt.Errorf("user not found")
+	}
+
+	pubKeyHex, err := lib.StringToHexString(user.PubKey)
+	if err != nil {
+		return nil, nil, fmt.Errorf("invalid pubkey %s", err)
+	}
+
+	derived, err := lib.PubKeyBytesToAddr(pubKeyHex)
+	if err != nil {
+		return nil, nil, fmt.Errorf("invalid pubkey %s", err)
+	}
+	if derived != userAddr {
+		return nil, nil, fmt.Errorf("stored key does not match session user")
+	}
+
+	return user, pubKeyHex, nil
 }
 
 func (s *MORRPCController) Handle(ctx context.Context, msg m.RPCMessage, sourceLog lib.ILogger, sendResponse SendResponse) error {
@@ -158,17 +222,9 @@ func (s *MORRPCController) sessionPrompt(ctx context.Context, msg m.RPCMessage, 
 		return err
 	}
 
-	user, err := s.sessionStorage.GetUser(session.UserAddr().Hex())
+	user, pubKeyHex, err := s.sessionUserPubKey(session.UserAddr())
 	if err != nil {
-		return fmt.Errorf("error reading user: %w", err)
-	}
-	if user == nil {
-		return fmt.Errorf("user not found")
-	}
-
-	pubKeyHex, err := lib.StringToHexString(user.PubKey)
-	if err != nil {
-		return fmt.Errorf("invalid pubkey %s", err)
+		return err
 	}
 
 	sig := req.Signature
@@ -239,18 +295,20 @@ func (s *MORRPCController) sessionReport(ctx context.Context, msg m.RPCMessage, 
 		sourceLog.Error(err)
 		return err
 	}
-
-	user, err := s.sessionStorage.GetUser(session.UserAddr)
-	if err != nil {
-		sourceLog.Errorf("error reading user: %s", err)
-		return fmt.Errorf("error reading user: %w", err)
-	}
-	if user == nil {
-		err := fmt.Errorf("user not found")
+	if session.EndsAt != nil && sessionExpiredByServerTime(session.EndsAt.Uint64(), uint64(time.Now().UnixMilli())) {
+		err := fmt.Errorf("session expired")
 		sourceLog.Error(err)
 		return err
 	}
-	pubKeyHex, err := lib.StringToHexString(user.PubKey)
+	// Same provider binding as prompt/stream (isSessionValid); fail closed on
+	// a missing or foreign provider address.
+	if !s.servesProvider(ctx, common.HexToAddress(session.ProviderAddr)) {
+		err := fmt.Errorf("session not bound to this provider")
+		sourceLog.Error(err)
+		return err
+	}
+
+	_, pubKeyHex, err := s.sessionUserPubKey(common.HexToAddress(session.UserAddr))
 	if err != nil {
 		sourceLog.Error(err)
 		return err
@@ -292,17 +350,9 @@ func (s *MORRPCController) callAgentTool(ctx context.Context, msg m.RPCMessage, 
 		return err
 	}
 
-	user, err := s.sessionStorage.GetUser(session.UserAddr().Hex())
+	user, pubKeyHex, err := s.sessionUserPubKey(session.UserAddr())
 	if err != nil {
-		return fmt.Errorf("error reading user: %w", err)
-	}
-	if user == nil {
-		return fmt.Errorf("user not found")
-	}
-
-	pubKeyHex, err := lib.StringToHexString(user.PubKey)
-	if err != nil {
-		return fmt.Errorf("invalid pubkey %s", err)
+		return err
 	}
 
 	sig := req.Signature
@@ -341,17 +391,9 @@ func (s *MORRPCController) getAgentTools(ctx context.Context, msg m.RPCMessage, 
 		return err
 	}
 
-	user, err := s.sessionStorage.GetUser(session.UserAddr().Hex())
+	user, pubKeyHex, err := s.sessionUserPubKey(session.UserAddr())
 	if err != nil {
-		return fmt.Errorf("error reading user: %w", err)
-	}
-	if user == nil {
-		return fmt.Errorf("user not found")
-	}
-
-	pubKeyHex, err := lib.StringToHexString(user.PubKey)
-	if err != nil {
-		return fmt.Errorf("invalid pubkey %s", err)
+		return err
 	}
 
 	sig := req.Signature
@@ -391,17 +433,9 @@ func (s *MORRPCController) sessionPromptStreamStart(ctx context.Context, msg m.R
 	}
 
 	// Verify user signature
-	user, err := s.sessionStorage.GetUser(session.UserAddr().Hex())
+	_, pubKeyHex, err := s.sessionUserPubKey(session.UserAddr())
 	if err != nil {
-		return fmt.Errorf("error reading user: %w", err)
-	}
-	if user == nil {
-		return fmt.Errorf("user not found")
-	}
-
-	pubKeyHex, err := lib.StringToHexString(user.PubKey)
-	if err != nil {
-		return fmt.Errorf("invalid pubkey %s", err)
+		return err
 	}
 
 	sig := req.Signature
@@ -417,22 +451,18 @@ func (s *MORRPCController) sessionPromptStreamStart(ctx context.Context, msg m.R
 	// Clean up expired sessions
 	s.streamManager.CleanupExpiredSessions()
 
-	// Check if stream already exists
-	if _, exists := s.streamManager.GetSession(req.StreamID); exists {
-		return fmt.Errorf("stream with ID %s already exists", req.StreamID)
-	}
-
-	// Create streaming session
-	_, err = s.streamManager.CreateSession(req.StreamID, req.SessionID.Hex(), req.TotalChunks, req.FileSize, req.ContentType)
+	// The client streamID is validated and used only as an in-memory key scoped
+	// to this session; the temp file path is server-generated.
+	streamSession, err := s.streamManager.CreateSession(req.StreamID, req.SessionID.Hex(), req.TotalChunks, req.FileSize, req.ContentType)
 	if err != nil {
 		return fmt.Errorf("failed to create streaming session: %s", err)
 	}
 
 	sourceLog.Debugf("started audio streaming session %s for session %s, total chunks: %d, file size: %d",
-		req.StreamID, req.SessionID.Hex(), req.TotalChunks, req.FileSize)
+		streamSession.StreamID, req.SessionID.Hex(), req.TotalChunks, req.FileSize)
 
-	// Send success response
-	res, err := s.morRpc.SessionPromptStreamStartResponse(req.StreamID, "started", s.prKey, msg.ID)
+	// Echo the stream ID so existing consumers keep working unchanged
+	res, err := s.morRpc.SessionPromptStreamStartResponse(streamSession.StreamID, "started", s.prKey, msg.ID)
 	if err != nil {
 		sourceLog.Error(err)
 		return err
@@ -459,17 +489,9 @@ func (s *MORRPCController) sessionPromptStreamChunk(ctx context.Context, msg m.R
 	}
 
 	// Verify user signature
-	user, err := s.sessionStorage.GetUser(session.UserAddr().Hex())
+	_, pubKeyHex, err := s.sessionUserPubKey(session.UserAddr())
 	if err != nil {
-		return fmt.Errorf("error reading user: %w", err)
-	}
-	if user == nil {
-		return fmt.Errorf("user not found")
-	}
-
-	pubKeyHex, err := lib.StringToHexString(user.PubKey)
-	if err != nil {
-		return fmt.Errorf("invalid pubkey %s", err)
+		return err
 	}
 
 	sig := req.Signature
@@ -482,37 +504,18 @@ func (s *MORRPCController) sessionPromptStreamChunk(ctx context.Context, msg m.R
 		return err
 	}
 
-	// Get streaming session
-	streamSession, exists := s.streamManager.GetSession(req.StreamID)
-	if !exists {
-		return fmt.Errorf("streaming session %s not found", req.StreamID)
-	}
-
-	// Validate chunk index
-	if req.ChunkIndex != streamSession.ChunkCount {
-		return fmt.Errorf("expected chunk index %d, got %d", streamSession.ChunkCount, req.ChunkIndex)
-	}
-
-	// Decode and append chunk data
+	// Decode chunk data
 	chunkData, err := base64.StdEncoding.DecodeString(req.ChunkData)
 	if err != nil {
 		return fmt.Errorf("failed to decode chunk data: %s", err)
 	}
 
-	// Append chunk data to temp file
-	file, err := os.OpenFile(streamSession.TempFilePath, os.O_WRONLY|os.O_APPEND, 0644)
+	// Lookup is scoped to the calling session; ordering and size bounds are
+	// enforced inside the manager under its lock.
+	streamSession, err := s.streamManager.AppendChunk(req.StreamID, req.SessionID.Hex(), req.ChunkIndex, chunkData)
 	if err != nil {
-		return fmt.Errorf("failed to open temp file for writing: %s", err)
+		return err
 	}
-	defer file.Close()
-
-	_, err = file.Write(chunkData)
-	if err != nil {
-		return fmt.Errorf("failed to write chunk data to temp file: %s", err)
-	}
-
-	streamSession.ChunkCount++
-	streamSession.LastActivity = time.Now()
 
 	sourceLog.Debugf("received chunk %d/%d for stream %s, size: %d bytes",
 		req.ChunkIndex+1, streamSession.TotalChunks, req.StreamID, len(chunkData))
@@ -545,17 +548,9 @@ func (s *MORRPCController) sessionPromptStreamEnd(ctx context.Context, msg m.RPC
 	}
 
 	// Verify user signature
-	user, err := s.sessionStorage.GetUser(session.UserAddr().Hex())
+	user, pubKeyHex, err := s.sessionUserPubKey(session.UserAddr())
 	if err != nil {
-		return fmt.Errorf("error reading user: %w", err)
-	}
-	if user == nil {
-		return fmt.Errorf("user not found")
-	}
-
-	pubKeyHex, err := lib.StringToHexString(user.PubKey)
-	if err != nil {
-		return fmt.Errorf("invalid pubkey %s", err)
+		return err
 	}
 
 	sig := req.Signature
@@ -568,15 +563,18 @@ func (s *MORRPCController) sessionPromptStreamEnd(ctx context.Context, msg m.RPC
 		return err
 	}
 
-	// Get streaming session
-	streamSession, exists := s.streamManager.GetSession(req.StreamID)
+	// Get streaming session (lookup is scoped to the calling session)
+	streamSession, exists := s.streamManager.GetSession(req.StreamID, req.SessionID.Hex())
 	if !exists {
 		return fmt.Errorf("streaming session %s not found", req.StreamID)
 	}
 
-	// Validate all chunks received
+	// Validate all chunks and all declared bytes received
 	if streamSession.ChunkCount != streamSession.TotalChunks {
 		return fmt.Errorf("incomplete stream: received %d chunks, expected %d", streamSession.ChunkCount, streamSession.TotalChunks)
+	}
+	if streamSession.BytesWritten != streamSession.FileSize {
+		return fmt.Errorf("incomplete stream: received %d bytes, expected %d", streamSession.BytesWritten, streamSession.FileSize)
 	}
 
 	sourceLog.Debugf("completed audio streaming session %s, temp file: %s", req.StreamID, streamSession.TempFilePath)
@@ -593,13 +591,13 @@ func (s *MORRPCController) sessionPromptStreamEnd(ctx context.Context, msg m.RPC
 	err = s.processStreamedAudioFile(ctx, session, streamSession.TempFilePath, req.AudioRequestParam, msg.ID, user.PubKey, req.SessionID, sendResponse, sourceLog)
 	if err != nil {
 		// Clean up streaming session on error
-		s.streamManager.RemoveSession(req.StreamID)
+		s.streamManager.RemoveSession(req.StreamID, req.SessionID.Hex())
 		sourceLog.Errorf("failed to process streamed audio file: %s", err)
 		return err
 	}
 
 	// Clean up streaming session after successful processing
-	s.streamManager.RemoveSession(req.StreamID)
+	s.streamManager.RemoveSession(req.StreamID, req.SessionID.Hex())
 
 	sourceLog.Debugf("processed streamed audio file for session %s", req.SessionID.Hex())
 
@@ -652,9 +650,15 @@ func (s *MORRPCController) isSessionValid(ctx context.Context, sessionID common.
 		return nil, fmt.Errorf("session cannot be loaded %s", err)
 	}
 
-	isSessionExpired := session.EndsAt().Uint64()*1000 < uint64(reqTimestamp)
+	isSessionExpired := sessionExpiredByServerTime(session.EndsAt().Uint64(), uint64(time.Now().UnixMilli()))
 	if isSessionExpired {
 		return nil, fmt.Errorf("session expired")
+	}
+
+	// A session is only usable on the provider it was opened with (directly,
+	// or via a contract provider that authorizes this node's key)
+	if !s.servesProvider(ctx, session.ProviderAddr()) {
+		return nil, fmt.Errorf("session not bound to this provider")
 	}
 	return session, nil
 }
