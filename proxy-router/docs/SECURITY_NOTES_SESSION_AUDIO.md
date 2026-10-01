@@ -9,14 +9,20 @@
   `session.prompt.stream.*`) re-derives the stored key and requires it to match
   the session's on-chain user before verifying the signature
   (`sessionUserPubKey`). A stale or mismatched record cannot authenticate.
-- `AddUser` allows overwrite. Ownership is proven by the caller before the
-  write, so a later write for the same address can only come from the wallet
-  owner; this also lets an owner replace a stale record on the next
+- Records learned from inbound peers are written through `AddUserBound`, which
+  itself refuses any key that does not derive to the address, so the
+  key<->wallet invariant is enforced by the store and not only by the call
+  site. Overwrite is allowed because only the wallet owner can satisfy the
+  bound write; this also lets an owner replace a stale record on the next
   `session.request` without operator intervention.
+- The unbound `AddUser` remains for consumer-side provider records only: a
+  contract provider's record legitimately holds the owner's key under the
+  contract address after the caller validated it against the resolved signer.
 - Session expiry uses server time (`sessionExpiredByServerTime`); the client
   timestamp is not used for expiry.
-- A session is only usable on the provider it was opened with
-  (`session.ProviderAddr()` must equal this node's wallet).
+- A session is only usable on the provider it was opened with. `isSessionValid`
+  (prompt/stream) checks the on-chain `ProviderAddr()`; `session.report` checks
+  the cached session's `ProviderAddr`. Both fail closed.
 
 ## Audio stream sandbox (MORRPC)
 
@@ -26,9 +32,11 @@
   (`sessionID:streamID`). It never influences a filesystem path.
 - Temp files are created with `os.CreateTemp` under a fixed directory
   (`morpheus-audio-streams`) and verified with `PathUnderDir`.
-- Bounds per stream: `totalchunks` in `1..4096`, `filesize` in `1..256 MiB`,
-  decoded chunk `<= 8 MiB`, cumulative bytes `<= filesize`, at most 4 concurrent
-  streams per session. Chunks must arrive in order.
+- Bounds per stream: `totalchunks` in `1..4096` and `<= filesize`, `filesize`
+  in `1..256 MiB`, decoded chunk `<= 8 MiB`, cumulative bytes `<= filesize`,
+  and `end` requires exactly `filesize` bytes. At most 4 concurrent streams per
+  session and 2 GiB of declared size in flight across all sessions. Chunks must
+  arrive in order.
 - Remove/process only operate on managed paths
   (`SafeRemoveManagedAudioPath` / `IsManagedAudioPath`); a `FilePath` on
   `session.prompt` that is not a managed path is refused.
@@ -46,7 +54,18 @@
   infer the format.
 - Chat file storage builds paths from sanitized ids and rejects path elements.
 - `POST /ipfs/add` is unchanged: it is operator-authenticated and reads a file
-  the operator chose on their own machine (MorpheusUI model pinning).
+  the operator chose on their own machine (MorpheusUI model pinning). Accepted
+  residual: if `:8082` admin credentials are compromised the endpoint can read
+  any path the process can; the same credentials already expose
+  wallet-spending endpoints, so the control for this surface is keeping `:8082`
+  off the public network and running non-root, not a path allowlist.
+
+## Known follow-ups (out of scope for this hotfix)
+
+- Consumer-side provider key records (`proxy_sender.go` `InitiateSession`) are
+  verified self-consistently against the response signature but not bound to
+  the provider address; binding needs the resolved signer for contract
+  providers. Not part of the inbound provider surface this hotfix addresses.
 
 ## Compatibility
 
@@ -61,8 +80,9 @@ upgrade first; consumers can upgrade at their own pace.
 ## Tests
 
 - `internal/lib`: `PathUnderDir`, `PubKeyBytesToAddr`
-- `internal/storages`: `AddUser` overwrite semantics
-- `internal/proxyapi`: stream id validation, session-scoped lookup, bounds,
-  ordered append, managed-path remove, stored-key derivation check, server-time
-  expiry helper
+- `internal/storages`: `AddUserBound` key<->address enforcement, `AddUser`
+  overwrite semantics
+- `internal/proxyapi`: stream id validation, session-scoped lookup, per-stream
+  and global bounds, ordered append, managed-path remove, stored-key derivation
+  check, server-time expiry helper
 - `internal/chatstorage`: id sanitization

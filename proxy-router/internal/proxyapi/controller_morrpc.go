@@ -270,6 +270,13 @@ func (s *MORRPCController) sessionReport(ctx context.Context, msg m.RPCMessage, 
 		sourceLog.Error(err)
 		return err
 	}
+	// Same provider binding as prompt/stream (isSessionValid); fail closed on
+	// a missing or foreign provider address.
+	if common.HexToAddress(session.ProviderAddr) != s.providerAddr {
+		err := fmt.Errorf("session not bound to this provider")
+		sourceLog.Error(err)
+		return err
+	}
 
 	_, pubKeyHex, err := s.sessionUserPubKey(common.HexToAddress(session.UserAddr))
 	if err != nil {
@@ -532,9 +539,12 @@ func (s *MORRPCController) sessionPromptStreamEnd(ctx context.Context, msg m.RPC
 		return fmt.Errorf("streaming session %s not found", req.StreamID)
 	}
 
-	// Validate all chunks received
+	// Validate all chunks and all declared bytes received
 	if streamSession.ChunkCount != streamSession.TotalChunks {
 		return fmt.Errorf("incomplete stream: received %d chunks, expected %d", streamSession.ChunkCount, streamSession.TotalChunks)
+	}
+	if streamSession.BytesWritten != streamSession.FileSize {
+		return fmt.Errorf("incomplete stream: received %d bytes, expected %d", streamSession.BytesWritten, streamSession.FileSize)
 	}
 
 	sourceLog.Debugf("completed audio streaming session %s, temp file: %s", req.StreamID, streamSession.TempFilePath)

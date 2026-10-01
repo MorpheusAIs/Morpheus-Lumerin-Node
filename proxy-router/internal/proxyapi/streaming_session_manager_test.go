@@ -88,6 +88,10 @@ func TestCreateSessionEnforcesBounds(t *testing.T) {
 	_, err = sm.CreateSession("a", "0xS", 1, MAX_AUDIO_STREAM_FILE_SIZE+1, "audio/wav")
 	require.Error(t, err)
 
+	// more chunks than bytes is impossible
+	_, err = sm.CreateSession("a", "0xS", 11, 10, "audio/wav")
+	require.Error(t, err)
+
 	for i := 0; i < MAX_AUDIO_STREAMS_PER_SESSION; i++ {
 		_, err := sm.CreateSession("s"+string(rune('a'+i)), "0xS", 1, 1, "audio/wav")
 		require.NoError(t, err)
@@ -97,6 +101,27 @@ func TestCreateSessionEnforcesBounds(t *testing.T) {
 	for i := 0; i < MAX_AUDIO_STREAMS_PER_SESSION; i++ {
 		sm.RemoveSession("s"+string(rune('a'+i)), "0xS")
 	}
+}
+
+func TestCreateSessionEnforcesGlobalInflightCap(t *testing.T) {
+	sm := NewStreamingSessionManager()
+	// declared sizes only; CreateTemp files are empty so this costs no disk
+	perStream := uint64(MAX_AUDIO_STREAM_FILE_SIZE)
+	n := int(uint64(MAX_AUDIO_STREAM_INFLIGHT_BYTES) / perStream) // 8
+	for i := 0; i < n; i++ {
+		sid := "0xS" + string(rune('a'+i)) // distinct sessions avoid the per-session cap
+		_, err := sm.CreateSession("x", sid, 1, perStream, "audio/wav")
+		require.NoError(t, err, "stream %d", i)
+	}
+	_, err := sm.CreateSession("x", "0xOVER", 1, 1, "audio/wav")
+	require.Error(t, err)
+	sm.RemoveSession("x", "0xSa")
+	_, err = sm.CreateSession("x", "0xOVER", 1, 1, "audio/wav")
+	require.NoError(t, err)
+	for i := 1; i < n; i++ {
+		sm.RemoveSession("x", "0xS"+string(rune('a'+i)))
+	}
+	sm.RemoveSession("x", "0xOVER")
 }
 
 func TestAppendChunkEnforcesOrderAndSize(t *testing.T) {

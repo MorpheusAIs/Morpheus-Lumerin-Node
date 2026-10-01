@@ -23,6 +23,9 @@ const (
 	MAX_AUDIO_STREAM_CHUNK_SIZE   = 8 * 1024 * 1024   // 8 MiB per decoded chunk
 	MAX_AUDIO_STREAM_TOTAL_CHUNKS = 4096
 	MAX_AUDIO_STREAMS_PER_SESSION = 4
+	// Upper bound on the sum of declared sizes across all in-flight streams,
+	// so many sessions cannot collectively fill the disk.
+	MAX_AUDIO_STREAM_INFLIGHT_BYTES = 2 * 1024 * 1024 * 1024 // 2 GiB
 )
 
 // Client-supplied stream identifiers are used only as an in-memory lookup key,
@@ -104,6 +107,11 @@ func (sm *StreamingSessionManager) CreateSession(streamID, sessionID string, tot
 	if fileSize == 0 || fileSize > MAX_AUDIO_STREAM_FILE_SIZE {
 		return nil, fmt.Errorf("file size out of range")
 	}
+	// Every chunk carries at least one byte, so the chunk count can never
+	// exceed the declared size.
+	if uint64(totalChunks) > fileSize {
+		return nil, fmt.Errorf("total chunks exceeds file size")
+	}
 
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
@@ -114,13 +122,18 @@ func (sm *StreamingSessionManager) CreateSession(streamID, sessionID string, tot
 	}
 
 	active := 0
+	var inflight uint64
 	for _, s := range sm.sessions {
 		if strings.EqualFold(s.SessionID, sessionID) {
 			active++
 		}
+		inflight += s.FileSize
 	}
 	if active >= MAX_AUDIO_STREAMS_PER_SESSION {
 		return nil, fmt.Errorf("too many concurrent streams for session")
+	}
+	if inflight+fileSize > MAX_AUDIO_STREAM_INFLIGHT_BYTES {
+		return nil, fmt.Errorf("audio stream capacity exhausted")
 	}
 
 	tempFilePath, err := sm.createTempFile(contentType)

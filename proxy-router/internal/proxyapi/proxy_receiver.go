@@ -576,7 +576,9 @@ func (s *ProxyReceiver) SessionRequest(ctx context.Context, msgID string, reqID 
 		PubKey: req.Key.Hex(),
 	}
 
-	err = s.sessionStorage.AddUser(&user)
+	// Bound write: the store re-checks key<->wallet so the invariant does not
+	// depend on this call site alone.
+	err = s.sessionStorage.AddUserBound(&user)
 	if err != nil {
 		err := lib.WrapError(fmt.Errorf("failed store user"), err)
 		log.Error(err)
