@@ -1047,11 +1047,26 @@ jobs:
 
           echo "🚀 Updating SecretVM test instance ${SECRETVM_TEST_VM_UUID:0:8}..." >> $GITHUB_STEP_SUMMARY
 
-          secretvm-cli -k "$SECRETVM_API_KEY" vm edit "$SECRETVM_TEST_VM_UUID" \
+          # secretvm-cli exits 0 even when the API rejects the request and only
+          # reports the failure in its JSON output. Capture and inspect it so a
+          # rejected deploy fails the step instead of surfacing later as an
+          # attestation mismatch.
+          set +e
+          EDIT_OUT=$(secretvm-cli -k "$SECRETVM_API_KEY" vm edit "$SECRETVM_TEST_VM_UUID" \
             --docker-compose /tmp/docker-compose.tee.deployed.yml \
-            --env /tmp/secretvm-test.env
+            --env /tmp/secretvm-test.env 2>&1)
+          EDIT_RC=$?
+          set -e
 
           rm -f /tmp/secretvm-test.env
+
+          echo "$EDIT_OUT"
+          if [ "$EDIT_RC" -ne 0 ] || echo "$EDIT_OUT" | grep -q '"status":"error"'; then
+            MSG=$(echo "$EDIT_OUT" | grep -o '"message":"[^"]*"' | tail -n 1 | sed 's/"message":"//; s/"$//')
+            echo "❌ SecretVM test vm edit rejected: ${MSG:-see job log}" >> $GITHUB_STEP_SUMMARY
+            echo "::error::SecretVM test vm edit rejected: ${MSG:-see job log}"
+            exit 1
+          fi
 
           echo "✅ SecretVM test instance updated with new TEE image" >> $GITHUB_STEP_SUMMARY
           echo "   Compose: \`docker-compose-tee-deployed-${{ needs.Generate-Tag.outputs.tag_name }}\`" >> $GITHUB_STEP_SUMMARY
@@ -1166,11 +1181,26 @@ jobs:
 
           echo "🚀 Updating SecretVM prod instance ${SECRETVM_PROD_VM_UUID:0:8}..." >> $GITHUB_STEP_SUMMARY
 
-          secretvm-cli -k "$SECRETVM_API_KEY" vm edit "$SECRETVM_PROD_VM_UUID" \
+          # secretvm-cli exits 0 even when the API rejects the request and only
+          # reports the failure in its JSON output. Capture and inspect it so a
+          # rejected deploy fails the step instead of surfacing later as an
+          # attestation mismatch.
+          set +e
+          EDIT_OUT=$(secretvm-cli -k "$SECRETVM_API_KEY" vm edit "$SECRETVM_PROD_VM_UUID" \
             --docker-compose /tmp/docker-compose.tee.deployed.yml \
-            --env /tmp/secretvm-prod.env
+            --env /tmp/secretvm-prod.env 2>&1)
+          EDIT_RC=$?
+          set -e
 
           rm -f /tmp/secretvm-prod.env
+
+          echo "$EDIT_OUT"
+          if [ "$EDIT_RC" -ne 0 ] || echo "$EDIT_OUT" | grep -q '"status":"error"'; then
+            MSG=$(echo "$EDIT_OUT" | grep -o '"message":"[^"]*"' | tail -n 1 | sed 's/"message":"//; s/"$//')
+            echo "❌ SecretVM prod vm edit rejected: ${MSG:-see job log}" >> $GITHUB_STEP_SUMMARY
+            echo "::error::SecretVM prod vm edit rejected: ${MSG:-see job log}"
+            exit 1
+          fi
 
           echo "✅ SecretVM prod instance updated with new TEE image" >> $GITHUB_STEP_SUMMARY
           echo "   Compose: \`docker-compose-tee-deployed-${{ needs.Generate-Tag.outputs.tag_name }}\`" >> $GITHUB_STEP_SUMMARY
