@@ -290,7 +290,8 @@ func start() error {
 	proxyRouterApi := proxyapi.NewProxySender(chainID, wallet, contractLogStorage, sessionStorage, sessionRepo, cfg.Proxy.CNodePNodeTimeout, cfg.Proxy.CNodePNodeMaxRetries, cfg.Proxy.CNodePNodeAudioMaxRetries, appLog)
 	// Authenticate contract providers (e.g. custody contracts) by their on-chain
 	// owner(), matching SessionRouter._isValidProviderReceipt's contract-owner branch.
-	proxyRouterApi.SetProviderAuthResolver(proxyapi.NewProviderAuthResolver(ethClient))
+	providerAuthResolver := proxyapi.NewProviderAuthResolver(ethClient)
+	proxyRouterApi.SetProviderAuthResolver(providerAuthResolver)
 	explorer := blockchainapi.NewBlockscoutApiV2Client(cfg.Blockchain.BlockscoutApiUrl, log.Named("INDEXER"))
 	var teeVerifier *attestation.Verifier
 	if cfg.TEE.PortalURL != "" || cfg.TEE.ImageRepo != "" {
@@ -425,6 +426,9 @@ func start() error {
 	appLog.Infof("API docs available at %s/swagger/index.html", cfg.Web.PublicUrl)
 
 	proxy := proxyctl.NewProxyCtl(eventListener, wallet, chainID, appLog, tcpLog, cfg.Proxy.Address, sessionStorage, modelConfigLoader, valid, aiEngine, blockchainApi, sessionRepo, sessionExpiryHandler, backendVerifier, modelHealthChecker)
+	// Same resolver the consumer side uses: lets a contract-provider node
+	// (signing as owner()) accept sessions opened against the contract address.
+	proxy.SetProviderAuthResolver(providerAuthResolver)
 	err = proxy.Run(ctx)
 
 	cancelServer()
