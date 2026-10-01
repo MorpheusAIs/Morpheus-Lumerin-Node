@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"reflect"
 	"strconv"
 	"time"
@@ -805,6 +804,11 @@ func (c *ProxyController) AddFile(ctx *gin.Context) {
 		return
 	}
 
+	if err := ValidateAllowlistedFilePath(req.FilePath, DefaultFilePathAllowRoots()); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	result, err := c.ipfsManager.AddFile(ctx, req.FilePath, req.Tags, req.ID.Hex(), req.ModelName)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -1515,33 +1519,30 @@ func (c *ProxyController) parseAudioTranscriptionParams(
 }
 
 func (c *ProxyController) createTempFile(ctx *gin.Context) (string, error) {
-	// Get the file from form data
 	file, fileHeader, err := ctx.Request.FormFile("file")
 	if err != nil {
 		return "", fmt.Errorf("Failed to get file: %v", err)
 	}
 	defer file.Close()
+	_ = fileHeader // client filename must not influence path
 
-	// Create a temporary file to save the uploaded audio
-	tempDir := os.TempDir()
-	tempFilePath := filepath.Join(tempDir, fileHeader.Filename)
-	tempFile, err := os.Create(tempFilePath)
+	tempFile, err := os.CreateTemp(os.TempDir(), "audio-upload-*")
 	if err != nil {
 		return "", fmt.Errorf("Failed to create temp file: %v", err)
 	}
-	defer tempFile.Close()
+	tempFilePath := tempFile.Name()
 
-	// Copy the uploaded file to the temporary file
 	if _, err = io.Copy(tempFile, file); err != nil {
+		_ = tempFile.Close()
 		return "", fmt.Errorf("Failed to save audio file: %v", err)
 	}
 
-	// Close the file before returning
-	tempFile.Close()
+	if err := tempFile.Close(); err != nil {
+		return "", fmt.Errorf("Failed to close temp file: %v", err)
+	}
 
 	return tempFilePath, nil
 }
-
 func (c *ProxyController) executeTranscription(ctx *gin.Context, adapter aiengine.AIEngineStream, request *gsc.AudioTranscriptionRequest, stream bool) error {
 	return adapter.AudioTranscription(ctx, request, func(cbctx context.Context, completion gsc.Chunk, aiResponseError *gsc.AiEngineErrorResponse) error {
 		if aiResponseError != nil {

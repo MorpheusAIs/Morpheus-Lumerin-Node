@@ -14,15 +14,17 @@
 - `SafeRemoveManagedAudioPath` / `IsManagedAudioPath` refuse remove/process of non-managed paths.
 - `session.prompt` audio `FilePath` must be managed; unmanaged client paths are refused.
 
-### HTTP sibling fixed in same area
-- None landed in this PR for `:8082` upload path construction (see follow-ups).
+### HTTP / storage siblings
+- `:8082` upload `createTempFile`, `/ipfs/add` path allowlist, chat id path join, `session.report` expiry — included in this hotfix.
 
-## Follow-ups
-- HTTP `createTempFile` still joins `os.TempDir()` with multipart filename; switch to `CreateTemp` (no client filename in path).
-- HTTP `POST /ipfs/add` takes client `filePath` for local read (auth-gated); harden or restrict to allowlisted roots.
-- Chat file storage joins `identifier` into chat dir; ensure identifiers are sanitized hashes only.
-- `session.report` loads storage session without the same server-time `EndsAt` gate as prompt/stream paths.
-- Ops: run process non-root; consumers should not expose inbound MORRPC `:3333` publicly.
+## Additional blast-radius fixes (same hotfix)
+- HTTP `createTempFile` uses `os.CreateTemp` (multipart filename not used in path).
+- HTTP `POST /ipfs/add` validates `filePath` stays under allowlisted roots (temp dir, cwd).
+- Chat file storage builds paths via sanitized ids + `PathUnderDir` (no raw client path join).
+- `session.report` applies the same server-time `EndsAt` gate as prompt/stream.
+
+## Ops
+- Run process non-root; consumers should not expose inbound MORRPC `:3333` publicly.
 
 ## Tests
 - `internal/lib`: PathUnderDir, PubKeyBytesToAddr

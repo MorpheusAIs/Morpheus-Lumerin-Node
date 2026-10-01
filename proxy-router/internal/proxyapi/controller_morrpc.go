@@ -240,6 +240,11 @@ func (s *MORRPCController) sessionReport(ctx context.Context, msg m.RPCMessage, 
 		sourceLog.Error(err)
 		return err
 	}
+	if session.EndsAt != nil && sessionExpiredByServerTime(session.EndsAt.Uint64(), uint64(time.Now().UnixMilli())) {
+		err := fmt.Errorf("session expired")
+		sourceLog.Error(err)
+		return err
+	}
 
 	user, err := s.sessionStorage.GetUser(session.UserAddr)
 	if err != nil {
