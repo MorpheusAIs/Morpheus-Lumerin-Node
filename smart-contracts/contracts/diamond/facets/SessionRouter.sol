@@ -309,6 +309,7 @@ contract SessionRouter is
 
             if (userStakeToLock_ > 0) {
                 _getSessionsStorage().userStakesOnHold[session.user].push(OnHold(userStakeToLock_, releaseAt_));
+                emit UserStakeOnHold(session.user, userStakeToLock_, releaseAt_);
             }
         }
         uint256 userAmountToWithdraw_ = userStake - userStakeToLock_;
@@ -456,6 +457,38 @@ contract SessionRouter is
             onHoldEntries.pop();
             length_--;
             removedCount_++;
+        }
+
+        if (amount_ == 0) {
+            revert SessionUserAmountToWithdrawIsZero();
+        }
+
+        IERC20(_getBidsStorage().token).safeTransfer(user_, amount_);
+
+        emit UserWithdrawn(user_, amount_);
+    }
+
+    function withdrawAllUserStakes(address user_) external {
+        _validateDelegatee(_msgSender(), user_, DELEGATION_RULES_SESSION);
+
+        OnHold[] storage onHoldEntries = _getSessionsStorage().userStakesOnHold[user_];
+        uint256 length_ = onHoldEntries.length;
+        uint256 amount_ = 0;
+
+        if (length_ == 0) {
+            revert SessionUserAmountToWithdrawIsZero();
+        }
+
+        for (uint256 i = length_; i > 0; i--) {
+            if (block.timestamp < onHoldEntries[i - 1].releaseAt) {
+                continue;
+            }
+
+            amount_ += onHoldEntries[i - 1].amount;
+
+            onHoldEntries[i - 1] = onHoldEntries[length_ - 1];
+            onHoldEntries.pop();
+            length_--;
         }
 
         if (amount_ == 0) {
