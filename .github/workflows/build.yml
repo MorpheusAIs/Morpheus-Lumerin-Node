@@ -1693,150 +1693,6 @@ jobs:
             echo "⚠️ Continuing with warning - ECS deployment completed but version verification inconclusive"
           fi
 
-  Drain-Morpheus-C-Node:
-    # Quiet the C-Node immediately BEFORE the C-Node itself is rolled — and, per the
-    # job graph below, only AFTER both P-Nodes have already been updated one at a time
-    # (P-Node-1 -> P-Node-2). We deliberately do NOT drain during the provider rolls:
-    # with two independent on-chain providers serving the same models, the C-Node must
-    # stay live in the NLB so the API Gateway's provider-failover (mark the dead
-    # session FAILED -> reopen on the surviving provider; see
-    # Morpheus-Marketplace-API/src/api/v1/chat/chat_failover.py) keeps traffic flowing
-    # while each provider restarts.
-    #
-    # Why drain at all (for the C-Node roll): the proxy-router on the C-Node keeps a
-    # BadgerDB of active sessions. On prd the BadgerDB is ephemeral on Fargate (no EFS)
-    # and the router rehydrates state on boot from on-chain data. Draining first means
-    # warm sessions see a clean upstream failure (NLB returns 503 / connection closed)
-    # instead of a half-dead mid-stream hang during the C-Node restart.
-    #
-    # This job deregisters the running C-Node task ENI from every target group on the
-    # C-Node NLB. The target groups have connection_termination=true (see
-    # Morpheus-Infra/environments/02-morpheus_c_node/.terragrunt/02_mor_router_svc.tf),
-    # so existing TCP sessions are closed promptly. The ECS service and its task
-    # continue to run; we are only manipulating LB membership.
-    #
-    # `!cancelled()` + explicit result checks: on `test`, P-Node-1 deploys DEV
-    # provider and P-Node-2 is skipped (HA is prd-only); on `main`, BOTH provider
-    # rolls must SUCCEED before the C-Node is touched.
-    name: Drain Morpheus C-Node from NLB
-    if: |
-      !cancelled() &&
-      github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
-      (needs.changes.outputs.proxy == 'true' || github.event_name == 'workflow_dispatch') &&
-      needs.GHCR-Build-and-Push.result == 'success' &&
-      (needs.Deploy-to-Morpheus-P-Node.result == 'success' || needs.Deploy-to-Morpheus-P-Node.result == 'skipped') &&
-      (needs.Deploy-to-Morpheus-P-Node-2.result == 'success' || needs.Deploy-to-Morpheus-P-Node-2.result == 'skipped') &&
-      (
-        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true' && github.event.inputs.create_deployment == 'true')
-      )
-    needs:
-      - changes
-      - Generate-Tag
-      - GHCR-Build-and-Push
-      - Deploy-to-Morpheus-P-Node
-      - Deploy-to-Morpheus-P-Node-2
-    runs-on: ubuntu-latest
-    environment: ${{ github.ref_name }}
-    outputs:
-      tg_arns: ${{ steps.drain.outputs.tg_arns }}
-      drained_ips: ${{ steps.drain.outputs.drained_ips }}
-    steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v6
-        with:
-          aws-access-key-id: ${{ secrets.MORPHEUS_AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.MORPHEUS_AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-2
-
-      - name: Deregister C-Node targets from all NLB target groups
-        id: drain
-        run: |
-          set -euo pipefail
-
-          if [ "${{ github.ref_name }}" == "test" ]; then
-            ENV="dev"
-          elif [ "${{ github.ref_name }}" == "main" ]; then
-            ENV="prd"
-          else
-            echo "❌ Unsupported branch for drain: ${{ github.ref_name }}"
-            exit 1
-          fi
-
-          CLUSTER_NAME="ecs-${ENV}-morpheus-engine"
-          SERVICE_NAME="svc-${ENV}-router"
-
-          echo "🎯 Discovering target groups for ${CLUSTER_NAME}/${SERVICE_NAME}..."
-          TG_ARNS=$(aws ecs describe-services \
-            --cluster "$CLUSTER_NAME" \
-            --services "$SERVICE_NAME" \
-            --query 'services[0].loadBalancers[].targetGroupArn' \
-            --output text)
-
-          if [ -z "$TG_ARNS" ] || [ "$TG_ARNS" == "None" ]; then
-            echo "❌ No target groups resolved for service $SERVICE_NAME"
-            exit 1
-          fi
-
-          echo "📋 Target groups: $TG_ARNS"
-
-          DRAINED_IPS=""
-          for TG_ARN in $TG_ARNS; do
-            echo ""
-            echo "🔄 Inspecting $TG_ARN..."
-            TARGETS_JSON=$(aws elbv2 describe-target-health \
-              --target-group-arn "$TG_ARN" \
-              --query 'TargetHealthDescriptions[].Target' \
-              --output json)
-            TARGET_COUNT=$(echo "$TARGETS_JSON" | jq 'length')
-
-            if [ "$TARGET_COUNT" -eq 0 ]; then
-              echo "  (no registered targets — nothing to drain)"
-              continue
-            fi
-
-            # Build --targets Id=...,Port=... arg list
-            TARGETS_CLI=$(echo "$TARGETS_JSON" | jq -r '.[] | "Id=\(.Id),Port=\(.Port)"')
-            echo "  Current targets ($TARGET_COUNT):"
-            echo "$TARGETS_CLI" | sed 's/^/    /'
-
-            # Collect IPs across all TGs for later reference (deduped)
-            IPS=$(echo "$TARGETS_JSON" | jq -r '.[].Id')
-            DRAINED_IPS="$DRAINED_IPS $IPS"
-
-            echo "  Calling DeregisterTargets..."
-            # shellcheck disable=SC2086
-            aws elbv2 deregister-targets \
-              --target-group-arn "$TG_ARN" \
-              --targets $TARGETS_CLI
-          done
-
-          # connection_termination=true on router TGs closes live TCP sessions in under
-          # a second; svc TG has deregistration_delay=0 and API TG has 30. 45s leaves
-          # plenty of margin for LB state to propagate across AZs before the C-Node
-          # task is rolled (both P-Nodes have already been updated by this point).
-          DRAIN_WAIT=45
-          echo ""
-          echo "⏳ Waiting ${DRAIN_WAIT}s for deregistration to propagate..."
-          sleep $DRAIN_WAIT
-
-          # Flatten outputs (newline → space, then comma for workflow output)
-          TG_ARNS_CSV=$(echo "$TG_ARNS" | tr -s '[:space:]' ',' | sed 's/^,//;s/,$//')
-          IPS_CSV=$(echo "$DRAINED_IPS" | tr -s '[:space:]' ',' | sed 's/^,//;s/,$//' | awk -F, '{for (i=1;i<=NF;i++) if (!seen[$i]++) printf (i>1?",":"")"%s",$i; print ""}')
-
-          echo "tg_arns=$TG_ARNS_CSV" >> "$GITHUB_OUTPUT"
-          echo "drained_ips=$IPS_CSV" >> "$GITHUB_OUTPUT"
-
-          {
-            echo "### 🚰 C-Node drain complete"
-            echo ""
-            echo "**Environment:** \`$ENV\`"
-            echo "**Target groups drained:** \`$TG_ARNS_CSV\`"
-            echo "**Target IPs removed:** \`$IPS_CSV\`"
-            echo ""
-            echo "Both P-Nodes are already updated; the NLB will return clean upstream errors until the new C-Node task is re-registered."
-          } >> "$GITHUB_STEP_SUMMARY"
-
   Deploy-to-Morpheus-C-Node:
     name: Deploy to Morpheus Consumer via GitHub
     # NOTE on `needs` + skipped dependencies:
@@ -1845,18 +1701,34 @@ jobs:
     # own `if`), so on a `test` deploy `Deploy-to-Morpheus-P-Node-2` is skipped
     # (HA is prd-only) while P-Node-1 deploys DEV. Without an explicit `if` that
     # tolerates those skips, the C-Node deploy gets skipped too — which is exactly what
-    # bit us on the first v7 test run: the drain job ran and deregistered the C-Node,
-    # then the actual deploy silently skipped, leaving dev without a replacement task.
+    # bit us on the first v7 test run: the deploy silently skipped, leaving dev
+    # without a replacement task.
     #
     # This `if` explicitly allows the skipped P-Node outcomes, while still gating on
-    # drain + GHCR success and requiring we're on a deploy-eligible branch.
+    # GHCR success and requiring we're on a deploy-eligible branch.
     # `!cancelled()` keeps the guard working if a user cancels mid-run.
+    #
+    # Ordering: runs only AFTER both P-Nodes have been updated one at a time
+    # (P-Node-1 -> P-Node-2). The C-Node stays live in the NLB during the provider
+    # rolls so the API Gateway's provider-failover keeps traffic flowing.
+    #
+    # There is deliberately NO pre-deploy NLB drain of the old C-Node task. An
+    # earlier version of this workflow deregistered the old task's ENI from the
+    # target groups before `update-service`. That bypassed ECS's own rolling
+    # replacement: with the target already gone, ECS never stopped the old task
+    # as a deployment action and instead waited for its periodic ELB-health
+    # reconciliation to report TARGET IS NOT FOUND — usually ~45s, but observed
+    # at 17 minutes, which blew the task-RUNNING wait below. Letting ECS own the
+    # stop is deterministic: it deregisters the old target itself (TG
+    # deregistration_delay is 0s / 30s with connection_termination=true, so live
+    # flows close promptly) and launches the replacement immediately. The hold
+    # window that actually matters for session rehydration is applied to the NEW
+    # task further down (deregister -> sleep -> re-register).
     if: |
       !cancelled() &&
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (needs.changes.outputs.proxy == 'true' || github.event_name == 'workflow_dispatch') &&
       needs.GHCR-Build-and-Push.result == 'success' &&
-      needs.Drain-Morpheus-C-Node.result == 'success' &&
       (needs.Deploy-to-Morpheus-P-Node.result == 'success' || needs.Deploy-to-Morpheus-P-Node.result == 'skipped') &&
       (needs.Deploy-to-Morpheus-P-Node-2.result == 'success' || needs.Deploy-to-Morpheus-P-Node-2.result == 'skipped') &&
       (
@@ -1867,7 +1739,6 @@ jobs:
       - changes
       - Generate-Tag
       - GHCR-Build-and-Push
-      - Drain-Morpheus-C-Node
       - Deploy-to-Morpheus-P-Node
       - Deploy-to-Morpheus-P-Node-2
     runs-on: ubuntu-latest
@@ -2055,28 +1926,24 @@ jobs:
           fi
           echo "⏱️  Rehydration hold window: ${CNODE_REHYDRATION_WAIT_SECS}s"
 
-          # Resolve TGs (re-use drain-job output if provided, else rediscover).
-          DRAIN_TG_ARNS="${{ needs.Drain-Morpheus-C-Node.outputs.tg_arns }}"
-          if [ -n "$DRAIN_TG_ARNS" ]; then
-            TG_ARN_LIST=$(echo "$DRAIN_TG_ARNS" | tr ',' ' ')
-            echo "📋 Re-using TG ARNs from drain job: $TG_ARN_LIST"
-          else
-            echo "📋 Discovering TGs from ECS service (drain job output was empty)..."
-            TG_ARN_LIST=$(aws ecs describe-services \
-              --cluster "$CLUSTER_NAME" \
-              --services "$SERVICE_NAME" \
-              --query 'services[0].loadBalancers[].targetGroupArn' \
-              --output text)
-          fi
+          # Resolve TGs from the ECS service.
+          echo "📋 Discovering TGs from ECS service..."
+          TG_ARN_LIST=$(aws ecs describe-services \
+            --cluster "$CLUSTER_NAME" \
+            --services "$SERVICE_NAME" \
+            --query 'services[0].loadBalancers[].targetGroupArn' \
+            --output text)
 
-          if [ -z "$TG_ARN_LIST" ]; then
+          if [ -z "$TG_ARN_LIST" ] || [ "$TG_ARN_LIST" == "None" ]; then
             echo "❌ No TG ARNs resolved; cannot safely control traffic. Aborting."
             exit 1
           fi
+          echo "📋 Target groups: $TG_ARN_LIST"
 
           # Poll (up to 15 min) until the new task is RUNNING and has a private IP.
-          # ECS lifecycle:
-          #   - stopTimeout=120s to let old task drain (already deregistered by drain job)
+          # ECS lifecycle (maximumPercent=100 / minimumHealthyPercent=0, so the
+          # deployment stops the old task first, then launches the replacement):
+          #   - ECS deregisters the old target itself; stopTimeout=120s lets it drain
           #   - new task goes PROVISIONING → PENDING → RUNNING
           echo "⏳ Waiting for new C-Node task ($NEW_TASK_ARN) to be RUNNING..."
           NEW_TASK_IP=""
@@ -2424,9 +2291,9 @@ jobs:
     name: Deploy to Morpheus Provider via GitHub
     # P-Node-1 roll. On `test` → DEV provider (ecs-dev-morpheus-provider). On `main` →
     # PRD provider (first half of the one-at-a-time HA roll; P-Node-2 follows).
-    # Does NOT depend on the C-Node drain: the C-Node stays live during provider
-    # rolls so API Gateway failover can keep traffic flowing. Drain runs AFTER
-    # providers, right before the C-Node roll (see Drain-Morpheus-C-Node).
+    # The C-Node stays live during provider rolls so API Gateway failover can
+    # keep traffic flowing; the C-Node roll itself runs AFTER both providers
+    # (see Deploy-to-Morpheus-C-Node).
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (needs.changes.outputs.proxy == 'true' || github.event_name == 'workflow_dispatch') &&
