@@ -16,18 +16,10 @@ services:
       - usr/.env
     networks:
       - traefik
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.proxy-router.rule=PathPrefix(`/`)
-      - traefik.http.routers.proxy-router.entrypoints=websecure
-      - traefik.http.routers.proxy-router.tls=true
-      - traefik.http.services.proxy-router.loadbalancer.server.port=8082
   traefik:
     image: traefik:v2.10
     command:
       - --api.insecure=false
-      - --providers.docker=true
-      - --providers.docker.exposedbydefault=false
       - --entrypoints.websecure.address=:443
       - --entrypoints.websecure.http.tls.options=default@file
       - --providers.file.directory=/etc/traefik/dynamic
@@ -35,13 +27,14 @@ services:
     ports:
       - 443:443
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - /mnt/secure/cert:/certs:ro
     networks:
       - traefik
     configs:
       - source: tls_config
         target: /etc/traefik/dynamic/tls.yml
+      - source: routes_config
+        target: /etc/traefik/dynamic/routes.yml
     env_file:
       - usr/.env
 volumes:
@@ -61,3 +54,18 @@ configs:
             defaultCertificate:
               certFile: /certs/secret_vm_fullchain.pem
               keyFile: /certs/secret_vm_private.pem
+  routes_config:
+    content: |-
+      http:
+        routers:
+          proxy-router:
+            rule: PathPrefix(`/`)
+            entryPoints:
+              - websecure
+            tls: {}
+            service: proxy-router
+        services:
+          proxy-router:
+            loadBalancer:
+              servers:
+                - url: http://proxy-router:8082
