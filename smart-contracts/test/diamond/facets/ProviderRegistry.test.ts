@@ -184,6 +184,16 @@ describe('ProviderRegistry', () => {
         providerRegistry.connect(PROVIDER).providerRegister(PROVIDER, wei(0), ''),
       ).to.be.revertedWithCustomError(providerRegistry, 'ProviderStakeTooLow');
     });
+    it('should revert when endpoint is empty or too long (RFP L4)', async () => {
+      await expect(
+        providerRegistry.connect(PROVIDER).providerRegister(PROVIDER, wei(100), ''),
+      ).to.be.revertedWithCustomError(diamond, 'ProviderEndpointEmpty');
+
+      const tooLongEndpoint = 'a'.repeat(257);
+      await expect(
+        providerRegistry.connect(PROVIDER).providerRegister(PROVIDER, wei(100), tooLongEndpoint),
+      ).to.be.revertedWithCustomError(diamond, 'ProviderEndpointTooLong');
+    });
     it('should throw error when create provider without delegation or with incorrect rules', async () => {
       await expect(
         providerRegistry.connect(OWNER).providerRegister(PROVIDER, wei(0), ''),

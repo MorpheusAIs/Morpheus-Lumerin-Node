@@ -15,6 +15,8 @@ interface IProviderRegistry is IProviderStorage {
     error ProviderHasActiveBids();
     error ProviderNotFound();
     error ProviderHasAlreadyDeregistered();
+    error ProviderEndpointEmpty();
+    error ProviderEndpointTooLong();
 
     /**
      * The function to initialize the facet.
