@@ -8,6 +8,12 @@ interface IMarketplace is IMarketplaceStorage {
     event MarketplaceBidPosted(address indexed provider, bytes32 indexed modelId, uint256 nonce);
     event MarketplaceBidDeleted(address indexed provider, bytes32 indexed modelId, uint256 nonce);
     event MarketplaceBidMinMaxPriceUpdated(uint256 bidMinPricePerSecond, uint256 bidMaxPricePerSecond);
+    event MarketplaceBidPriceUpdated(
+        bytes32 indexed bidId,
+        address indexed provider,
+        bytes32 indexed modelId,
+        uint256 newPricePerSecond
+    );
 
     error MarketplaceProviderNotFound();
     error MarketplaceModelNotFound();
@@ -51,6 +57,13 @@ interface IMarketplace is IMarketplaceStorage {
      * @param bidId_ The bid ID.
      */
     function deleteModelBid(bytes32 bidId_) external;
+
+    /**
+     * The function to update the price per second of an active bid without reposting.
+     * @param bidId_ The active bid ID.
+     * @param newPricePerSecond_ The new price per second.
+     */
+    function updateBidPrice(bytes32 bidId_, uint256 newPricePerSecond_) external;
 
     /**
      * The function to withdraw the stake amount.
