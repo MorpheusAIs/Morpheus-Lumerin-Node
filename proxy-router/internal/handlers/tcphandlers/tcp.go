@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net"
 	"time"
 
@@ -39,7 +41,11 @@ func NewTCPHandler(
 
 		msg, err := getMessage(conn)
 		if err != nil {
-			sourceLog.Error("error reading message", err)
+			if errors.Is(err, io.EOF) {
+				sourceLog.Debugf("connection closed by client before message received: %s", err)
+			} else {
+				sourceLog.Warnf("failed to parse incoming message (likely port scanner or invalid payload): %s", err)
+			}
 			return
 		}
 
