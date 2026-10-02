@@ -58,6 +58,32 @@ contract ProviderRegistry is IProviderRegistry, OwnableDiamondStorage, ProviderS
         emit ProviderRegistered(provider_);
     }
 
+    function providerUpdateEndpoint(address provider_, string calldata endpoint_) public {
+        _validateDelegatee(_msgSender(), provider_, DELEGATION_RULES_PROVIDER);
+
+        if (bytes(endpoint_).length == 0) {
+            revert ProviderEndpointEmpty();
+        }
+        if (bytes(endpoint_).length > 256) {
+            revert ProviderEndpointTooLong();
+        }
+
+        PovidersStorage storage providersStorage = _getProvidersStorage();
+        Provider storage provider = providersStorage.providers[provider_];
+
+        if (provider.createdAt == 0 || provider.isDeleted) {
+            revert ProviderNotFound();
+        }
+
+        provider.endpoint = endpoint_;
+
+        emit ProviderEndpointUpdated(provider_, endpoint_);
+    }
+
+    function providerUpdateEndpoint(string calldata endpoint_) external {
+        providerUpdateEndpoint(_msgSender(), endpoint_);
+    }
+
     function providerDeregister(address provider_) external {
         _validateDelegatee(_msgSender(), provider_, DELEGATION_RULES_PROVIDER);
 

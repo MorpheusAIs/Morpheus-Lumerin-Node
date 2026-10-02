@@ -267,6 +267,82 @@ describe('ProviderRegistry', () => {
       );
     });
   });
+
+  describe('#providerUpdateEndpoint', async () => {
+    beforeEach(async () => {
+      await providerRegistry.connect(PROVIDER).providerRegister(PROVIDER, wei(100), 'test.example.com:1234');
+    });
+
+    it('should update endpoint for active provider without changing stake or balance', async () => {
+      const balanceBefore = await token.balanceOf(PROVIDER);
+      const stakeBefore = (await providerRegistry.getProvider(PROVIDER)).stake;
+
+      await expect(providerRegistry.connect(PROVIDER)['providerUpdateEndpoint(address,string)'](PROVIDER, 'updated.endpoint.com:8080'))
+        .to.emit(providerRegistry, 'ProviderEndpointUpdated')
+        .withArgs(PROVIDER.address, 'updated.endpoint.com:8080');
+
+      const data = await providerRegistry.getProvider(PROVIDER);
+      expect(data.endpoint).to.eq('updated.endpoint.com:8080');
+      expect(data.stake).to.eq(stakeBefore);
+      expect(await token.balanceOf(PROVIDER)).to.eq(balanceBefore);
+    });
+
+    it('should update endpoint via convenience overload', async () => {
+      await expect(providerRegistry.connect(PROVIDER)['providerUpdateEndpoint(string)']('new.overload.com:9000'))
+        .to.emit(providerRegistry, 'ProviderEndpointUpdated')
+        .withArgs(PROVIDER.address, 'new.overload.com:9000');
+
+      const data = await providerRegistry.getProvider(PROVIDER);
+      expect(data.endpoint).to.eq('new.overload.com:9000');
+    });
+
+    it('should update endpoint from delegatee address', async () => {
+      await delegateRegistry
+        .connect(PROVIDER)
+        .delegateContract(OWNER, providerRegistry, await providerRegistry.DELEGATION_RULES_PROVIDER(), true);
+
+      await expect(providerRegistry.connect(OWNER)['providerUpdateEndpoint(address,string)'](PROVIDER, 'delegate.endpoint.com:443'))
+        .to.emit(providerRegistry, 'ProviderEndpointUpdated')
+        .withArgs(PROVIDER.address, 'delegate.endpoint.com:443');
+
+      const data = await providerRegistry.getProvider(PROVIDER);
+      expect(data.endpoint).to.eq('delegate.endpoint.com:443');
+    });
+
+    it('should throw error when provider does not exist', async () => {
+      await expect(
+        providerRegistry.connect(OWNER)['providerUpdateEndpoint(address,string)'](OWNER, 'notfound.com'),
+      ).to.be.revertedWithCustomError(providerRegistry, 'ProviderNotFound');
+    });
+
+    it('should throw error when provider is deregistered', async () => {
+      await setNextTime(301 + YEAR);
+      await providerRegistry.connect(PROVIDER).providerDeregister(PROVIDER);
+
+      await expect(
+        providerRegistry.connect(PROVIDER)['providerUpdateEndpoint(address,string)'](PROVIDER, 'deregistered.com'),
+      ).to.be.revertedWithCustomError(providerRegistry, 'ProviderNotFound');
+    });
+
+    it('should throw error when caller has insufficient rights', async () => {
+      await expect(
+        providerRegistry.connect(OWNER)['providerUpdateEndpoint(address,string)'](PROVIDER, 'unauthorized.com'),
+      ).to.be.revertedWithCustomError(providerRegistry, 'InsufficientRightsForOperation');
+    });
+
+    it('should throw error when endpoint is empty', async () => {
+      await expect(
+        providerRegistry.connect(PROVIDER)['providerUpdateEndpoint(address,string)'](PROVIDER, ''),
+      ).to.be.revertedWithCustomError(providerRegistry, 'ProviderEndpointEmpty');
+    });
+
+    it('should throw error when endpoint is too long (> 256 bytes)', async () => {
+      const longEndpoint = 'a'.repeat(257);
+      await expect(
+        providerRegistry.connect(PROVIDER)['providerUpdateEndpoint(address,string)'](PROVIDER, longEndpoint),
+      ).to.be.revertedWithCustomError(providerRegistry, 'ProviderEndpointTooLong');
+    });
+  });
 });
 
 // npm run generate-types && npx hardhat test "test/diamond/facets/ProviderRegistry.test.ts"
