@@ -189,6 +189,34 @@ contract SessionRouter is
         return (amount_ * getComputeBalance(timestamp_)) / (totalMorSupply_ * 100);
     }
 
+    /**
+     * @notice Returns session duration, stipend and pricing quote for given inputs (RFP H2).
+     */
+    function quoteSession(
+        bytes32 bidId_,
+        uint256 amount_,
+        bool isDirectPaymentFromUser_
+    ) external view returns (
+        uint256 stipend,
+        uint128 durationSeconds,
+        uint128 endsAt,
+        uint256 pricePerSecond,
+        bytes32 modelId,
+        address provider
+    ) {
+        if (!isBidActive(bidId_)) {
+            revert SessionBidNotFound();
+        }
+
+        Bid storage bid = _getBidsStorage().bids[bidId_];
+        stipend = stakeToStipend(amount_, uint128(block.timestamp));
+        endsAt = getSessionEnd(amount_, bid.pricePerSecond, uint128(block.timestamp));
+        durationSeconds = endsAt - uint128(block.timestamp);
+        pricePerSecond = bid.pricePerSecond;
+        modelId = bid.modelId;
+        provider = bid.provider;
+    }
+
     function _extractProviderApproval(bytes calldata providerApproval_) private view returns (bytes32) {
         (bytes32 bidId_, uint256 chainId_, , uint128 timestamp_) = abi.decode(
             providerApproval_,

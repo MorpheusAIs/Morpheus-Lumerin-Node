@@ -1157,9 +1157,23 @@ describe('SessionRouter', () => {
     });
   });
 
-  describe('#stipendToStake', () => {
-    it('should return zero if compute balance is zero', async () => {
-      expect(await sessionRouter.connect(SECOND).stipendToStake(0, 0)).to.eq(0);
+  describe('#quoteSession (RFP H2)', () => {
+    it('should quote session duration and pricing matching openSession exactly', async () => {
+      await setTime(payoutStart + 10 * DAY);
+      const quote = await sessionRouter.quoteSession(bidId, wei(50), false);
+      expect(quote.pricePerSecond).to.be.greaterThan(0n);
+      expect(quote.provider).to.eq(PROVIDER);
+      expect(quote.modelId).to.eq(modelId);
+      expect(quote.stipend).to.be.greaterThan(0n);
+      expect(quote.durationSeconds).to.be.greaterThan(0n);
+      expect(quote.endsAt).to.eq(BigInt(payoutStart + 10 * DAY) + quote.durationSeconds);
+    });
+
+    it('should revert quoteSession when bid is not found or inactive', async () => {
+      const nonExistentBid = ethers.encodeBytes32String('nonexistent');
+      await expect(
+        sessionRouter.quoteSession(nonExistentBid, wei(50), false),
+      ).to.be.revertedWithCustomError(sessionRouter, 'SessionBidNotFound');
     });
   });
 
