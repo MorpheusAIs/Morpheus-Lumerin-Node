@@ -11,6 +11,7 @@ interface IModelRegistry is IModelStorage {
     error ModelHasAlreadyDeregistered();
     error ModelNotFound();
     error ModelHasActiveBids();
+    error ModelFeeNotSupportedYet();
 
     /**
      * The function to initialize the facet.
@@ -28,7 +29,7 @@ interface IModelRegistry is IModelStorage {
      * @param modelOwner_ The model owner address.
      * @param modelId_ The model ID.
      * @param ipfsCID_ The model IPFS CID.
-     * @param fee_ The model fee.
+     * @param fee_ The model fee (must be 0 until settlement royalties are supported).
      * @param amount_ The model stake amount.
      * @param name_ The model name.
      * @param tags_ The model tags.
