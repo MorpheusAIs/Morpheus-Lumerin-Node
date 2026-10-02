@@ -33,8 +33,23 @@ contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, B
         uint256 amount_,
         string calldata name_,
         string[] memory tags_
-    ) external {
         _validateDelegatee(_msgSender(), modelOwner_, DELEGATION_RULES_MODEL);
+
+        uint256 nameLen_ = bytes(name_).length;
+        if (nameLen_ == 0) {
+            revert ModelNameEmpty();
+        }
+        if (nameLen_ > 64) {
+            revert ModelNameTooLong();
+        }
+        if (tags_.length > 10) {
+            revert ModelTooManyTags();
+        }
+        for (uint256 i = 0; i < tags_.length; i++) {
+            if (bytes(tags_[i]).length > 32) {
+                revert ModelTagTooLong();
+            }
+        }
 
         ModelsStorage storage modelsStorage = _getModelsStorage();
 

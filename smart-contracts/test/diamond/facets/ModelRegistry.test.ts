@@ -223,6 +223,27 @@ describe('ModelRegistry', () => {
         modelRegistry.connect(SECOND).modelRegister(SECOND, baseModelId, ipfsCID, 0, wei(1), 'name', ['tag_1']),
       ).to.be.revertedWithCustomError(modelRegistry, 'ModelStakeTooLow');
     });
+    it('should revert when name is empty or too long (RFP L4)', async () => {
+      await expect(
+        modelRegistry.connect(SECOND).modelRegister(SECOND, baseModelId, ipfsCID, 0, wei(100), '', ['tag_1']),
+      ).to.be.revertedWithCustomError(diamond, 'ModelNameEmpty');
+
+      const tooLongName = 'a'.repeat(65);
+      await expect(
+        modelRegistry.connect(SECOND).modelRegister(SECOND, baseModelId, ipfsCID, 0, wei(100), tooLongName, ['tag_1']),
+      ).to.be.revertedWithCustomError(diamond, 'ModelNameTooLong');
+    });
+    it('should revert when tags count or length exceed limit (RFP L4)', async () => {
+      const tooManyTags = Array(11).fill('tag');
+      await expect(
+        modelRegistry.connect(SECOND).modelRegister(SECOND, baseModelId, ipfsCID, 0, wei(100), 'name', tooManyTags),
+      ).to.be.revertedWithCustomError(diamond, 'ModelTooManyTags');
+
+      const tooLongTag = ['b'.repeat(33)];
+      await expect(
+        modelRegistry.connect(SECOND).modelRegister(SECOND, baseModelId, ipfsCID, 0, wei(100), 'name', tooLongTag),
+      ).to.be.revertedWithCustomError(diamond, 'ModelTagTooLong');
+    });
     it('should throw error when register the model without delegation or with incorrect rules', async () => {
       await expect(
         modelRegistry.connect(OWNER).modelRegister(SECOND, baseModelId, ipfsCID, 0, wei(100), 'name', ['tag_1']),
