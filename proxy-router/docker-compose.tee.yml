@@ -17,9 +17,6 @@ services:
     networks:
       - traefik
   traefik:
-    # Routing is declared statically via the file provider below. SecretVM
-    # rejects a docker.sock bind (breaks VM isolation), so the Docker provider
-    # and service labels are not used.
     image: traefik:v2.10
     command:
       - --api.insecure=false
