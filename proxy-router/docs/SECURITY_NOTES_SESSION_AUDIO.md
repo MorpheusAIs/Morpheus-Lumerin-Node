@@ -19,7 +19,14 @@
   contract provider's record legitimately holds the owner's key under the
   contract address after the caller validated it against the resolved signer.
 - Session expiry uses server time (`sessionExpiredByServerTime`); the client
-  timestamp is not used for expiry.
+  timestamp is not used for expiry. The expiry gate applies to inference
+  (`session.prompt`, `session.prompt.stream.*`) only. `session.report` is
+  intentionally **not** expiry-gated: the consumer's auto-closer runs after
+  `EndsAt` and asks for this report first; refusing it forces a user-signed
+  receipt, which the contract records as a dispute against the provider
+  (success count and stats not updated). Stale receipts are already rejected
+  on-chain (`SIGNATURE_TTL`), a session cannot be closed twice, and the
+  provider/signer binding below still gates who can obtain a report.
 - A session is only usable on the provider it was opened with. `isSessionValid`
   (prompt/stream) checks the on-chain `ProviderAddr()`; `session.report` checks
   the cached session's `ProviderAddr`. The check (`servesProvider`) accepts the

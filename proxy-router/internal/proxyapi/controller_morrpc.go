@@ -295,11 +295,13 @@ func (s *MORRPCController) sessionReport(ctx context.Context, msg m.RPCMessage, 
 		sourceLog.Error(err)
 		return err
 	}
-	if session.EndsAt != nil && sessionExpiredByServerTime(session.EndsAt.Uint64(), uint64(time.Now().UnixMilli())) {
-		err := fmt.Errorf("session expired")
-		sourceLog.Error(err)
-		return err
-	}
+	// Deliberately no expiry gate here. The consumer's auto-closer only runs
+	// after EndsAt, and CloseSession asks for this report first; refusing it
+	// forces a user-signed receipt, which the contract records as a dispute
+	// against the provider. Stale receipts are already rejected on-chain
+	// (SIGNATURE_TTL) and the session cannot be closed twice. Provider and
+	// signer binding below still fully gate who can obtain a report.
+	//
 	// Same provider binding as prompt/stream (isSessionValid); fail closed on
 	// a missing or foreign provider address.
 	if !s.servesProvider(ctx, common.HexToAddress(session.ProviderAddr)) {
