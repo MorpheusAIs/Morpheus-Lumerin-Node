@@ -103,4 +103,26 @@ contract ProviderRegistry is IProviderRegistry, OwnableDiamondStorage, ProviderS
 
         return provider.stake - provider.limitPeriodEarned;
     }
+
+    /**
+     * @notice Returns provider earnings status and reward capacity for current limiter period (RFP M6).
+     */
+    function getProviderEarningsStatus(address provider_) external view returns (
+        uint256 stake,
+        uint256 earnedThisPeriod,
+        uint256 remainingCapacity,
+        uint128 periodEnd
+    ) {
+        Provider storage provider = _getProvidersStorage().providers[provider_];
+        stake = provider.stake;
+        if (block.timestamp > provider.limitPeriodEnd) {
+            earnedThisPeriod = 0;
+            remainingCapacity = stake;
+            periodEnd = provider.limitPeriodEnd;
+        } else {
+            earnedThisPeriod = provider.limitPeriodEarned;
+            remainingCapacity = stake > earnedThisPeriod ? stake - earnedThisPeriod : 0;
+            periodEnd = provider.limitPeriodEnd;
+        }
+    }
 }
