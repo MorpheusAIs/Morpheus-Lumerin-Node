@@ -692,6 +692,17 @@ jobs:
         run: |
           TEE_IMAGE="${{ needs.Generate-Tag.outputs.image_name }}-tee"
           DIGEST=${{ steps.capture-digest.outputs.digest }}
+
+          # SecretVM strips comment-only lines from the compose before measuring
+          # it into RTMR3, but compute-rtmr3.py hashes the file verbatim. Any
+          # '#' comment line therefore makes the published golden RTMR3 differ
+          # from what the VM actually attests, and every consumer refuses the
+          # provider with "register mismatch". Keep the measured file comment-free;
+          # explain things in git history or docs, not inside this file.
+          if grep -nE '^[[:space:]]*#' proxy-router/docker-compose.tee.yml; then
+            echo "::error::proxy-router/docker-compose.tee.yml contains comment lines; SecretVM strips them before measuring RTMR3, so the golden value would not match the VM. Remove the comments."
+            exit 1
+          fi
           
           sed "s|image: ghcr.io/morpheusais/morpheus-lumerin-node-tee:.*|image: ${TEE_IMAGE}@${DIGEST}|" \
             proxy-router/docker-compose.tee.yml > /tmp/docker-compose.tee.deployed.yml
