@@ -109,9 +109,12 @@ var stackBindings = map[string]bindingSet{
 	},
 
 	// https://docs.venice.ai/api-reference/endpoint/chat/completions
+	// Effort uses the reasoning object: LiteLLM validates a top-level
+	// reasoning_effort against its provider map and rejects it for openai/
+	// deployments, while it forwards reasoning{...} untouched.
 	"venice": {
 		system.IntentReasoningDisable:          {Kind: bodyParam, Param: "venice_parameters.disable_thinking", ParamType: "boolean", Value: true, Hint: "adds /no_think and strips the thinking block"},
-		system.IntentReasoningEffort:           {Kind: bodyParam, Param: "reasoning_effort", ParamType: "enum", EnumValues: []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}, Hint: "top-level takes precedence over reasoning.effort"},
+		system.IntentReasoningEffort:           {Kind: bodyParam, Param: "reasoning.effort", ParamType: "enum", EnumValues: []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}, Hint: "per-model levels in the venice listing (reasoningEffortOptions); top-level reasoning_effort is equivalent but LiteLLM rejects it"},
 		system.IntentReasoningFormat:           {Kind: bodyParam, Param: "venice_parameters.strip_thinking_response", ParamType: "boolean", Hint: "true suppresses <think> blocks server-side"},
 		system.IntentSamplingTopK:              {Kind: bodyParam, Param: "top_k", ParamType: "number", Hint: "integer >= 0"},
 		system.IntentSamplingMinP:              {Kind: bodyParam, Param: "min_p", ParamType: "number", Hint: "[0,1]"},

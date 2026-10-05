@@ -8,7 +8,33 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 )
 
-// Ordered: first match wins.
+// Hubs and vendors spell one model differently (Kimi-K2.7-Code,
+// kimi-k2-7-code, kimi_k2_7_code, "Kimi K2.7 Code"), so every name rule
+// matches the normalized spelling: lowercase, with ".", "_" and spaces as "-".
+var modelNameSeparators = strings.NewReplacer(".", "-", "_", "-", " ", "-")
+
+func normalizeModelName(name string) string {
+	return modelNameSeparators.Replace(strings.ToLower(strings.TrimSpace(name)))
+}
+
+// A "thinking" token names a reasoning checkpoint (Qwen3-…-Thinking-2507,
+// Kimi-K2-Thinking, glm-4.7-thinking). It says the model reasons, not that it
+// cannot stop: whether it can is up to the backend. "non-thinking" listings
+// name the opposite and do not count.
+var (
+	thinkingTokenRe   = regexp.MustCompile(`(?:^|[^a-z0-9])thinking(?:[^a-z0-9]|$)`)
+	negatedThinkingRe = regexp.MustCompile(`(?:^|[^a-z0-9])(?:non|no)-thinking(?:[^a-z0-9]|$)`)
+)
+
+func thinkingNamed(name string) bool {
+	n := normalizeModelName(name)
+	if n == "" {
+		return false
+	}
+	return thinkingTokenRe.MatchString(negatedThinkingRe.ReplaceAllString(n, "-"))
+}
+
+// Ordered: first match wins. Substrings are in normalized spelling.
 type familyRule struct {
 	substr string
 	family string
@@ -19,12 +45,9 @@ var familyRules = []familyRule{
 	{"qwen3", "qwen3"},
 	{"qwen2", "qwen2.5"},
 	{"deepseek-r1", "deepseek-r1"},
-	{"deepseek_r1", "deepseek-r1"},
 	{"deepseek-reasoner", "deepseek-r1"},
-	{"deepseek-v3.1", "deepseek-v3.1"},
 	{"deepseek-v3-1", "deepseek-v3.1"},
-	{"deepseek_v3.1", "deepseek-v3.1"},
-	{"deepseek-chat-v3.1", "deepseek-v3.1"},
+	{"deepseek-chat-v3-1", "deepseek-v3.1"},
 	{"deepseek", "deepseek"},
 	{"chatglm", "glm"},
 	{"glm", "glm"},
@@ -64,7 +87,7 @@ var knownFamilies = func() map[string]bool {
 }()
 
 func FamilyFromName(name string) string {
-	n := strings.ToLower(strings.TrimSpace(name))
+	n := normalizeModelName(name)
 	if n == "" {
 		return ""
 	}
@@ -111,10 +134,6 @@ func budgetKwargBindings() bindingSet {
 }
 
 func bindingsForFamily(family, modelName string) (alwaysOn bool, b bindingSet) {
-	if strings.Contains(strings.ToLower(modelName), "thinking") {
-		return true, nil
-	}
-
 	switch family {
 	case "qwen3", "glm", "hunyuan":
 		return false, kwargBoolBindings("enable_thinking")
@@ -155,8 +174,9 @@ func bindingsForFamily(family, modelName string) (alwaysOn bool, b bindingSet) {
 	return false, nil
 }
 
+// subs are in normalized spelling.
 func containsAny(name string, subs ...string) bool {
-	n := strings.ToLower(name)
+	n := normalizeModelName(name)
 	for _, sub := range subs {
 		if strings.Contains(n, sub) {
 			return true
@@ -170,10 +190,10 @@ func containsAny(name string, subs ...string) bool {
 // thinking mode: https://ai.google.dev/gemma/docs/core/model_card_3.
 // gemma4Re must not match a 4B size token: google/medgemma-4b-it is Gemma 3
 // based (https://huggingface.co/google/medgemma-4b-it).
-var gemma4Re = regexp.MustCompile(`gemma[-_]?4(?:[-_:.]|$)`)
+var gemma4Re = regexp.MustCompile(`gemma-?4(?:[-:]|$)`)
 
 func gemmaBindings(modelName string) (alwaysOn bool, b bindingSet) {
-	if gemma4Re.MatchString(strings.ToLower(modelName)) {
+	if gemma4Re.MatchString(normalizeModelName(modelName)) {
 		return false, kwargBoolBindings("enable_thinking")
 	}
 	return false, nil
@@ -185,11 +205,11 @@ func gemmaBindings(modelName string) (alwaysOn bool, b bindingSet) {
 // https://huggingface.co/moonshotai/Kimi-K2-Instruct (no thinking mode)
 func kimiBindings(modelName string) (alwaysOn bool, b bindingSet) {
 	switch {
-	case containsAny(modelName, "kimi-k3", "kimi_k3"):
+	case containsAny(modelName, "kimi-k3"):
 		return true, nil
-	case containsAny(modelName, "k2.7-code"):
+	case containsAny(modelName, "k2-7-code"):
 		return true, nil
-	case containsAny(modelName, "k2.5", "k2.6"):
+	case containsAny(modelName, "k2-5", "k2-6"):
 		return false, kwargBoolBindings("thinking")
 	}
 	return false, nil
@@ -221,7 +241,7 @@ func exaoneBindings(modelName string) (alwaysOn bool, b bindingSet) {
 	switch {
 	case containsAny(modelName, "exaone-deep"):
 		return true, nil
-	case containsAny(modelName, "exaone-4", "exaone4", "exaone_4"):
+	case containsAny(modelName, "exaone-4", "exaone4"):
 		return false, kwargBoolBindings("enable_thinking")
 	}
 	return false, nil

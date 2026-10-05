@@ -469,6 +469,16 @@ func (d *Detector) probeRegistryShape(ctx context.Context, bases []string, model
 					ev.GatewayReasoning = true
 					tracef(ctx, "venice listing reports supportsReasoning")
 				}
+				if options, ok := caps["reasoningEffortOptions"].([]any); ok {
+					for _, o := range options {
+						if s, ok := o.(string); ok {
+							ev.RegistryEfforts = append(ev.RegistryEfforts, s)
+						}
+					}
+					if len(ev.RegistryEfforts) > 0 {
+						tracef(ctx, "venice listing offers reasoning efforts %s", tracedKeys(ev.RegistryEfforts))
+					}
+				}
 			}
 			return
 		}
