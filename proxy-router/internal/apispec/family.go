@@ -8,7 +8,59 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 )
 
-// Ordered: first match wins.
+// Hubs and vendors spell one model differently (Kimi-K2.7-Code,
+// kimi-k2-7-code, kimi_k2_7_code, "Kimi K2.7 Code", Vertex AI's
+// claude-sonnet-4-5@20250929), so every name rule matches the normalized
+// spelling: lowercase, with ".", "_", "@" and spaces as "-". Venice's inline
+// request parameters (llama-3.3-70b:strip_thinking_response=true) name no
+// model and are dropped.
+var modelNameSeparators = strings.NewReplacer(".", "-", "_", "-", "@", "-", " ", "-")
+
+func normalizeModelName(name string) string {
+	return modelNameSeparators.Replace(strings.ToLower(strings.TrimSpace(withoutInlineParams(name))))
+}
+
+// NormalizeModelName is the spelling every name rule matches, for callers
+// that compare names the same way.
+func NormalizeModelName(name string) string {
+	return normalizeModelName(name)
+}
+
+// Same rule as the detector's bare model id: a ":" segment with "=" is a
+// parameter, an Ollama tag ("qwen3:8b") has none.
+func withoutInlineParams(name string) string {
+	if !strings.Contains(name, "=") {
+		return name
+	}
+	parts := strings.Split(name, ":")
+	kept := make([]string, 1, len(parts))
+	kept[0] = parts[0]
+	for _, p := range parts[1:] {
+		if !strings.Contains(p, "=") {
+			kept = append(kept, p)
+		}
+	}
+	return strings.Join(kept, ":")
+}
+
+// A "thinking" token names a reasoning checkpoint (Qwen3-…-Thinking-2507,
+// Kimi-K2-Thinking, glm-4.7-thinking). It says the model reasons, not that it
+// cannot stop: whether it can is up to the backend. "non-thinking" listings
+// name the opposite and do not count.
+var (
+	thinkingTokenRe   = regexp.MustCompile(`(?:^|[^a-z0-9])thinking(?:[^a-z0-9]|$)`)
+	negatedThinkingRe = regexp.MustCompile(`(?:^|[^a-z0-9])(?:non|no)-thinking(?:[^a-z0-9]|$)`)
+)
+
+func thinkingNamed(name string) bool {
+	n := normalizeModelName(name)
+	if n == "" {
+		return false
+	}
+	return thinkingTokenRe.MatchString(negatedThinkingRe.ReplaceAllString(n, "-"))
+}
+
+// Ordered: first match wins. Substrings are in normalized spelling.
 type familyRule struct {
 	substr string
 	family string
@@ -19,12 +71,9 @@ var familyRules = []familyRule{
 	{"qwen3", "qwen3"},
 	{"qwen2", "qwen2.5"},
 	{"deepseek-r1", "deepseek-r1"},
-	{"deepseek_r1", "deepseek-r1"},
 	{"deepseek-reasoner", "deepseek-r1"},
-	{"deepseek-v3.1", "deepseek-v3.1"},
 	{"deepseek-v3-1", "deepseek-v3.1"},
-	{"deepseek_v3.1", "deepseek-v3.1"},
-	{"deepseek-chat-v3.1", "deepseek-v3.1"},
+	{"deepseek-chat-v3-1", "deepseek-v3.1"},
 	{"deepseek", "deepseek"},
 	{"chatglm", "glm"},
 	{"glm", "glm"},
@@ -64,7 +113,7 @@ var knownFamilies = func() map[string]bool {
 }()
 
 func FamilyFromName(name string) string {
-	n := strings.ToLower(strings.TrimSpace(name))
+	n := normalizeModelName(name)
 	if n == "" {
 		return ""
 	}
@@ -111,10 +160,6 @@ func budgetKwargBindings() bindingSet {
 }
 
 func bindingsForFamily(family, modelName string) (alwaysOn bool, b bindingSet) {
-	if strings.Contains(strings.ToLower(modelName), "thinking") {
-		return true, nil
-	}
-
 	switch family {
 	case "qwen3", "glm", "hunyuan":
 		return false, kwargBoolBindings("enable_thinking")
@@ -155,11 +200,32 @@ func bindingsForFamily(family, modelName string) (alwaysOn bool, b bindingSet) {
 	return false, nil
 }
 
+// subs are in normalized spelling.
 func containsAny(name string, subs ...string) bool {
-	n := strings.ToLower(name)
+	n := normalizeModelName(name)
 	for _, sub := range subs {
 		if strings.Contains(n, sub) {
 			return true
+		}
+	}
+	return false
+}
+
+// containsVersion is containsAny for version tokens: a match followed by a
+// digit is a longer number (k2-5 must not match k2-50b), so it does not count.
+func containsVersion(name string, subs ...string) bool {
+	n := normalizeModelName(name)
+	for _, sub := range subs {
+		for from := 0; ; {
+			i := strings.Index(n[from:], sub)
+			if i < 0 {
+				break
+			}
+			end := from + i + len(sub)
+			if end == len(n) || n[end] < '0' || n[end] > '9' {
+				return true
+			}
+			from += i + 1
 		}
 	}
 	return false
@@ -170,10 +236,10 @@ func containsAny(name string, subs ...string) bool {
 // thinking mode: https://ai.google.dev/gemma/docs/core/model_card_3.
 // gemma4Re must not match a 4B size token: google/medgemma-4b-it is Gemma 3
 // based (https://huggingface.co/google/medgemma-4b-it).
-var gemma4Re = regexp.MustCompile(`gemma[-_]?4(?:[-_:.]|$)`)
+var gemma4Re = regexp.MustCompile(`gemma-?4(?:[-:]|$)`)
 
 func gemmaBindings(modelName string) (alwaysOn bool, b bindingSet) {
-	if gemma4Re.MatchString(strings.ToLower(modelName)) {
+	if gemma4Re.MatchString(normalizeModelName(modelName)) {
 		return false, kwargBoolBindings("enable_thinking")
 	}
 	return false, nil
@@ -185,11 +251,11 @@ func gemmaBindings(modelName string) (alwaysOn bool, b bindingSet) {
 // https://huggingface.co/moonshotai/Kimi-K2-Instruct (no thinking mode)
 func kimiBindings(modelName string) (alwaysOn bool, b bindingSet) {
 	switch {
-	case containsAny(modelName, "kimi-k3", "kimi_k3"):
+	case containsAny(modelName, "kimi-k3"):
 		return true, nil
-	case containsAny(modelName, "k2.7-code"):
+	case containsAny(modelName, "k2-7-code"):
 		return true, nil
-	case containsAny(modelName, "k2.5", "k2.6"):
+	case containsVersion(modelName, "k2-5", "k2-6"):
 		return false, kwargBoolBindings("thinking")
 	}
 	return false, nil
@@ -221,7 +287,7 @@ func exaoneBindings(modelName string) (alwaysOn bool, b bindingSet) {
 	switch {
 	case containsAny(modelName, "exaone-deep"):
 		return true, nil
-	case containsAny(modelName, "exaone-4", "exaone4", "exaone_4"):
+	case containsVersion(modelName, "exaone-4", "exaone4"):
 		return false, kwargBoolBindings("enable_thinking")
 	}
 	return false, nil
@@ -254,7 +320,7 @@ func claudeVersion(name string) (major, minor int, ok bool) {
 // https://platform.claude.com/docs/en/build-with-claude/thinking
 // https://platform.claude.com/docs/en/build-with-claude/effort
 func claudeBindings(modelName string) (alwaysOn bool, b bindingSet) {
-	name := strings.ToLower(modelName)
+	name := normalizeModelName(modelName)
 	disable := &system.ParamBinding{Kind: system.BindingKindBodyParam, Param: "thinking", ParamType: "object", Value: map[string]any{"type": "disabled"}}
 	effortAll := &system.ParamBinding{Kind: system.BindingKindBodyParam, Param: "output_config.effort", ParamType: "enum", EnumValues: []string{"low", "medium", "high", "xhigh", "max"}, Hint: "xhigh/max availability varies per model"}
 	enabledWithBudget := &system.ParamBinding{Kind: system.BindingKindBodyParam, Param: "thinking", ParamType: "object", Value: map[string]any{"type": "enabled", "budget_tokens": 1024}, Hint: "budget_tokens >= 1024 and below max_tokens"}

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -364,13 +365,42 @@ func (d *Detector) probeVLLM(ctx context.Context, base, modelName, apiKey string
 	if list := d.getJSON(ctx, base+"/v1/models", apiKey); list != nil {
 		if data, ok := list["data"].([]any); ok {
 			if entry := matchModelEntry(data, modelName); entry != nil {
-				if id, ok := entry["id"].(string); ok {
-					ev.ServedModelID = id
-				}
+				id, _ := entry["id"].(string)
+				root, _ := entry["root"].(string)
+				ev.ServedModelID = vllmWeightsName(ctx, id, root)
 			}
 		}
 	}
 	return true
+}
+
+// vLLM's id is --served-model-name, which must equal the configured
+// modelName, so it is the operator's label; root is the --model it loaded.
+// A hub id (org/name) names the published weights and wins. A local path is
+// the operator's choice as much as the label, so it wins only when it names a
+// known family and says more than the label: /models/qwen3-235b under the
+// label qwen3-235b-a22b-thinking-2507 does not. Only root's last segment is
+// kept, so no directory reaches the trace.
+func vllmWeightsName(ctx context.Context, id, root string) string {
+	if root == "" || strings.EqualFold(root, id) {
+		return id
+	}
+	weights := path.Base(strings.TrimRight(root, "/"))
+	switch {
+	case weights == "." || weights == "/" || apispec.FamilyFromName(weights) == "":
+		tracef(ctx, "vllm serves %q from weights whose name maps to no known family; the served name stands", id)
+		return id
+	case localPath(root) && strings.Contains(apispec.NormalizeModelName(id), apispec.NormalizeModelName(weights)):
+		tracef(ctx, "vllm serves %q from local weights %q, which say no more than the served name; the served name stands", id, weights)
+		return id
+	}
+	tracef(ctx, "vllm serves %q from weights %q; the weights name the model", id, weights)
+	return weights
+}
+
+// A hub id is exactly org/name; anything else vLLM was given is a path.
+func localPath(root string) bool {
+	return strings.HasPrefix(root, "/") || strings.HasPrefix(root, ".") || strings.HasPrefix(root, "~") || strings.Count(root, "/") != 1
 }
 
 func matchModelEntry(data []any, modelName string) map[string]any {
@@ -468,6 +498,27 @@ func (d *Detector) probeRegistryShape(ctx context.Context, bases []string, model
 				if reasons, ok := caps["supportsReasoning"].(bool); ok && reasons {
 					ev.GatewayReasoning = true
 					tracef(ctx, "venice listing reports supportsReasoning")
+				}
+				// supportsReasoningEffort says whether the model takes an effort
+				// level at all; the levels count only when it does.
+				options, _ := caps["reasoningEffortOptions"].([]any)
+				takesEffort, flagged := caps["supportsReasoningEffort"].(bool)
+				switch {
+				case takesEffort:
+					for _, o := range options {
+						if s, ok := o.(string); ok {
+							ev.RegistryEfforts = append(ev.RegistryEfforts, s)
+						}
+					}
+					if len(ev.RegistryEfforts) > 0 {
+						tracef(ctx, "venice listing offers reasoning efforts %s", tracedKeys(ev.RegistryEfforts))
+					}
+				case flagged:
+					ev.NoEffort = true
+					tracef(ctx, "venice listing reports supportsReasoningEffort false: the model takes no effort level")
+				}
+				if !takesEffort && len(options) > 0 {
+					tracef(ctx, "venice listing names reasoning effort levels but not supportsReasoningEffort; levels ignored")
 				}
 			}
 			return

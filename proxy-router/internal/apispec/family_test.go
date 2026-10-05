@@ -51,8 +51,8 @@ func TestBindingsForFamilyDefaults(t *testing.T) {
 	require.Equal(t, true, b[system.IntentReasoningEnable].Value)
 
 	alwaysOn, b := bindingsForFamily("qwen3", "qwen3-235b-thinking-2507")
-	require.True(t, alwaysOn)
-	require.Empty(t, b)
+	require.False(t, alwaysOn, "a thinking token is not an always-on fact; Compose decides the toggle")
+	require.NotNil(t, b[system.IntentReasoningDisable])
 
 	for _, f := range []string{"qwq", "deepseek-r1"} {
 		alwaysOn, _ := bindingsForFamily(f, "m")

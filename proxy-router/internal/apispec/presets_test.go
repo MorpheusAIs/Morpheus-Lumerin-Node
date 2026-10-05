@@ -172,11 +172,11 @@ func TestBindingsForFamilyKimi(t *testing.T) {
 	requireNoReasoning(t, "kimi", "Kimi-K2-Instruct")
 	requireNoReasoning(t, "kimi", "moonshotai/Kimi-K2-Instruct-0905")
 	requireNoReasoning(t, "kimi", "kimi")
-	requireAlwaysOn(t, "kimi", "Kimi-K2-Thinking")
-	requireAlwaysOn(t, "kimi", "moonshotai/Kimi-K2.7-Code")
-	requireAlwaysOn(t, "kimi", "moonshotai/Kimi-K3")
-	requireAlwaysOn(t, "kimi", "kimi_k3")
-	for _, name := range []string{"Kimi-K2.5", "moonshotai/Kimi-K2.6"} {
+	requireNoReasoning(t, "kimi", "Kimi-K2-Thinking")
+	for _, name := range []string{"moonshotai/Kimi-K2.7-Code", "kimi-k2-7-code", "kimi_k2_7_code", "Kimi K2.7 Code", "moonshotai/Kimi-K3", "kimi_k3", "Kimi K3"} {
+		requireAlwaysOn(t, "kimi", name)
+	}
+	for _, name := range []string{"Kimi-K2.5", "moonshotai/Kimi-K2.6", "kimi-k2-5", "kimi-k2-6", "kimi_k2_6", "Kimi K2.6"} {
 		alwaysOn, b := bindingsForFamily("kimi", name)
 		require.False(t, alwaysOn, name)
 		requireKwargBool(t, b, "thinking", name)
@@ -248,7 +248,7 @@ func TestMergeStackBindingsFillsMissingIntentsOnly(t *testing.T) {
 	established := bindingSet{
 		system.IntentReasoningDisable: {Kind: system.BindingKindTemplateKwarg, Param: "chat_template_kwargs.enable_thinking", ParamType: "boolean", Value: false},
 	}
-	mergeStackTables(api, "teststack", established, true, false)
+	mergeStackTables(api, "teststack", established, true, false, false)
 
 	require.Equal(t, "chat_template_kwargs.enable_thinking", api.Bindings[system.IntentReasoningDisable].Param)
 	require.Equal(t, "top_k", api.Bindings[system.IntentSamplingTopK].Param)
@@ -263,13 +263,13 @@ func TestMergeStackTablesKeepsRegistryParameters(t *testing.T) {
 	withStackTable(t, "teststack", nil, []string{"temperature"})
 
 	api := &system.ModelApiSpec{Stack: "teststack", Parameters: []string{"tools", "reasoning"}}
-	mergeStackTables(api, "teststack", nil, false, false)
+	mergeStackTables(api, "teststack", nil, false, false, false)
 	require.Equal(t, []string{"tools", "reasoning"}, api.Parameters)
 }
 
 func TestMergeStackTablesNoopForUnknownStack(t *testing.T) {
 	api := &system.ModelApiSpec{Stack: "", ModelFamily: "llama"}
-	mergeStackTables(api, "", nil, false, false)
+	mergeStackTables(api, "", nil, false, false, false)
 	require.Empty(t, api.Bindings)
 	require.Empty(t, api.Parameters)
 }
@@ -281,12 +281,12 @@ func TestMergeStackTablesGatesReasoningOnEvidence(t *testing.T) {
 	}, nil)
 
 	api := &system.ModelApiSpec{Stack: "teststack"}
-	mergeStackTables(api, "teststack", nil, false, false)
+	mergeStackTables(api, "teststack", nil, false, false, false)
 	require.Nil(t, api.Bindings[system.IntentReasoningBudget])
 	require.NotNil(t, api.Bindings[system.IntentSamplingTopK])
 
 	api = &system.ModelApiSpec{Stack: "teststack"}
-	mergeStackTables(api, "teststack", nil, true, false)
+	mergeStackTables(api, "teststack", nil, true, false, false)
 	require.NotNil(t, api.Bindings[system.IntentReasoningBudget])
 }
 
@@ -298,7 +298,7 @@ func TestMergeStackTablesAlwaysOnKeepsOnlyFormat(t *testing.T) {
 	}, nil)
 
 	api := &system.ModelApiSpec{Stack: "teststack"}
-	mergeStackTables(api, "teststack", nil, true, true)
+	mergeStackTables(api, "teststack", nil, true, true, false)
 	require.Nil(t, api.Bindings[system.IntentReasoningDisable])
 	require.Nil(t, api.Bindings[system.IntentReasoningEffort])
 	require.NotNil(t, api.Bindings[system.IntentReasoningFormat])

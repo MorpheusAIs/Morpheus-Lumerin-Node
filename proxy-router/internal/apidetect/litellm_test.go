@@ -204,7 +204,7 @@ func TestDetectLiteLLMTwoHopVeniceReasoning(t *testing.T) {
 	require.Equal(t, "qwen3", api.ModelFamily)
 	require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
 	require.Equal(t, "venice_parameters.disable_thinking", api.Bindings[system.IntentReasoningDisable].Param, "venice's knob: forwarded by litellm as a provider kwarg")
-	require.Equal(t, "reasoning_effort", api.Bindings[system.IntentReasoningEffort].Param, "listed in supported_openai_params")
+	require.Equal(t, "reasoning.effort", api.Bindings[system.IntentReasoningEffort].Param, "the reasoning object: forwarded by litellm as a provider kwarg")
 	require.Nil(t, api.Bindings[system.IntentReasoningEnable], "venice has no enable knob; litellm's is not borrowed")
 	require.Nil(t, api.Bindings[system.IntentReasoningBudget], "litellm's thinking.budget_tokens is not venice's")
 	require.Equal(t, "top_k", api.Bindings[system.IntentSamplingTopK].Param)
@@ -854,7 +854,7 @@ func requireSubset(t *testing.T, list, allowed []string) {
 }
 
 func TestDetectLiteLLMTwoHopIdentifiedUpstreamBecomesStack(t *testing.T) {
-	t.Run("venice, reasoning_effort not forwarded", func(t *testing.T) {
+	t.Run("venice, reasoning_effort not forwarded: effort uses the reasoning object", func(t *testing.T) {
 		venice, veniceLog := registryServerMulti(t, veniceEntry("deepseek-v4-pro", true), veniceEntry("llama-3.3-70b", false))
 		mapHostToVendor(t, venice.URL, "venice")
 		litellm, _ := litellmServer(t, liveGroup, []map[string]any{
@@ -873,7 +873,7 @@ func TestDetectLiteLLMTwoHopIdentifiedUpstreamBecomesStack(t *testing.T) {
 		require.Equal(t, "venice_parameters.disable_thinking", disable.Param)
 		require.Equal(t, true, disable.Value)
 		require.Equal(t, "venice_parameters.strip_thinking_response", api.Bindings[system.IntentReasoningFormat].Param)
-		require.Nil(t, api.Bindings[system.IntentReasoningEffort], "reasoning_effort is standard and not in supported_openai_params")
+		require.Equal(t, "reasoning.effort", api.Bindings[system.IntentReasoningEffort].Param, "not rooted at the standard reasoning_effort, so litellm forwards it")
 		requireNoReasoningEffortBinding(t, api)
 		require.Equal(t, "top_k", api.Bindings[system.IntentSamplingTopK].Param, "non-standard root: forwarded")
 		require.Equal(t, "response_format", api.Bindings[system.IntentResponseFormatJSON].Param, "standard root in the supported list")
@@ -889,7 +889,7 @@ func TestDetectLiteLLMTwoHopIdentifiedUpstreamBecomesStack(t *testing.T) {
 		require.NotContains(t, trace, "sk-litellm")
 		require.Contains(t, trace, "upstream venice listing reports reasoning support")
 		require.Contains(t, trace, "upstream venice identified: it becomes the stack (via litellm)")
-		require.Contains(t, trace, "bindings: reasoning.effort dropped — litellm does not forward reasoning_effort for this model")
+		require.NotContains(t, trace, "bindings: reasoning.effort dropped")
 		require.Contains(t, trace, "bindings: tools.parallel dropped — litellm does not forward parallel_tool_calls for this model")
 	})
 
@@ -904,8 +904,8 @@ func TestDetectLiteLLMTwoHopIdentifiedUpstreamBecomesStack(t *testing.T) {
 		require.Equal(t, "venice", api.Stack)
 		require.Equal(t, "litellm", api.Via)
 		effort := api.Bindings[system.IntentReasoningEffort]
-		require.NotNil(t, effort, "venice's reasoning.effort binding survives when LiteLLM forwards reasoning_effort")
-		require.Equal(t, "reasoning_effort", effort.Param)
+		require.NotNil(t, effort, "venice's reasoning.effort binding survives either way")
+		require.Equal(t, "reasoning.effort", effort.Param)
 		require.Equal(t, []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}, effort.EnumValues, "venice's documented enum")
 		require.Equal(t, "venice_parameters.disable_thinking", api.Bindings[system.IntentReasoningDisable].Param)
 		require.Contains(t, api.Parameters, "reasoning_effort")
@@ -1016,7 +1016,7 @@ func TestDetectLiteLLMTwoHopIdentifiedUpstreamBecomesStack(t *testing.T) {
 		require.Equal(t, "venice", api.Stack)
 		require.Equal(t, "litellm", api.Via)
 		require.Equal(t, "venice_parameters.disable_thinking", api.Bindings[system.IntentReasoningDisable].Param)
-		require.Nil(t, api.Bindings[system.IntentReasoningEffort])
+		require.Equal(t, "reasoning.effort", api.Bindings[system.IntentReasoningEffort].Param)
 		requireNoReasoningEffortBinding(t, api)
 		require.Equal(t, "response_format", api.Bindings[system.IntentResponseFormatJSON].Param, "kept: nothing says it is not forwarded")
 		require.Equal(t, "parallel_tool_calls", api.Bindings[system.IntentToolsParallel].Param)

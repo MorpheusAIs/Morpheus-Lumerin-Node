@@ -27,7 +27,14 @@ type Evidence struct {
 	RegistryBindings map[string]*system.ParamBinding
 	Parameters       []string
 	ReasoningEfforts []string
-	LiteLLMSeen      bool
+	// Effort levels the backend's own model listing offers for this model
+	// (Venice reasoningEffortOptions). "none" among them means the backend can
+	// turn reasoning off, whatever the family does on its own.
+	RegistryEfforts []string
+	// The backend's own listing says the model takes no effort level (Venice
+	// supportsReasoningEffort false).
+	NoEffort    bool
+	LiteLLMSeen bool
 	// nil means the list could not be read; an empty list is a known, empty list.
 	LiteLLMSupportedParams []string
 	Declared               bool
@@ -52,6 +59,7 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 
 	ev.Parameters = sanitizeNames(ev.Parameters, maxParameters, "parameters", tracef)
 	ev.ReasoningEfforts = sanitizeNames(ev.ReasoningEfforts, maxReasoningEfforts, "reasoning efforts", tracef)
+	ev.RegistryEfforts = sanitizeNames(ev.RegistryEfforts, maxReasoningEfforts, "listing reasoning efforts", tracef)
 	if ev.LiteLLMSupportedParams != nil {
 		// Keep it a known list: nil means unread.
 		supported := sanitizeNames(ev.LiteLLMSupportedParams, maxParameters, "litellm supported params", tracef)
@@ -95,6 +103,16 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 	if ev.ServedModelID != "" {
 		name = ev.ServedModelID
 	}
+	// The served id names the weights, an operator's label may not: only the
+	// former decides that a toggle is withheld, either counts as evidence.
+	thinkingCheckpoint := thinkingNamed(name)
+	thinkingName := thinkingCheckpoint || thinkingNamed(ev.ModelName)
+	switch {
+	case thinkingCheckpoint:
+		tracef("thinking: %q names a thinking checkpoint — it reasons; whether it can stop is up to the backend", name)
+	case thinkingName:
+		tracef("thinking: the configured name %q says the model reasons; the served id %q names no checkpoint, so its family's toggles stay", ev.ModelName, name)
+	}
 
 	alwaysOn := false
 	var bindings bindingSet
@@ -113,6 +131,8 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 		case fam != nil && fam[system.IntentReasoningDisable] == nil && fam[system.IntentReasoningEffort] != nil:
 			bindings = cloneSet(fam)
 			tracef("bindings: ollama reports the 'thinking' capability; family %q takes effort levels, not a toggle", family)
+		case thinkingCheckpoint:
+			tracef("bindings: ollama reports the 'thinking' capability; a thinking checkpoint may not stop, so no on/off toggle is assumed")
 		default:
 			bindings = ollamaThinkBindings()
 			tracef("bindings: ollama reports the 'thinking' capability -> /v1 reasoning_effort (none = off)")
@@ -132,10 +152,16 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 		var defaults bindingSet
 		alwaysOn, defaults = bindingsForFamily(family, name)
 		familyReasons = alwaysOn || len(defaults) > 0
+		if thinkingCheckpoint {
+			if kept := withoutTemplateToggles(defaults); len(kept) < len(defaults) {
+				defaults = kept
+				tracef("bindings: family %q on/off toggle from the chat template or system prompt not assumed — a thinking checkpoint's template may force its reasoning", family)
+			}
+		}
 		switch {
-		case defaults == nil && alwaysOn:
+		case len(defaults) == 0 && alwaysOn:
 			tracef("thinking: family %q (model %q) reasons unconditionally", family, name)
-		case defaults == nil:
+		case len(defaults) == 0:
 		case stack == "":
 			tracef("bindings: family default for %q skipped — stack undetermined (unknown wire vocabulary)", family)
 		case gatedStack(stack) && familyNativeVendor[family] != stack:
@@ -154,15 +180,22 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 		}
 	}
 
+	// Family always-on facts describe the weights; a backend that offers effort
+	// none for the model has its own off switch (Venice turns MiniMax-M2.7 off).
+	if alwaysOn && containsString(ev.RegistryEfforts, "none") {
+		alwaysOn = false
+		tracef("thinking: family %q reasons unconditionally, but the %s listing offers reasoning effort none — the backend turns it off itself", family, stack)
+	}
+
 	// A detected gateway may hide its upstream's knob, so family knowledge alone
 	// counts as reasoning evidence only for a declared stack.
-	reasoningKnown := alwaysOn || ev.GatewayReasoning || hasReasoningBindings(bindings) || (ev.Declared && familyReasons)
+	reasoningKnown := alwaysOn || thinkingName || ev.GatewayReasoning || len(ev.RegistryEfforts) > 0 || hasReasoningBindings(bindings) || (ev.Declared && familyReasons)
 	if len(ev.Parameters) > 0 {
 		api.Parameters = append([]string(nil), ev.Parameters...)
 		sort.Strings(api.Parameters)
 	}
 	before := len(bindings)
-	mergeStackTables(api, stack, bindings, reasoningKnown, alwaysOn)
+	mergeStackTables(api, stack, bindings, reasoningKnown, alwaysOn, len(ev.RegistryEfforts) > 0)
 	if added := len(api.Bindings) - before; added > 0 {
 		tracef("bindings: +%d from the %s stack table (documented request params)", added, stack)
 	}
@@ -202,6 +235,26 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 					tracef("bindings: reasoning.enable value from litellm supported_reasoning_efforts -> %s", level)
 				}
 			}
+		}
+	}
+
+	if stack == "venice" && len(ev.RegistryEfforts) > 0 {
+		if effort := api.Bindings[system.IntentReasoningEffort]; effort != nil {
+			effort.EnumValues = append([]string(nil), ev.RegistryEfforts...)
+			tracef("bindings: reasoning.effort levels from the venice listing -> %s", strings.Join(effort.EnumValues, "|"))
+		}
+	}
+
+	if ev.NoEffort && api.Bindings[system.IntentReasoningEffort] != nil {
+		delete(api.Bindings, system.IntentReasoningEffort)
+		tracef("bindings: reasoning.effort dropped — the %s listing says the model takes no effort level", stack)
+	}
+
+	// Ollama's effort none is think=false, the toggle a checkpoint is not given.
+	if stack == "ollama" && thinkingCheckpoint {
+		if effort := api.Bindings[system.IntentReasoningEffort]; effort != nil && containsString(effort.EnumValues, "none") {
+			effort.EnumValues = withoutString(effort.EnumValues, "none")
+			tracef("bindings: reasoning.effort none withheld — on ollama it turns thinking off, which a thinking checkpoint may not do")
 		}
 	}
 
@@ -267,7 +320,39 @@ func containsString(list []string, s string) bool {
 	return false
 }
 
-func mergeStackTables(api *system.ModelApiSpec, stack string, family bindingSet, reasoningKnown, alwaysOn bool) {
+func withoutString(list []string, s string) []string {
+	out := make([]string, 0, len(list))
+	for _, v := range list {
+		if v != s {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// A checkpoint's template may ignore an on/off kwarg or prompt switch
+// (Qwen3-…-Thinking-2507 opens its reasoning whatever enable_thinking says),
+// and an ignored toggle fails silently. API params are validated by the
+// vendor, and effort or budget limits still apply, so those stay.
+func withoutTemplateToggles(b bindingSet) bindingSet {
+	var out bindingSet
+	for intent, binding := range b {
+		toggle := intent == system.IntentReasoningDisable || intent == system.IntentReasoningEnable
+		if toggle && binding != nil && (binding.Kind == system.BindingKindTemplateKwarg || binding.Kind == system.BindingKindSystemPrompt) {
+			continue
+		}
+		if out == nil {
+			out = bindingSet{}
+		}
+		out[intent] = binding
+	}
+	return out
+}
+
+// effortListed: the backend's own listing names effort levels for the model,
+// so an always-on model still takes the stack's effort knob (it cannot stop,
+// but it can think less).
+func mergeStackTables(api *system.ModelApiSpec, stack string, family bindingSet, reasoningKnown, alwaysOn, effortListed bool) {
 	out := bindingSet{}
 	for intent, b := range family {
 		out[intent] = cloneBinding(b)
@@ -283,7 +368,7 @@ func mergeStackTables(api *system.ModelApiSpec, stack string, family bindingSet,
 			if !reasoningKnown {
 				continue
 			}
-			if alwaysOn && intent != system.IntentReasoningFormat {
+			if alwaysOn && intent != system.IntentReasoningFormat && !(effortListed && intent == system.IntentReasoningEffort) {
 				continue
 			}
 		}
