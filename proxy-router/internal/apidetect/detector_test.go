@@ -712,7 +712,7 @@ func TestDetectAlwaysOnFamilyOnLiteLLMGetsNoToggle(t *testing.T) {
 	require.Nil(t, api.Bindings[system.IntentReasoningBudget])
 }
 
-func TestDetectOllamaAlwaysOnVariantIgnoresCapabilityToggle(t *testing.T) {
+func TestDetectOllamaThinkingCheckpointGetsNoToggle(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/tags", jsonHandler(map[string]any{"models": []map[string]any{{"name": "qwen3-thinking:32b"}}}))
 	mux.HandleFunc("/api/show", jsonHandler(map[string]any{
@@ -723,9 +723,11 @@ func TestDetectOllamaAlwaysOnVariantIgnoresCapabilityToggle(t *testing.T) {
 
 	api := detect(t, srv.URL+"/v1/chat/completions", "openai", "qwen3-thinking:32b")
 	require.NotNil(t, api)
-	require.Equal(t, system.ThinkingModeAlwaysOn, api.Thinking.Mode)
+	require.Equal(t, system.ThinkingModeTunable, api.Thinking.Mode, "it reasons, but the name says nothing about an off switch")
 	require.Nil(t, api.Bindings[system.IntentReasoningDisable])
-	require.Nil(t, api.Bindings[system.IntentReasoningEffort])
+	require.Nil(t, api.Bindings[system.IntentReasoningEnable])
+	require.Equal(t, "reasoning_effort", api.Bindings[system.IntentReasoningEffort].Param, "ollama's documented effort knob")
+	require.NotContains(t, api.Bindings[system.IntentReasoningEffort].EnumValues, "none", "none would be ollama's off switch")
 }
 
 func TestDetectVeniceReasoningModel(t *testing.T) {
@@ -744,7 +746,7 @@ func TestDetectVeniceReasoningModel(t *testing.T) {
 	require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
 	require.Equal(t, "venice_parameters.disable_thinking", api.Bindings[system.IntentReasoningDisable].Param)
 	require.Equal(t, true, api.Bindings[system.IntentReasoningDisable].Value)
-	require.Equal(t, "reasoning_effort", api.Bindings[system.IntentReasoningEffort].Param)
+	require.Equal(t, "reasoning.effort", api.Bindings[system.IntentReasoningEffort].Param)
 	require.Equal(t, "venice_parameters.strip_thinking_response", api.Bindings[system.IntentReasoningFormat].Param)
 	require.NotEqual(t, system.BindingKindTemplateKwarg, api.Bindings[system.IntentReasoningDisable].Kind)
 }
