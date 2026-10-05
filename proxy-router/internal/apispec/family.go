@@ -20,6 +20,12 @@ func normalizeModelName(name string) string {
 	return modelNameSeparators.Replace(strings.ToLower(strings.TrimSpace(withoutInlineParams(name))))
 }
 
+// NormalizeModelName is the spelling every name rule matches, for callers
+// that compare names the same way.
+func NormalizeModelName(name string) string {
+	return normalizeModelName(name)
+}
+
 // Same rule as the detector's bare model id: a ":" segment with "=" is a
 // parameter, an Ollama tag ("qwen3:8b") has none.
 func withoutInlineParams(name string) string {

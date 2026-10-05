@@ -98,19 +98,42 @@ func TestDetectVLLMWeightsNameTheModel(t *testing.T) {
 		api, trace := d.DetectWithTrace(context.Background(), config.ModelConfig{ModelName: id, ApiType: "openai", ApiURL: srv.URL + "/v1/chat/completions"})
 		return api, strings.Join(trace, "\n")
 	}
+	controllableVia := func(param string) func(*testing.T, *system.ModelApiSpec) {
+		return func(t *testing.T, api *system.ModelApiSpec) {
+			require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
+			require.Equal(t, param, api.Bindings[system.IntentReasoningDisable].Param)
+		}
+	}
+	tunableWithoutSwitch := func(t *testing.T, api *system.ModelApiSpec) {
+		require.Equal(t, system.ThinkingModeTunable, api.Thinking.Mode)
+		require.Nil(t, api.Bindings[system.IntentReasoningDisable], "a thinking release gets no template switch it would ignore")
+	}
+	for _, tc := range []struct {
+		name, id, root string
+		check          func(*testing.T, *system.ModelApiSpec)
+	}{
+		{"hub id beats a thinking label", "qwen3-32b-thinking", "Qwen/Qwen3-32B", controllableVia("chat_template_kwargs.enable_thinking")},
+		{"local path more specific than the label", "qwen3-235b", "/models/Qwen3-235B-A22B-Thinking-2507", tunableWithoutSwitch},
+		{"local path naming no family", "kimi-k2.5", "/models/ft", controllableVia("chat_template_kwargs.thinking")},
+		{"local path naming only the family (kimi)", "kimi-k2.5", "/models/kimi", controllableVia("chat_template_kwargs.thinking")},
+		{"local path naming only the family (gemma)", "gemma-4-31b-it", "/models/gemma", controllableVia("chat_template_kwargs.enable_thinking")},
+		{"local path naming only the family (minimax)", "minimax-m2.5", "/models/minimax", func(t *testing.T, api *system.ModelApiSpec) {
+			require.Equal(t, system.ThinkingModeAlwaysOn, api.Thinking.Mode)
+		}},
+		{"local path less specific than a thinking label", "qwen3-235b-a22b-thinking-2507", "/models/qwen3-235b", tunableWithoutSwitch},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			api, trace := detectServed(tc.id, tc.root)
+			require.NotNil(t, api.Thinking)
+			tc.check(t, api)
+			if strings.HasPrefix(tc.root, "/") {
+				require.NotContains(t, trace, tc.root, "a local path stays out of the trace")
+			}
+		})
+	}
 
-	hybrid, trace := detectServed("qwen3-32b-thinking", "Qwen/Qwen3-32B")
-	require.Equal(t, system.ThinkingModeControllable, hybrid.Thinking.Mode, "a hybrid served under a thinking label keeps its switch")
-	require.Equal(t, "chat_template_kwargs.enable_thinking", hybrid.Bindings[system.IntentReasoningDisable].Param)
+	_, trace := detectServed("qwen3-32b-thinking", "Qwen/Qwen3-32B")
 	require.Contains(t, trace, `vllm serves "qwen3-32b-thinking" from weights "Qwen3-32B"`)
-
-	checkpoint, _ := detectServed("qwen3-235b", "/models/Qwen3-235B-A22B-Thinking-2507")
-	require.Nil(t, checkpoint.Bindings[system.IntentReasoningDisable], "a thinking release served under a plain label gets no template switch")
-	require.Equal(t, system.ThinkingModeTunable, checkpoint.Thinking.Mode)
-
-	local, trace := detectServed("kimi-k2.5", "/models/ft")
-	require.Equal(t, "chat_template_kwargs.thinking", local.Bindings[system.IntentReasoningDisable].Param, "weights named after no family leave the served name in charge")
-	require.NotContains(t, trace, "/models/", "a local path stays out of the trace")
 }
 
 func TestDetectVeniceNoEffortDropsTheEffortKnob(t *testing.T) {

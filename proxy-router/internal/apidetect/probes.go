@@ -375,21 +375,32 @@ func (d *Detector) probeVLLM(ctx context.Context, base, modelName, apiKey string
 }
 
 // vLLM's id is --served-model-name, which must equal the configured
-// modelName, so it is the operator's label; root is the --model the server
-// loaded. Only root's last segment is kept, so a local path puts no
-// directories in the trace, and only when it names a known family: a path
-// such as /models/ft says less than the label.
+// modelName, so it is the operator's label; root is the --model it loaded.
+// A hub id (org/name) names the published weights and wins. A local path is
+// the operator's choice as much as the label, so it wins only when it names a
+// known family and says more than the label: /models/qwen3-235b under the
+// label qwen3-235b-a22b-thinking-2507 does not. Only root's last segment is
+// kept, so no directory reaches the trace.
 func vllmWeightsName(ctx context.Context, id, root string) string {
 	if root == "" || strings.EqualFold(root, id) {
 		return id
 	}
 	weights := path.Base(strings.TrimRight(root, "/"))
-	if weights == "." || weights == "/" || apispec.FamilyFromName(weights) == "" {
+	switch {
+	case weights == "." || weights == "/" || apispec.FamilyFromName(weights) == "":
 		tracef(ctx, "vllm serves %q from weights whose name maps to no known family; the served name stands", id)
+		return id
+	case localPath(root) && strings.Contains(apispec.NormalizeModelName(id), apispec.NormalizeModelName(weights)):
+		tracef(ctx, "vllm serves %q from local weights %q, which say no more than the served name; the served name stands", id, weights)
 		return id
 	}
 	tracef(ctx, "vllm serves %q from weights %q; the weights name the model", id, weights)
 	return weights
+}
+
+// A hub id is exactly org/name; anything else vLLM was given is a path.
+func localPath(root string) bool {
+	return strings.HasPrefix(root, "/") || strings.HasPrefix(root, ".") || strings.HasPrefix(root, "~") || strings.Count(root, "/") != 1
 }
 
 func matchModelEntry(data []any, modelName string) map[string]any {
