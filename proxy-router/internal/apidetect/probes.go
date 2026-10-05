@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -364,13 +365,31 @@ func (d *Detector) probeVLLM(ctx context.Context, base, modelName, apiKey string
 	if list := d.getJSON(ctx, base+"/v1/models", apiKey); list != nil {
 		if data, ok := list["data"].([]any); ok {
 			if entry := matchModelEntry(data, modelName); entry != nil {
-				if id, ok := entry["id"].(string); ok {
-					ev.ServedModelID = id
-				}
+				id, _ := entry["id"].(string)
+				root, _ := entry["root"].(string)
+				ev.ServedModelID = vllmWeightsName(ctx, id, root)
 			}
 		}
 	}
 	return true
+}
+
+// vLLM's id is --served-model-name, which must equal the configured
+// modelName, so it is the operator's label; root is the --model the server
+// loaded. Only root's last segment is kept, so a local path puts no
+// directories in the trace, and only when it names a known family: a path
+// such as /models/ft says less than the label.
+func vllmWeightsName(ctx context.Context, id, root string) string {
+	if root == "" || strings.EqualFold(root, id) {
+		return id
+	}
+	weights := path.Base(strings.TrimRight(root, "/"))
+	if weights == "." || weights == "/" || apispec.FamilyFromName(weights) == "" {
+		tracef(ctx, "vllm serves %q from weights whose name maps to no known family; the served name stands", id)
+		return id
+	}
+	tracef(ctx, "vllm serves %q from weights %q; the weights name the model", id, weights)
+	return weights
 }
 
 func matchModelEntry(data []any, modelName string) map[string]any {
@@ -469,9 +488,12 @@ func (d *Detector) probeRegistryShape(ctx context.Context, bases []string, model
 					ev.GatewayReasoning = true
 					tracef(ctx, "venice listing reports supportsReasoning")
 				}
-				// The levels count only when the listing says effort is accepted.
+				// supportsReasoningEffort says whether the model takes an effort
+				// level at all; the levels count only when it does.
 				options, _ := caps["reasoningEffortOptions"].([]any)
-				if takesEffort, _ := caps["supportsReasoningEffort"].(bool); takesEffort {
+				takesEffort, flagged := caps["supportsReasoningEffort"].(bool)
+				switch {
+				case takesEffort:
 					for _, o := range options {
 						if s, ok := o.(string); ok {
 							ev.RegistryEfforts = append(ev.RegistryEfforts, s)
@@ -480,7 +502,11 @@ func (d *Detector) probeRegistryShape(ctx context.Context, bases []string, model
 					if len(ev.RegistryEfforts) > 0 {
 						tracef(ctx, "venice listing offers reasoning efforts %s", tracedKeys(ev.RegistryEfforts))
 					}
-				} else if len(options) > 0 {
+				case flagged:
+					ev.NoEffort = true
+					tracef(ctx, "venice listing reports supportsReasoningEffort false: the model takes no effort level")
+				}
+				if !takesEffort && len(options) > 0 {
 					tracef(ctx, "venice listing names reasoning effort levels but not supportsReasoningEffort; levels ignored")
 				}
 			}

@@ -31,7 +31,10 @@ type Evidence struct {
 	// (Venice reasoningEffortOptions). "none" among them means the backend can
 	// turn reasoning off, whatever the family does on its own.
 	RegistryEfforts []string
-	LiteLLMSeen     bool
+	// The backend's own listing says the model takes no effort level (Venice
+	// supportsReasoningEffort false).
+	NoEffort    bool
+	LiteLLMSeen bool
 	// nil means the list could not be read; an empty list is a known, empty list.
 	LiteLLMSupportedParams []string
 	Declared               bool
@@ -240,6 +243,11 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 			effort.EnumValues = append([]string(nil), ev.RegistryEfforts...)
 			tracef("bindings: reasoning.effort levels from the venice listing -> %s", strings.Join(effort.EnumValues, "|"))
 		}
+	}
+
+	if ev.NoEffort && api.Bindings[system.IntentReasoningEffort] != nil {
+		delete(api.Bindings, system.IntentReasoningEffort)
+		tracef("bindings: reasoning.effort dropped — the %s listing says the model takes no effort level", stack)
 	}
 
 	// Ollama's effort none is think=false, the toggle a checkpoint is not given.

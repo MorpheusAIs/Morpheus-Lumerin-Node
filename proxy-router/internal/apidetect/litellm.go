@@ -187,6 +187,10 @@ func (d *Detector) litellmUpstream(ctx context.Context, base, modelName, apiKey 
 			ev.RegistryEfforts = append([]string(nil), up.RegistryEfforts...)
 			tracef(ctx, "upstream %s listing offers reasoning efforts %s", identified, tracedKeys(up.RegistryEfforts))
 		}
+		if up.NoEffort {
+			ev.NoEffort = true
+			tracef(ctx, "upstream %s listing says the model takes no effort level", identified)
+		}
 	case kind == "ollama":
 		tracef(ctx, "upstream ollama stays evidence-only (litellm's ollama providers speak the native API, not the /v1 surface the ollama table describes); the spec's stack stays litellm")
 	}

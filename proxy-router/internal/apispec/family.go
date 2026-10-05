@@ -11,11 +11,30 @@ import (
 // Hubs and vendors spell one model differently (Kimi-K2.7-Code,
 // kimi-k2-7-code, kimi_k2_7_code, "Kimi K2.7 Code", Vertex AI's
 // claude-sonnet-4-5@20250929), so every name rule matches the normalized
-// spelling: lowercase, with ".", "_", "@" and spaces as "-".
+// spelling: lowercase, with ".", "_", "@" and spaces as "-". Venice's inline
+// request parameters (llama-3.3-70b:strip_thinking_response=true) name no
+// model and are dropped.
 var modelNameSeparators = strings.NewReplacer(".", "-", "_", "-", "@", "-", " ", "-")
 
 func normalizeModelName(name string) string {
-	return modelNameSeparators.Replace(strings.ToLower(strings.TrimSpace(name)))
+	return modelNameSeparators.Replace(strings.ToLower(strings.TrimSpace(withoutInlineParams(name))))
+}
+
+// Same rule as the detector's bare model id: a ":" segment with "=" is a
+// parameter, an Ollama tag ("qwen3:8b") has none.
+func withoutInlineParams(name string) string {
+	if !strings.Contains(name, "=") {
+		return name
+	}
+	parts := strings.Split(name, ":")
+	kept := make([]string, 1, len(parts))
+	kept[0] = parts[0]
+	for _, p := range parts[1:] {
+		if !strings.Contains(p, "=") {
+			kept = append(kept, p)
+		}
+	}
+	return strings.Join(kept, ":")
 }
 
 // A "thinking" token names a reasoning checkpoint (Qwen3-…-Thinking-2507,

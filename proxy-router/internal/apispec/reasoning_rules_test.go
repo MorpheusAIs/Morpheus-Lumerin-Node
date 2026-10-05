@@ -197,3 +197,22 @@ func TestComposeOllamaThinkingCheckpointGetsNoEffortNone(t *testing.T) {
 	require.NotNil(t, hybrid.Bindings[system.IntentReasoningDisable])
 	require.Contains(t, hybrid.Bindings[system.IntentReasoningEffort].EnumValues, "none")
 }
+
+func TestNamesIgnoreVeniceInlineParams(t *testing.T) {
+	require.False(t, thinkingNamed("llama-3.3-70b:strip_thinking_response=true"), "a parameter is not a thinking token")
+	require.False(t, thinkingNamed("qwen3-32b:disable_thinking=true"))
+	require.True(t, thinkingNamed("qwen3-thinking:32b"), "an ollama tag is part of the name")
+	require.Equal(t, "kimi-k2-5", normalizeModelName("Kimi-K2.5:enable_web_search=on&include_venice_system_prompt=false"))
+
+	plain := Compose(Evidence{Stack: "venice", ModelName: "llama-3.3-70b:strip_thinking_response=true"})
+	require.Nil(t, plain.Thinking, "no reasoning evidence from a parameter")
+	require.Nil(t, plain.Bindings[system.IntentReasoningDisable])
+}
+
+func TestComposeNoEffortDropsTheEffortKnob(t *testing.T) {
+	api, lines := ComposeWithTrace(Evidence{Stack: "venice", ModelName: "qwen3-235b", GatewayReasoning: true, NoEffort: true})
+	require.Nil(t, api.Bindings[system.IntentReasoningEffort])
+	require.Equal(t, "venice_parameters.disable_thinking", api.Bindings[system.IntentReasoningDisable].Param)
+	require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
+	require.Contains(t, strings.Join(lines, "\n"), "takes no effort level")
+}
