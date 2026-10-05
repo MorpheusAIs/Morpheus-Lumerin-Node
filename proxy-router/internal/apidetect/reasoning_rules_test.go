@@ -65,3 +65,18 @@ func TestDetectLiteLLMTwoHopCarriesVeniceEfforts(t *testing.T) {
 	require.Contains(t, trace, `upstream venice listing offers reasoning efforts ["none" "low" "medium" "high"]`)
 	veniceLog.requireAnonymous(t)
 }
+
+func TestDetectVeniceEffortLevelsNeedSupportsReasoningEffort(t *testing.T) {
+	entry := veniceEntryWithEfforts("minimax-m27", "none", "low", "high")
+	entry["model_spec"].(map[string]any)["capabilities"].(map[string]any)["supportsReasoningEffort"] = false
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/models", jsonHandler(map[string]any{"data": []map[string]any{entry}}))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	d := NewDetector(lib.NewTestLogger(), DefaultOptions())
+	api, trace := d.DetectWithTrace(context.Background(), config.ModelConfig{ModelName: "minimax-m27", ApiType: "openai", ApiURL: srv.URL + "/api/v1/chat/completions"})
+	require.Equal(t, system.ThinkingModeAlwaysOn, api.Thinking.Mode, "levels the listing does not accept prove no off switch")
+	require.Nil(t, api.Bindings[system.IntentReasoningEffort])
+	require.Contains(t, strings.Join(trace, "\n"), "levels ignored")
+}

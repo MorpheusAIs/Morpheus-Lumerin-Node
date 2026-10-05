@@ -116,3 +116,84 @@ func TestComposeVeniceEffortSurvivesLiteLLMFilter(t *testing.T) {
 	require.Equal(t, []string{"none", "low", "medium", "high"}, effort.EnumValues)
 	require.Equal(t, "venice_parameters.disable_thinking", api.Bindings[system.IntentReasoningDisable].Param)
 }
+
+func TestContainsVersionNeedsANonDigitBoundary(t *testing.T) {
+	for _, tc := range []struct {
+		name, sub string
+		want      bool
+	}{
+		{"Kimi-K2.5", "k2-5", true},
+		{"kimi-k2-6-thinking", "k2-6", true},
+		{"kimi-k2-50b", "k2-5", false},
+		{"kimi-k2-50b-k2-5", "k2-5", true},
+		{"EXAONE-4.0.1-32B", "exaone-4", true},
+		{"exaone-40b", "exaone-4", false},
+	} {
+		require.Equal(t, tc.want, containsVersion(tc.name, tc.sub), tc.name)
+	}
+	_, b := bindingsForFamily("kimi", "kimi-k2-50b")
+	require.Nil(t, b, "k2-50b is not K2.5")
+	_, b = bindingsForFamily("exaone", "exaone-40b")
+	require.Nil(t, b, "exaone-40b is not EXAONE 4")
+}
+
+func TestClaudeVersionIgnoresSeparatorSpelling(t *testing.T) {
+	for _, name := range []string{"claude_sonnet_4_5", "claude-sonnet-4-5@20250929", "Claude Sonnet 4.5"} {
+		_, b := claudeBindings(name)
+		require.NotNil(t, b[system.IntentReasoningBudget], "%s parses as 4.5", name)
+		require.Equal(t, []string{"low", "medium", "high"}, b[system.IntentReasoningEffort].EnumValues, name)
+	}
+	_, b := claudeBindings("claude-opus-4-1@20250805")
+	require.Nil(t, b[system.IntentReasoningEffort], "4.1 takes no effort")
+	require.NotNil(t, b[system.IntentReasoningBudget])
+}
+
+func TestComposeThinkingLabelKeepsServedHybridToggles(t *testing.T) {
+	hybrid, lines := ComposeWithTrace(Evidence{Stack: "vllm", ModelName: "team-qwen3-thinking", ServedModelID: "Qwen/Qwen3-32B"})
+	require.Equal(t, "qwen3", hybrid.ModelFamily)
+	require.Equal(t, system.ThinkingModeControllable, hybrid.Thinking.Mode, "the served weights are a hybrid; the operator's label does not remove its switch")
+	require.Equal(t, "chat_template_kwargs.enable_thinking", hybrid.Bindings[system.IntentReasoningDisable].Param)
+	require.Contains(t, strings.Join(lines, "\n"), "names no checkpoint")
+
+	checkpoint := Compose(Evidence{Stack: "vllm", ModelName: "team-qwen3", ServedModelID: "Qwen/Qwen3-235B-A22B-Thinking-2507"})
+	require.Nil(t, checkpoint.Bindings[system.IntentReasoningDisable], "the served id names the checkpoint")
+	require.Nil(t, checkpoint.Bindings[system.IntentReasoningEnable])
+	require.Equal(t, system.ThinkingModeTunable, checkpoint.Thinking.Mode)
+}
+
+func TestWithoutTemplateTogglesKeepsAPIParamsAndLimits(t *testing.T) {
+	kept := withoutTemplateToggles(budgetKwargBindings())
+	require.Nil(t, kept[system.IntentReasoningDisable], "thinking_budget=0 is a template switch")
+	require.NotNil(t, kept[system.IntentReasoningBudget], "a budget still limits a checkpoint")
+
+	_, claude := claudeBindings("claude-sonnet-4-5")
+	require.Len(t, withoutTemplateToggles(claude), len(claude), "API params are validated by the vendor, so they stay")
+
+	_, nemotron := bindingsForFamily("nemotron", "llama-3.3-nemotron-super-49b")
+	require.Empty(t, withoutTemplateToggles(nemotron), "system prompt switches go too")
+}
+
+func TestComposeThinkingCheckpointKeepsFamilyBudget(t *testing.T) {
+	api := Compose(Evidence{Stack: "vllm", ModelName: "seed-oss-36b-thinking"})
+	require.Equal(t, "seed-oss", api.ModelFamily)
+	require.Nil(t, api.Bindings[system.IntentReasoningDisable], "thinking_budget=0 is the template switch a checkpoint may ignore")
+	require.Equal(t, "chat_template_kwargs.thinking_budget", api.Bindings[system.IntentReasoningBudget].Param, "the family's budget still applies")
+}
+
+func TestComposeListedEffortLevelsAreReasoningEvidence(t *testing.T) {
+	api := Compose(Evidence{Stack: "venice", ModelName: "some-new-model", RegistryEfforts: []string{"low", "high"}})
+	require.NotNil(t, api.Thinking, "a listing that names effort levels says the model reasons")
+	require.Equal(t, []string{"low", "high"}, api.Bindings[system.IntentReasoningEffort].EnumValues)
+}
+
+func TestComposeOllamaThinkingCheckpointGetsNoEffortNone(t *testing.T) {
+	checkpoint := Compose(Evidence{Stack: "ollama", ModelName: "qwen3-thinking:32b", Architecture: "qwen3", OllamaThinking: true})
+	effort := checkpoint.Bindings[system.IntentReasoningEffort]
+	require.NotNil(t, effort)
+	require.NotContains(t, effort.EnumValues, "none", "none is ollama's think=false, the toggle a checkpoint is not given")
+	require.Contains(t, stackBindings["ollama"][system.IntentReasoningEffort].EnumValues, "none", "the shared stack table is untouched")
+
+	hybrid := Compose(Evidence{Stack: "ollama", ModelName: "qwen3:8b", Architecture: "qwen3", OllamaThinking: true})
+	require.NotNil(t, hybrid.Bindings[system.IntentReasoningDisable])
+	require.Contains(t, hybrid.Bindings[system.IntentReasoningEffort].EnumValues, "none")
+}

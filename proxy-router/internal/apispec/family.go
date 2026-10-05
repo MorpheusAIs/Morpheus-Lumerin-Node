@@ -9,9 +9,10 @@ import (
 )
 
 // Hubs and vendors spell one model differently (Kimi-K2.7-Code,
-// kimi-k2-7-code, kimi_k2_7_code, "Kimi K2.7 Code"), so every name rule
-// matches the normalized spelling: lowercase, with ".", "_" and spaces as "-".
-var modelNameSeparators = strings.NewReplacer(".", "-", "_", "-", " ", "-")
+// kimi-k2-7-code, kimi_k2_7_code, "Kimi K2.7 Code", Vertex AI's
+// claude-sonnet-4-5@20250929), so every name rule matches the normalized
+// spelling: lowercase, with ".", "_", "@" and spaces as "-".
+var modelNameSeparators = strings.NewReplacer(".", "-", "_", "-", "@", "-", " ", "-")
 
 func normalizeModelName(name string) string {
 	return modelNameSeparators.Replace(strings.ToLower(strings.TrimSpace(name)))
@@ -185,6 +186,26 @@ func containsAny(name string, subs ...string) bool {
 	return false
 }
 
+// containsVersion is containsAny for version tokens: a match followed by a
+// digit is a longer number (k2-5 must not match k2-50b), so it does not count.
+func containsVersion(name string, subs ...string) bool {
+	n := normalizeModelName(name)
+	for _, sub := range subs {
+		for from := 0; ; {
+			i := strings.Index(n[from:], sub)
+			if i < 0 {
+				break
+			}
+			end := from + i + len(sub)
+			if end == len(n) || n[end] < '0' || n[end] > '9' {
+				return true
+			}
+			from += i + 1
+		}
+	}
+	return false
+}
+
 // Gemma 4 only, off by default: https://huggingface.co/google/gemma-4-31B-it,
 // https://ai.google.dev/gemma/docs/capabilities/thinking. Gemma 3 has no
 // thinking mode: https://ai.google.dev/gemma/docs/core/model_card_3.
@@ -209,7 +230,7 @@ func kimiBindings(modelName string) (alwaysOn bool, b bindingSet) {
 		return true, nil
 	case containsAny(modelName, "k2-7-code"):
 		return true, nil
-	case containsAny(modelName, "k2-5", "k2-6"):
+	case containsVersion(modelName, "k2-5", "k2-6"):
 		return false, kwargBoolBindings("thinking")
 	}
 	return false, nil
@@ -241,7 +262,7 @@ func exaoneBindings(modelName string) (alwaysOn bool, b bindingSet) {
 	switch {
 	case containsAny(modelName, "exaone-deep"):
 		return true, nil
-	case containsAny(modelName, "exaone-4", "exaone4"):
+	case containsVersion(modelName, "exaone-4", "exaone4"):
 		return false, kwargBoolBindings("enable_thinking")
 	}
 	return false, nil
@@ -274,7 +295,7 @@ func claudeVersion(name string) (major, minor int, ok bool) {
 // https://platform.claude.com/docs/en/build-with-claude/thinking
 // https://platform.claude.com/docs/en/build-with-claude/effort
 func claudeBindings(modelName string) (alwaysOn bool, b bindingSet) {
-	name := strings.ToLower(modelName)
+	name := normalizeModelName(modelName)
 	disable := &system.ParamBinding{Kind: system.BindingKindBodyParam, Param: "thinking", ParamType: "object", Value: map[string]any{"type": "disabled"}}
 	effortAll := &system.ParamBinding{Kind: system.BindingKindBodyParam, Param: "output_config.effort", ParamType: "enum", EnumValues: []string{"low", "medium", "high", "xhigh", "max"}, Hint: "xhigh/max availability varies per model"}
 	enabledWithBudget := &system.ParamBinding{Kind: system.BindingKindBodyParam, Param: "thinking", ParamType: "object", Value: map[string]any{"type": "enabled", "budget_tokens": 1024}, Hint: "budget_tokens >= 1024 and below max_tokens"}

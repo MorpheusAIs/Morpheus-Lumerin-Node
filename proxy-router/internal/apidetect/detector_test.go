@@ -727,6 +727,7 @@ func TestDetectOllamaThinkingCheckpointGetsNoToggle(t *testing.T) {
 	require.Nil(t, api.Bindings[system.IntentReasoningDisable])
 	require.Nil(t, api.Bindings[system.IntentReasoningEnable])
 	require.Equal(t, "reasoning_effort", api.Bindings[system.IntentReasoningEffort].Param, "ollama's documented effort knob")
+	require.NotContains(t, api.Bindings[system.IntentReasoningEffort].EnumValues, "none", "none would be ollama's off switch")
 }
 
 func TestDetectVeniceReasoningModel(t *testing.T) {

@@ -469,7 +469,9 @@ func (d *Detector) probeRegistryShape(ctx context.Context, bases []string, model
 					ev.GatewayReasoning = true
 					tracef(ctx, "venice listing reports supportsReasoning")
 				}
-				if options, ok := caps["reasoningEffortOptions"].([]any); ok {
+				// The levels count only when the listing says effort is accepted.
+				options, _ := caps["reasoningEffortOptions"].([]any)
+				if takesEffort, _ := caps["supportsReasoningEffort"].(bool); takesEffort {
 					for _, o := range options {
 						if s, ok := o.(string); ok {
 							ev.RegistryEfforts = append(ev.RegistryEfforts, s)
@@ -478,6 +480,8 @@ func (d *Detector) probeRegistryShape(ctx context.Context, bases []string, model
 					if len(ev.RegistryEfforts) > 0 {
 						tracef(ctx, "venice listing offers reasoning efforts %s", tracedKeys(ev.RegistryEfforts))
 					}
+				} else if len(options) > 0 {
+					tracef(ctx, "venice listing names reasoning effort levels but not supportsReasoningEffort; levels ignored")
 				}
 			}
 			return
