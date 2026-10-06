@@ -23,7 +23,7 @@ const docTemplate = `{
                         "BasicAuth": []
                     }
                 ],
-                "description": "Permission: agent_requests",
+                "description": "Permission: agent_requests, and the caller must have full access (\"*\"): allowances are spending caps, so only the operator approves them. Other callers return 403.",
                 "produces": [
                     "application/json"
                 ],
@@ -47,6 +47,12 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/authapi.AuthRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/authapi.ErrorRes"
                         }
                     }
                 }
@@ -82,7 +88,7 @@ const docTemplate = `{
                         "BasicAuth": []
                     }
                 ],
-                "description": "Permission: request_allowance",
+                "description": "Permission: request_allowance. A caller without full access (\"*\") may only request an allowance for its own username; other usernames return 403.",
                 "produces": [
                     "application/json"
                 ],
@@ -107,6 +113,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/authapi.AuthRes"
                         }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/authapi.ErrorRes"
+                        }
                     }
                 }
             }
@@ -118,7 +130,7 @@ const docTemplate = `{
                         "BasicAuth": []
                     }
                 ],
-                "description": "Permission: agent_requests",
+                "description": "Permission: agent_requests, and the caller must have full access (\"*\"): allowances are spending caps, so only the operator changes them. Other callers return 403.",
                 "produces": [
                     "application/json"
                 ],
@@ -142,6 +154,12 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/authapi.AuthRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/authapi.ErrorRes"
                         }
                     }
                 }
@@ -190,7 +208,7 @@ const docTemplate = `{
                         "BasicAuth": []
                     }
                 ],
-                "description": "Permission: add_user",
+                "description": "Permission: add_user. A caller without full access (\"*\") may only create or update users whose permissions are a subset of its own, may not grant \"*\", and may not touch admin; such requests return 403.",
                 "produces": [
                     "application/json"
                 ],
@@ -215,6 +233,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/authapi.AuthRes"
                         }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/authapi.ErrorRes"
+                        }
                     }
                 }
             },
@@ -224,7 +248,7 @@ const docTemplate = `{
                         "BasicAuth": []
                     }
                 ],
-                "description": "Permission: remove_user",
+                "description": "Permission: remove_user. admin can never be removed. A caller without full access (\"*\") may only remove users whose permissions are a subset of its own; such requests return 403.",
                 "produces": [
                     "application/json"
                 ],
@@ -249,6 +273,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/authapi.AuthRes"
                         }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/authapi.ErrorRes"
+                        }
                     }
                 }
             }
@@ -260,7 +290,7 @@ const docTemplate = `{
                         "BasicAuth": []
                     }
                 ],
-                "description": "Permission: agent_requests",
+                "description": "Permission: agent_requests. Confirming grants the perms the agent asked for, so a caller without full access (\"*\") may only confirm requests whose perms are a subset of its own; such requests return 403.",
                 "produces": [
                     "application/json"
                 ],
@@ -284,6 +314,12 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/authapi.AuthRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/authapi.ErrorRes"
                         }
                     }
                 }
@@ -3791,6 +3827,14 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "authapi.ErrorRes": {
+            "type": "object",
+            "properties": {
+                "error": {
                     "type": "string"
                 }
             }

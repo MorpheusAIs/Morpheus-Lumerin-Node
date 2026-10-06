@@ -274,6 +274,9 @@ func (cfg *HTTPAuthConfig) EnsureConfigFilesExist() error {
 // successful-login path — a standalone change, not a drive-by one. Deliberately
 // left as-is here rather than silently locking existing users out.
 func (cfg *HTTPAuthConfig) AddUser(username string, plaintextPassword string, perms []string) error {
+	if err := ValidateUserSpec(username, perms); err != nil {
+		return err
+	}
 	saltBytes := make([]byte, 16)
 	if _, err := io.ReadFull(rand.Reader, saltBytes); err != nil {
 		return err
@@ -441,6 +444,12 @@ func (cfg *HTTPAuthConfig) IsAllowanceEnough(username string, token string, amou
 	if agentUser == nil {
 		return false, fmt.Errorf("user not found")
 	}
+	if !agentUser.IsConfirmed {
+		// A pending request's allowance was chosen by whoever filed the
+		// unauthenticated request; it is spendable only once a full-access
+		// user has confirmed it.
+		return false, fmt.Errorf("agent user %s is not confirmed", username)
+	}
 
 	token = strings.ToLower(token)
 	allowance := agentUser.Allowances[token]
@@ -451,8 +460,11 @@ func (cfg *HTTPAuthConfig) IsAllowanceEnough(username string, token string, amou
 }
 
 func (cfg *HTTPAuthConfig) RequestAgentUser(username, password string, perms []string, allowances map[string]string) error {
-	if username == "admin" {
-		return fmt.Errorf("admin is a reserved username")
+	if username == AdminUsername {
+		return fmt.Errorf("%w: admin is a reserved username", ErrInvalidUserSpec)
+	}
+	if err := ValidateUserSpec(username, perms); err != nil {
+		return err
 	}
 
 	existingUser, err := cfg.AuthStorage.GetAgentUser(username)

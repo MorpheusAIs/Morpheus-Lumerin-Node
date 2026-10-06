@@ -305,9 +305,9 @@ func (i *IpfsManager) GetFileWithProgress(ctx context.Context, metadataCIDStr st
 		return fmt.Errorf("object at CID %s is not a regular file", metadata.FileCID)
 	}
 
-	destFile, err := os.Create(destinationPath)
+	destFile, err := createDownloadFile(destinationPath)
 	if err != nil {
-		return fmt.Errorf("failed to create destination file: %w", err)
+		return err
 	}
 	defer destFile.Close()
 

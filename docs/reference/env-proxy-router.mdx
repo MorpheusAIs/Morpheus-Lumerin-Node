@@ -3,7 +3,7 @@ title: "Env: proxy-router"
 description: "Every environment variable consumed by the proxy-router, with mainnet/testnet defaults and explicit precedence rules where two variables overlap."
 audience: ["provider-full", "provider-resale", "prosumer", "developer"]
 product: ["proxy-router"]
-last_verified: "2026-09-25"
+last_verified: "2026-10-06"
 source: "docs/proxy-router.all.env"
 ---
 
@@ -238,6 +238,7 @@ The proxy-router talks to a local Kubo API only when you set a real **multiaddr*
 |----------|---------|-------|
 | `IPFS_MULTADDR` | *(empty — disabled)* | Kubo API multiaddr, e.g. `/ip4/127.0.0.1/tcp/5001`. Invalid values log a warning and disable IPFS. |
 | `IPFS_DISABLED` | `false` | Set `true` to force-disable even when `IPFS_MULTADDR` is set. |
+| `IPFS_ALLOWED_DIRS` | *(empty)* | OS path list (`:` on Unix, `;` on Windows) of directories that API users **without** the `*` permission may download into via `ipfs_get` and add files from via `ipfs_add`. Unset means those users cannot download or add at all. Users with `*` are never restricted. Downloads never overwrite an existing file. |
 
 ## System tuning (optional sysctl tweaks)
 
