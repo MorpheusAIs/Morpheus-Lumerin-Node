@@ -268,6 +268,9 @@ func (bv *BackendVerifier) AttestBackend(ctx context.Context, modelID string, at
 		return fmt.Errorf("failed to fetch golden values for model %s: %w", modelID, err)
 	}
 	if golden != nil {
+		if cpuResult.Type == TEETypeSEV && cpuResult.SEVTemplate == "" {
+			cpuResult.SEVTemplate = workloadResult.TemplateName
+		}
 		if err := CompareRegisters(cpuResult, golden, bv.log); err != nil {
 			bv.storeFailure(modelID, attestationURL, fmt.Sprintf("register mismatch: %s", err))
 			return err

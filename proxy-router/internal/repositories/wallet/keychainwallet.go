@@ -249,9 +249,12 @@ func (w *KeychainWallet) PrivateKeyUpdated() <-chan struct{} {
 	return w.updatedCh
 }
 
+// notifyUpdated wakes every PrivateKeyUpdated waiter and arms a fresh channel.
+// Both steps run under the mutex: closing outside it let two concurrent wallet
+// updates close the same channel, and closing a closed channel panics.
 func (w *KeychainWallet) notifyUpdated() {
-	close(w.updatedCh)
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
+	close(w.updatedCh)
 	w.updatedCh = make(chan struct{})
 }
