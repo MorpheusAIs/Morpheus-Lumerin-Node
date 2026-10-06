@@ -13,11 +13,11 @@ import (
 )
 
 var (
-	// ErrIPFSPathInvalid: the path is not an absolute file path.
-	ErrIPFSPathInvalid = errors.New("invalid file path")
-	// ErrIPFSPathNotAllowed: a caller without full API access named a path
+	// errIPFSPathInvalid: the path is not an absolute file path.
+	errIPFSPathInvalid = errors.New("invalid file path")
+	// errIPFSPathNotAllowed: a caller without full API access named a path
 	// outside the configured IPFS directories.
-	ErrIPFSPathNotAllowed = errors.New("file path not allowed")
+	errIPFSPathNotAllowed = errors.New("file path not allowed")
 )
 
 // SetIPFSAllowedDirs configures the directories that callers without full API
@@ -33,38 +33,35 @@ func (c *ProxyController) SetIPFSAllowedDirs(pathList string) {
 }
 
 // resolveIPFSDownloadDest validates the `dest` of an IPFS download and
-// returns the path to create.
-//
-// The path must be absolute and name a file. A caller with full API access
-// (the operator, or the desktop app acting for them) may write anywhere,
-// which keeps the desktop's "pick a folder" flow working. Any other caller is
-// confined to allowedDirs and refused when none are configured, so ipfs_get
-// can be delegated to an agent without handing it an arbitrary-file-write
-// primitive. Overwrite protection lives in createDownloadFile (O_EXCL).
+// returns the path to create. The file does not exist yet, so only its
+// directory is resolved through symlinks. Overwrite protection lives in
+// createDownloadFile (O_EXCL).
 func resolveIPFSDownloadDest(dest string, fullAccess bool, allowedDirs []string) (string, error) {
-	cleaned, err := cleanAbsFilePath(dest)
-	if err != nil {
-		return "", err
-	}
-	if fullAccess {
-		return cleaned, nil
-	}
-	return confineToAllowedDirs(cleaned, allowedDirs, resolveParentDir)
+	return resolveIPFSPath(dest, fullAccess, allowedDirs, resolveParentDir)
 }
 
-// resolveIPFSSourcePath validates the `filePath` of an IPFS add with the same
-// rules as resolveIPFSDownloadDest; without it ipfs_add let any holder publish
-// .cookie (the admin password) or proxy.conf to IPFS. The file must exist, so
-// its own symlinks are resolved before the containment check.
+// resolveIPFSSourcePath validates the `filePath` of an IPFS add. Without it
+// ipfs_add let any holder publish .cookie (the admin password) or proxy.conf
+// to IPFS. The file must exist, so it is resolved through symlinks itself.
 func resolveIPFSSourcePath(path string, fullAccess bool, allowedDirs []string) (string, error) {
-	cleaned, err := cleanAbsFilePath(path)
+	return resolveIPFSPath(path, fullAccess, allowedDirs, filepath.EvalSymlinks)
+}
+
+// resolveIPFSPath applies the shared rules: the path must be absolute and name
+// a file. A caller with full API access (the operator, or the desktop app
+// acting for them) may use any such path, which keeps the desktop's "pick a
+// folder" flow working. Any other caller is confined to allowedDirs and
+// refused when none are configured, so ipfs_get and ipfs_add can be delegated
+// to an agent without handing it the node's filesystem.
+func resolveIPFSPath(p string, fullAccess bool, allowedDirs []string, resolve func(string) (string, error)) (string, error) {
+	cleaned, err := cleanAbsFilePath(p)
 	if err != nil {
 		return "", err
 	}
 	if fullAccess {
 		return cleaned, nil
 	}
-	return confineToAllowedDirs(cleaned, allowedDirs, filepath.EvalSymlinks)
+	return confineToAllowedDirs(cleaned, allowedDirs, resolve)
 }
 
 // cleanAbsFilePath returns the cleaned form of p when it is an absolute path
@@ -74,19 +71,19 @@ func resolveIPFSSourcePath(path string, fullAccess bool, allowedDirs []string) (
 func cleanAbsFilePath(p string) (string, error) {
 	p = strings.TrimSpace(p)
 	if p == "" {
-		return "", fmt.Errorf("%w: path is required", ErrIPFSPathInvalid)
+		return "", fmt.Errorf("%w: path is required", errIPFSPathInvalid)
 	}
 	cleaned := filepath.Clean(p)
 	if !filepath.IsAbs(cleaned) {
-		return "", fmt.Errorf("%w: path must be absolute", ErrIPFSPathInvalid)
+		return "", fmt.Errorf("%w: path must be absolute", errIPFSPathInvalid)
 	}
 	if strings.HasPrefix(filepath.VolumeName(cleaned), `\\`) {
-		return "", fmt.Errorf("%w: UNC paths are not allowed", ErrIPFSPathInvalid)
+		return "", fmt.Errorf("%w: UNC paths are not allowed", errIPFSPathInvalid)
 	}
 	if base := filepath.Base(p); base == "." || base == ".." ||
 		strings.HasSuffix(p, "/") || strings.HasSuffix(p, string(filepath.Separator)) ||
 		filepath.Base(cleaned) == string(filepath.Separator) {
-		return "", fmt.Errorf("%w: path must name a file", ErrIPFSPathInvalid)
+		return "", fmt.Errorf("%w: path must name a file", errIPFSPathInvalid)
 	}
 	return cleaned, nil
 }
@@ -102,7 +99,7 @@ func resolveParentDir(p string) (string, error) {
 }
 
 // confineToAllowedDirs returns the real path of candidate when it lies inside
-// one of allowedDirs, and ErrIPFSPathNotAllowed otherwise. Symlinks are
+// one of allowedDirs, and errIPFSPathNotAllowed otherwise. Symlinks are
 // resolved on both sides before comparing (resolve for the candidate,
 // EvalSymlinks for each allowed dir), so a link planted inside an allowed
 // directory cannot redirect the access. Both the configured and the resolved
@@ -112,7 +109,7 @@ func resolveParentDir(p string) (string, error) {
 // resolve step never reaches out to a remote host.
 func confineToAllowedDirs(candidate string, allowedDirs []string, resolve func(string) (string, error)) (string, error) {
 	if len(allowedDirs) == 0 {
-		return "", fmt.Errorf("%w: no IPFS_ALLOWED_DIRS configured for users without full access", ErrIPFSPathNotAllowed)
+		return "", fmt.Errorf("%w: no IPFS_ALLOWED_DIRS configured for users without full access", errIPFSPathNotAllowed)
 	}
 	roots := make([]string, 0, 2*len(allowedDirs))
 	for _, dir := range allowedDirs {
@@ -124,21 +121,14 @@ func confineToAllowedDirs(candidate string, allowedDirs []string, resolve func(s
 	}
 	resolved, err := resolve(candidate)
 	if err != nil {
-		return "", fmt.Errorf("%w: path does not exist", ErrIPFSPathNotAllowed)
+		return "", fmt.Errorf("%w: path does not exist", errIPFSPathNotAllowed)
 	}
-	if !underAny(resolved, roots) {
-		return "", fmt.Errorf("%w: path is outside the configured IPFS directories", ErrIPFSPathNotAllowed)
-	}
-	return resolved, nil
-}
-
-func underAny(p string, roots []string) bool {
 	for _, root := range roots {
-		if lib.PathUnderDir(p, root) {
-			return true
+		if lib.PathUnderDir(resolved, root) {
+			return resolved, nil
 		}
 	}
-	return false
+	return "", fmt.Errorf("%w: path is outside the configured IPFS directories", errIPFSPathNotAllowed)
 }
 
 // createDownloadFile opens the destination for writing with O_EXCL: never
@@ -158,7 +148,7 @@ func createDownloadFile(destinationPath string) (*os.File, error) {
 
 // ipfsPathErrorStatus maps a path validation error to an HTTP status.
 func ipfsPathErrorStatus(err error) int {
-	if errors.Is(err, ErrIPFSPathNotAllowed) {
+	if errors.Is(err, errIPFSPathNotAllowed) {
 		return http.StatusForbidden
 	}
 	return http.StatusBadRequest

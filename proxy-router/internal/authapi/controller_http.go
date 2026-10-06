@@ -29,6 +29,20 @@ func NewAuthController(authConfig *system.HTTPAuthConfig, environment string, lo
 	return a
 }
 
+// authErrorStatus maps a system auth error to an HTTP status: a refused
+// delegation is 403, a malformed username or perm list is 400, anything else
+// is 500.
+func authErrorStatus(err error) int {
+	switch {
+	case errors.Is(err, system.ErrUserChangeForbidden):
+		return http.StatusForbidden
+	case errors.Is(err, system.ErrInvalidUserSpec):
+		return http.StatusBadRequest
+	default:
+		return http.StatusInternalServerError
+	}
+}
+
 func (s *AuthController) RegisterRoutes(r interfaces.Router) {
 	r.POST("/auth/users", s.authConfig.CheckAuth("add_user"), s.AddUser)
 	r.DELETE("/auth/users", s.authConfig.CheckAuth("remove_user"), s.DeleteUser)
@@ -64,18 +78,14 @@ func (a *AuthController) AddUser(ctx *gin.Context) {
 		return
 	}
 
-	if err := system.ValidateUserSpec(req.Username, req.Perms); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
 	if err := a.authConfig.AuthorizeUserChange(ctx.GetString("username"), req.Username, req.Perms); err != nil {
-		ctx.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+		ctx.JSON(authErrorStatus(err), gin.H{"error": err.Error()})
 		return
 	}
 
 	err := a.authConfig.AddUser(req.Username, req.Password, req.Perms)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(authErrorStatus(err), gin.H{"error": err.Error()})
 		return
 	}
 
@@ -109,7 +119,7 @@ func (a *AuthController) DeleteUser(ctx *gin.Context) {
 	}
 
 	if err := a.authConfig.AuthorizeUserRemoval(ctx.GetString("username"), req.Username); err != nil {
-		ctx.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+		ctx.JSON(authErrorStatus(err), gin.H{"error": err.Error()})
 		return
 	}
 
@@ -139,11 +149,7 @@ func (a *AuthController) RequestAgentUser(ctx *gin.Context) {
 
 	err := a.authConfig.RequestAgentUser(req.Username, req.Password, req.Perms, req.Allowances)
 	if err != nil {
-		status := http.StatusInternalServerError
-		if errors.Is(err, system.ErrInvalidUserSpec) {
-			status = http.StatusBadRequest
-		}
-		ctx.JSON(status, gin.H{"error": err.Error()})
+		ctx.JSON(authErrorStatus(err), gin.H{"error": err.Error()})
 		return
 	}
 
@@ -198,26 +204,16 @@ func (a *AuthController) ConfirmAgentRequest(ctx *gin.Context) {
 		return
 	}
 
+	caller := ctx.GetString("username")
+	var err error
 	if req.Confirm {
-		err := a.authConfig.ConfirmAgentUserAs(ctx.GetString("username"), req.Username)
-		if err != nil {
-			status := http.StatusInternalServerError
-			if errors.Is(err, system.ErrUserChangeForbidden) {
-				status = http.StatusForbidden
-			}
-			ctx.JSON(status, gin.H{"error": err.Error()})
-			return
-		}
+		err = a.authConfig.ConfirmAgentUserAs(caller, req.Username)
 	} else {
-		err := a.authConfig.DeclineAgentUserAs(ctx.GetString("username"), req.Username)
-		if err != nil {
-			status := http.StatusInternalServerError
-			if errors.Is(err, system.ErrUserChangeForbidden) {
-				status = http.StatusForbidden
-			}
-			ctx.JSON(status, gin.H{"error": err.Error()})
-			return
-		}
+		err = a.authConfig.DeclineAgentUserAs(caller, req.Username)
+	}
+	if err != nil {
+		ctx.JSON(authErrorStatus(err), gin.H{"error": err.Error()})
+		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"result": true})
 }

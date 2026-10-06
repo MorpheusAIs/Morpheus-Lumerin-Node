@@ -25,7 +25,7 @@ func TestResolveIPFSDownloadDest_RejectsMalformed(t *testing.T) {
 	// Spelled by hand: filepath.Join would clean "." and ".." away.
 	for _, dest := range []string{"", "   ", "relative/file", "./x", sep, root + sep, root + sep + ".", root + sep + ".."} {
 		_, err := resolveIPFSDownloadDest(dest, true, nil)
-		assert.ErrorIs(t, err, ErrIPFSPathInvalid, "dest=%q", dest)
+		assert.ErrorIs(t, err, errIPFSPathInvalid, "dest=%q", dest)
 	}
 }
 
@@ -41,7 +41,7 @@ func TestResolveIPFSDownloadDest_ScopedCallerConfinedToAllowedDirs(t *testing.T)
 	outside := t.TempDir()
 
 	_, err := resolveIPFSDownloadDest(filepath.Join(allowed, "m.gguf"), false, nil)
-	assert.ErrorIs(t, err, ErrIPFSPathNotAllowed, "no dirs configured")
+	assert.ErrorIs(t, err, errIPFSPathNotAllowed, "no dirs configured")
 
 	got, err := resolveIPFSDownloadDest(filepath.Join(allowed, "m.gguf"), false, []string{allowed})
 	require.NoError(t, err)
@@ -57,13 +57,13 @@ func TestResolveIPFSDownloadDest_ScopedCallerConfinedToAllowedDirs(t *testing.T)
 	assert.NoError(t, err)
 
 	_, err = resolveIPFSDownloadDest(filepath.Join(outside, "m.gguf"), false, []string{allowed})
-	assert.ErrorIs(t, err, ErrIPFSPathNotAllowed)
+	assert.ErrorIs(t, err, errIPFSPathNotAllowed)
 
 	_, err = resolveIPFSDownloadDest(filepath.Join(allowed, "..", filepath.Base(outside), "m.gguf"), false, []string{allowed})
-	assert.ErrorIs(t, err, ErrIPFSPathNotAllowed, "dot-dot escape")
+	assert.ErrorIs(t, err, errIPFSPathNotAllowed, "dot-dot escape")
 
 	_, err = resolveIPFSDownloadDest(filepath.Join(allowed, "missing", "m.gguf"), false, []string{allowed})
-	assert.ErrorIs(t, err, ErrIPFSPathNotAllowed, "parent directory must exist")
+	assert.ErrorIs(t, err, errIPFSPathNotAllowed, "parent directory must exist")
 }
 
 func TestResolveIPFSDownloadDest_SymlinkInsideAllowedDirCannotEscape(t *testing.T) {
@@ -72,7 +72,7 @@ func TestResolveIPFSDownloadDest_SymlinkInsideAllowedDirCannotEscape(t *testing.
 	require.NoError(t, os.Symlink(outside, filepath.Join(allowed, "link")))
 
 	_, err := resolveIPFSDownloadDest(filepath.Join(allowed, "link", "m.gguf"), false, []string{allowed})
-	assert.ErrorIs(t, err, ErrIPFSPathNotAllowed)
+	assert.ErrorIs(t, err, errIPFSPathNotAllowed)
 }
 
 func TestResolveIPFSSourcePath_ScopedCallerConfinedToAllowedDirs(t *testing.T) {
@@ -90,13 +90,13 @@ func TestResolveIPFSSourcePath_ScopedCallerConfinedToAllowedDirs(t *testing.T) {
 	assert.Equal(t, realInside, got)
 
 	_, err = resolveIPFSSourcePath(secret, false, []string{allowed})
-	assert.ErrorIs(t, err, ErrIPFSPathNotAllowed)
+	assert.ErrorIs(t, err, errIPFSPathNotAllowed)
 
 	_, err = resolveIPFSSourcePath(filepath.Join(allowed, "innocent.bin"), false, []string{allowed})
-	assert.ErrorIs(t, err, ErrIPFSPathNotAllowed, "symlink to a file outside")
+	assert.ErrorIs(t, err, errIPFSPathNotAllowed, "symlink to a file outside")
 
 	_, err = resolveIPFSSourcePath(filepath.Join(allowed, "nope.bin"), false, []string{allowed})
-	assert.ErrorIs(t, err, ErrIPFSPathNotAllowed, "file must exist")
+	assert.ErrorIs(t, err, errIPFSPathNotAllowed, "file must exist")
 
 	got, err = resolveIPFSSourcePath(secret, true, nil)
 	require.NoError(t, err)

@@ -69,6 +69,15 @@ func (cfg *HTTPAuthConfig) HasFullAccess(username string) bool {
 	return false
 }
 
+// requireKnownCaller refuses an empty or unregistered caller. CheckAuth
+// guarantees a registered one on the HTTP path; this covers every other path.
+func (cfg *HTTPAuthConfig) requireKnownCaller(caller string) error {
+	if _, known := cfg.AuthEntries[caller]; caller == "" || !known {
+		return fmt.Errorf("%w: unknown caller", ErrUserChangeForbidden)
+	}
+	return nil
+}
+
 // dominatesPerms reports whether caller may grant perms. A full-access caller
 // dominates everything; any other caller must itself hold every perm, and "*"
 // is never delegable. Returns the first offending perm.
@@ -108,33 +117,12 @@ func hasSpendingAllowance(rec *storages.AgentUser) bool {
 	return false
 }
 
-// AuthorizeUserChange decides whether caller may create or overwrite target
-// with requestedPerms. A full-access caller may do anything. Any other caller
-// may only touch users whose current and requested permissions are a subset
-// of its own, may never touch the admin account, and may never touch a user
+// authorizeTarget decides whether a scoped caller may touch target at all:
+// never admin, never a user whose current perms the caller lacks, never a user
 // that carries spending allowances (pending or confirmed).
-//
-// This is what makes add_user and agent_requests delegable. Without it either
-// permission was a one-request escalation to admin: POST /auth/users with
-// username "admin" replaced the operator's credential, and admin bypasses
-// agent allowances, so send_eth/send_mor then moved funds with no cap.
-func (cfg *HTTPAuthConfig) AuthorizeUserChange(caller, target string, requestedPerms []string) error {
-	if _, known := cfg.AuthEntries[caller]; caller == "" || !known {
-		return fmt.Errorf("%w: unknown caller", ErrUserChangeForbidden)
-	}
-	if cfg.HasFullAccess(caller) {
-		return nil
-	}
+func (cfg *HTTPAuthConfig) authorizeTarget(caller, target string) error {
 	if target == AdminUsername {
 		return fmt.Errorf("%w: only a full-access user may change %q", ErrUserChangeForbidden, AdminUsername)
-	}
-	if cfg.WhitelistDefault && len(requestedPerms) == 0 {
-		// With rpcwhitelistdefault=1 a user without an explicit whitelist is
-		// unrestricted, so an empty perms list is a hidden "*".
-		return fmt.Errorf("%w: rpcwhitelistdefault=1 would leave %q unrestricted; list explicit permissions", ErrUserChangeForbidden, target)
-	}
-	if p, ok := cfg.dominatesPerms(caller, requestedPerms); !ok {
-		return fmt.Errorf("%w: %q cannot grant permission %q", ErrUserChangeForbidden, caller, p)
 	}
 	if _, exists := cfg.AuthEntries[target]; exists {
 		if cfg.HasFullAccess(target) {
@@ -154,22 +142,61 @@ func (cfg *HTTPAuthConfig) AuthorizeUserChange(caller, target string, requestedP
 	return nil
 }
 
+// authorizeGrant decides whether a scoped caller may hand out perms: only a
+// subset of its own, and never an empty list while rpcwhitelistdefault=1,
+// because a user without a whitelist is then unrestricted (a hidden "*").
+func (cfg *HTTPAuthConfig) authorizeGrant(caller string, perms []string) error {
+	if cfg.WhitelistDefault && len(perms) == 0 {
+		return fmt.Errorf("%w: rpcwhitelistdefault=1 would leave the user unrestricted; list explicit permissions", ErrUserChangeForbidden)
+	}
+	if p, ok := cfg.dominatesPerms(caller, perms); !ok {
+		return fmt.Errorf("%w: %q cannot grant permission %q", ErrUserChangeForbidden, caller, p)
+	}
+	return nil
+}
+
+// AuthorizeUserChange decides whether caller may create or overwrite target
+// with requestedPerms. A full-access caller may do anything; any other caller
+// is bound by authorizeTarget and authorizeGrant.
+//
+// This is what makes add_user and agent_requests delegable. Without it either
+// permission was a one-request escalation to admin: POST /auth/users with
+// username "admin" replaced the operator's credential, and admin bypasses
+// agent allowances, so send_eth/send_mor then moved funds with no cap.
+func (cfg *HTTPAuthConfig) AuthorizeUserChange(caller, target string, requestedPerms []string) error {
+	if err := cfg.requireKnownCaller(caller); err != nil {
+		return err
+	}
+	if cfg.HasFullAccess(caller) {
+		return nil
+	}
+	if err := cfg.authorizeTarget(caller, target); err != nil {
+		return err
+	}
+	return cfg.authorizeGrant(caller, requestedPerms)
+}
+
 // AuthorizeUserRemoval decides whether caller may remove target. The admin
 // account can never be removed through the API, since that locks everyone out
-// until proxy.conf is edited by hand. Other users follow AuthorizeUserChange.
+// until proxy.conf is edited by hand. Other users follow authorizeTarget.
 func (cfg *HTTPAuthConfig) AuthorizeUserRemoval(caller, target string) error {
 	if target == AdminUsername {
 		return fmt.Errorf("%w: %q cannot be removed", ErrUserChangeForbidden, AdminUsername)
 	}
-	return cfg.AuthorizeUserChange(caller, target, nil)
+	if err := cfg.requireKnownCaller(caller); err != nil {
+		return err
+	}
+	if cfg.HasFullAccess(caller) {
+		return nil
+	}
+	return cfg.authorizeTarget(caller, target)
 }
 
 // ConfirmAgentUserAs confirms a pending agent request on behalf of caller.
 // Requests are filed unauthenticated with perms and allowances of the filer's
-// choosing, so a caller without full access may only approve requests whose
-// perms it holds itself and that carry no spending allowance, and may not
-// re-confirm an already confirmed agent (re-confirming resets its password to
-// the one in the stored request).
+// choosing, so a scoped caller is bound by AuthorizeUserChange (which refuses
+// a request carrying allowances) and may not re-confirm an already confirmed
+// agent, since re-confirming resets its password to the one in the request.
 func (cfg *HTTPAuthConfig) ConfirmAgentUserAs(caller, username string) error {
 	request, err := cfg.AuthStorage.GetAgentUser(username)
 	if err != nil {
@@ -178,18 +205,13 @@ func (cfg *HTTPAuthConfig) ConfirmAgentUserAs(caller, username string) error {
 	if request == nil {
 		return fmt.Errorf("auth request not found")
 	}
-	if !cfg.HasFullAccess(caller) {
-		if request.IsConfirmed {
-			return fmt.Errorf("%w: %q is already confirmed; only a full-access user may re-confirm it", ErrUserChangeForbidden, username)
-		}
-		if hasSpendingAllowance(request) {
-			return fmt.Errorf("%w: %q cannot approve a request that carries spending allowances", ErrUserChangeForbidden, caller)
-		}
+	if request.IsConfirmed && !cfg.HasFullAccess(caller) {
+		return fmt.Errorf("%w: %q is already confirmed; only a full-access user may re-confirm it", ErrUserChangeForbidden, username)
 	}
 	if err := cfg.AuthorizeUserChange(caller, request.Username, request.Perms); err != nil {
 		return err
 	}
-	return cfg.ConfirmAgentUser(username)
+	return cfg.confirmAgentRequest(request)
 }
 
 // DeclineAgentUserAs declines (deletes) an agent request on behalf of caller.
@@ -198,8 +220,8 @@ func (cfg *HTTPAuthConfig) ConfirmAgentUserAs(caller, username string) error {
 // declined by any caller that dominates its perms.
 func (cfg *HTTPAuthConfig) DeclineAgentUserAs(caller, username string) error {
 	if !cfg.HasFullAccess(caller) {
-		if _, known := cfg.AuthEntries[caller]; caller == "" || !known {
-			return fmt.Errorf("%w: unknown caller", ErrUserChangeForbidden)
+		if err := cfg.requireKnownCaller(caller); err != nil {
+			return err
 		}
 		rec, err := cfg.AuthStorage.GetAgentUser(username)
 		if err != nil {

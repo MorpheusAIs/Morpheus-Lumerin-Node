@@ -130,6 +130,13 @@ func TestAuthorizeUserRemoval(t *testing.T) {
 	assert.ErrorIs(t, cfg.AuthorizeUserRemoval("agent", "ops"), ErrUserChangeForbidden, "ops holds send_mor, agent does not")
 	assert.NoError(t, cfg.AuthorizeUserRemoval("agent", "junior"))
 	assert.NoError(t, cfg.AuthorizeUserRemoval("agent", "missing"))
+
+	// Removal grants nothing, so the rpcwhitelistdefault=1 empty-perms rule
+	// must not apply; a user with no whitelist is then full-access, though.
+	cfg.WhitelistDefault = true
+	require.NoError(t, cfg.AddUser("unlisted", "pw", nil))
+	assert.NoError(t, cfg.AuthorizeUserRemoval("agent", "junior"))
+	assert.ErrorIs(t, cfg.AuthorizeUserRemoval("agent", "unlisted"), ErrUserChangeForbidden)
 }
 
 func TestIsAllowanceEnough_RequiresConfirmedAgent(t *testing.T) {

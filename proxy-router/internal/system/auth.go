@@ -497,27 +497,14 @@ func (cfg *HTTPAuthConfig) RequestAgentUser(username, password string, perms []s
 	return nil
 }
 
-func (cfg *HTTPAuthConfig) ConfirmAgentUser(username string) error {
-	request, err := cfg.AuthStorage.GetAgentUser(username)
-	if err != nil {
-		return fmt.Errorf("error reading agent user: %w", err)
-	}
-	if request == nil {
-		return fmt.Errorf("auth request not found")
-	}
-
-	err = cfg.AddUser(request.Username, request.Password, request.Perms)
-	if err != nil {
+// confirmAgentRequest turns a loaded agent request into a login and marks it
+// confirmed. Authorization happens in ConfirmAgentUserAs.
+func (cfg *HTTPAuthConfig) confirmAgentRequest(request *storages.AgentUser) error {
+	if err := cfg.AddUser(request.Username, request.Password, request.Perms); err != nil {
 		return err
 	}
-
 	request.IsConfirmed = true
-	err = cfg.AuthStorage.AddAuthRequest(request)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return cfg.AuthStorage.AddAuthRequest(request)
 }
 
 func (cfg *HTTPAuthConfig) DeclineAgentUser(username string) error {
