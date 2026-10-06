@@ -225,7 +225,10 @@ func (d *Detector) probeLMStudio(ctx context.Context, base, modelName, apiKey st
 	}
 	ev.Stack = "lmstudio"
 	tracef(ctx, "identified lmstudio by /api/v0/models")
-	if entry := matchModelEntry(data, modelName); entry != nil {
+	if entry, bySpelling := findModelEntry(data, modelName); entry != nil {
+		if bySpelling {
+			traceSpelledEntry(ctx, "lmstudio /api/v0/models", modelName, entry)
+		}
 		if arch, ok := entry["arch"].(string); ok {
 			ev.Architecture = arch
 		}
@@ -364,7 +367,10 @@ func (d *Detector) probeVLLM(ctx context.Context, base, modelName, apiKey string
 
 	if list := d.getJSON(ctx, base+"/v1/models", apiKey); list != nil {
 		if data, ok := list["data"].([]any); ok {
-			if entry := matchModelEntry(data, modelName); entry != nil {
+			if entry, bySpelling := findModelEntry(data, modelName); entry != nil {
+				if bySpelling {
+					traceSpelledEntry(ctx, "vllm /v1/models", modelName, entry)
+				}
 				id, _ := entry["id"].(string)
 				root, _ := entry["root"].(string)
 				ev.ServedModelID = vllmWeightsName(ctx, id, root)
@@ -403,13 +409,10 @@ func localPath(root string) bool {
 	return strings.HasPrefix(root, "/") || strings.HasPrefix(root, ".") || strings.HasPrefix(root, "~") || strings.Count(root, "/") != 1
 }
 
-func matchModelEntry(data []any, modelName string) map[string]any {
-	entry, _ := findModelEntry(data, modelName)
-	return entry
-}
-
-// findModelEntry also reports whether the entry was found by spelling alone:
-// an id that differs from modelName only in separators.
+// findModelEntry looks modelName up in a model listing: by id (any case, also
+// without inline parameters), as the only entry, under an org/ prefix, and
+// last by spelling alone, an id that names the model once separators, case
+// and inline parameters are ignored. bySpelling reports that last kind.
 func findModelEntry(data []any, modelName string) (entry map[string]any, bySpelling bool) {
 	var entries []map[string]any
 	for _, item := range data {
@@ -464,6 +467,11 @@ func findModelEntry(data []any, modelName string) (entry map[string]any, bySpell
 	return entry, true
 }
 
+func traceSpelledEntry(ctx context.Context, listing, modelName string, entry map[string]any) {
+	id, _ := entry["id"].(string)
+	tracef(ctx, "%s lists %q as %q (same name in normalized spelling)", listing, bareModelID(modelName), id)
+}
+
 var veniceCapabilityNames = map[string]string{
 	"supportsReasoning":       "reasoning",
 	"supportsFunctionCalling": "tools",
@@ -489,8 +497,7 @@ func (d *Detector) probeRegistryShape(ctx context.Context, bases []string, model
 			continue
 		}
 		if bySpelling {
-			id, _ := entry["id"].(string)
-			tracef(ctx, "model listing at %s/models lists %q as %q (same name, other separators)", base, bareModelID(modelName), id)
+			traceSpelledEntry(ctx, "model listing at "+base+"/models", modelName, entry)
 		}
 
 		if params, ok := entry["supported_parameters"].([]any); ok {

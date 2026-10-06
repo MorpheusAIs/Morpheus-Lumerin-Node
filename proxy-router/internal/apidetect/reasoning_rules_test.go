@@ -186,6 +186,23 @@ func TestDetectLiteLLMTwoHopFindsVeniceEntryBySpelling(t *testing.T) {
 	effort := api.Bindings[system.IntentReasoningEffort]
 	require.Equal(t, "reasoning.effort", effort.Param)
 	require.Equal(t, []string{"none", "low", "medium", "high"}, effort.EnumValues)
-	require.Contains(t, trace, `lists "google.gemma-4-31b-it" as "google-gemma-4-31b-it" (same name, other separators)`)
+	require.Contains(t, trace, `lists "google.gemma-4-31b-it" as "google-gemma-4-31b-it" (same name in normalized spelling)`)
 	veniceLog.requireAnonymous(t)
+}
+
+func TestDetectVLLMTracesASpellingMatch(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/version", jsonHandler(map[string]any{"version": "0.18.0"}))
+	mux.HandleFunc("/v1/models", jsonHandler(map[string]any{"object": "list", "data": []map[string]any{
+		{"id": "google-gemma-4-31b-it", "root": "google/gemma-4-31B-it"},
+		{"id": "support-lora", "root": "/adapters/support", "parent": "google-gemma-4-31b-it"},
+	}}))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	d := NewDetector(lib.NewTestLogger(), DefaultOptions())
+	api, trace := d.DetectWithTrace(context.Background(), config.ModelConfig{ModelName: "google.gemma-4-31b-it", ApiType: "openai", ApiURL: srv.URL + "/v1/chat/completions"})
+	require.Equal(t, "vllm", api.Stack)
+	require.Equal(t, "gemma", api.ModelFamily)
+	require.Contains(t, strings.Join(trace, "\n"), `vllm /v1/models lists "google.gemma-4-31b-it" as "google-gemma-4-31b-it" (same name in normalized spelling)`)
 }

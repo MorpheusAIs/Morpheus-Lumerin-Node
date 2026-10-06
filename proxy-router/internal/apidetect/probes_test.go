@@ -26,12 +26,12 @@ func TestBareModelID(t *testing.T) {
 	}
 }
 
-func TestMatchModelEntryMatchesByBareID(t *testing.T) {
+func TestFindModelEntryMatchesByBareID(t *testing.T) {
 	data := []any{
 		map[string]any{"id": "deepseek-v4-pro"},
 		map[string]any{"id": "some-other-model"},
 	}
-	entry := matchModelEntry(data, "deepseek-v4-pro:include_venice_system_prompt=false")
+	entry, _ := findModelEntry(data, "deepseek-v4-pro:include_venice_system_prompt=false")
 	require.NotNil(t, entry)
 	id, _ := entry["id"].(string)
 	require.Equal(t, "deepseek-v4-pro", id)
@@ -57,6 +57,7 @@ func TestFindModelEntryBySpelling(t *testing.T) {
 		{"org-prefixed id", listing("google/gemma-4-31b-it", "meta-llama/llama-3.3-70b"), "Gemma_4_31B_it", "google/gemma-4-31b-it", true},
 		{"two respellings are ambiguous", listing("qwen3.5-9b", "qwen3-5-9b"), "Qwen3_5_9B", "", false},
 		{"a different id stays unmatched", listing("mistral-small-3-2-24b-instruct", "llama-3.3-70b"), "mistral-31-24b", "", false},
+		{"an empty name matches nothing", listing(" ", "x"), "", "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			entry, bySpelling := findModelEntry(tc.data, tc.model)
