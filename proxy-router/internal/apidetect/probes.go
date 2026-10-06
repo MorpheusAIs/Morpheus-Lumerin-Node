@@ -404,6 +404,13 @@ func localPath(root string) bool {
 }
 
 func matchModelEntry(data []any, modelName string) map[string]any {
+	entry, _ := findModelEntry(data, modelName)
+	return entry
+}
+
+// findModelEntry also reports whether the entry was found by spelling alone:
+// an id that differs from modelName only in separators.
+func findModelEntry(data []any, modelName string) (entry map[string]any, bySpelling bool) {
 	var entries []map[string]any
 	for _, item := range data {
 		if m, ok := item.(map[string]any); ok {
@@ -420,21 +427,41 @@ func matchModelEntry(data []any, modelName string) map[string]any {
 	for _, name := range candidates {
 		for _, m := range entries {
 			if id, ok := m["id"].(string); ok && strings.EqualFold(id, name) {
-				return m
+				return m, false
 			}
 		}
 	}
 	if len(entries) == 1 {
-		return entries[0]
+		return entries[0], false
 	}
 	for _, name := range candidates {
 		for _, m := range entries {
 			if id, ok := m["id"].(string); ok && strings.HasSuffix(strings.ToLower(id), "/"+strings.ToLower(name)) {
-				return m
+				return m, false
 			}
 		}
 	}
-	return nil
+
+	// Hubs spell one model with different separators: a LiteLLM deployment of
+	// google.gemma-4-31b-it reaches Venice, which lists google-gemma-4-31b-it.
+	// Only an unambiguous match counts.
+	want := apispec.NormalizeModelName(modelName)
+	if want == "" {
+		return nil, false
+	}
+	matches := 0
+	for _, m := range entries {
+		if id, ok := m["id"].(string); ok {
+			if norm := apispec.NormalizeModelName(id); norm == want || strings.HasSuffix(norm, "/"+want) {
+				entry = m
+				matches++
+			}
+		}
+	}
+	if matches != 1 {
+		return nil, false
+	}
+	return entry, true
 }
 
 var veniceCapabilityNames = map[string]string{
@@ -456,10 +483,14 @@ func (d *Detector) probeRegistryShape(ctx context.Context, bases []string, model
 		if !ok {
 			continue
 		}
-		entry := matchModelEntry(data, modelName)
+		entry, bySpelling := findModelEntry(data, modelName)
 		if entry == nil {
 			tracef(ctx, "model listing at %s/models has %d entries but none matches model %q (config drift?)", base, len(data), modelName)
 			continue
+		}
+		if bySpelling {
+			id, _ := entry["id"].(string)
+			tracef(ctx, "model listing at %s/models lists %q as %q (same name, other separators)", base, bareModelID(modelName), id)
 		}
 
 		if params, ok := entry["supported_parameters"].([]any); ok {

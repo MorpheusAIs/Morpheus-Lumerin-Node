@@ -166,3 +166,26 @@ func TestDetectLiteLLMTwoHopCarriesVeniceNoEffort(t *testing.T) {
 	require.Equal(t, "venice_parameters.disable_thinking", api.Bindings[system.IntentReasoningDisable].Param)
 	require.Contains(t, trace, "upstream venice listing says the model takes no effort level")
 }
+
+func TestDetectLiteLLMTwoHopFindsVeniceEntryBySpelling(t *testing.T) {
+	gemma := veniceEntryWithEfforts("google-gemma-4-31b-it", "none", "low", "medium", "high")
+	llama := map[string]any{"id": "llama-3.3-70b", "model_spec": map[string]any{"capabilities": map[string]any{"supportsReasoning": false}}}
+	venice, veniceLog := registryServerMulti(t, gemma, llama)
+	mapHostToVendor(t, venice.URL, "venice")
+	group := map[string]any{"model_group": "Gemma-4-31b", "supported_openai_params": []string{"temperature", "tools"}, "supports_reasoning": false}
+	litellm, _ := litellmServer(t, group, []map[string]any{
+		deployment("Gemma-4-31b", "openai/google.gemma-4-31b-it:include_venice_system_prompt=false", venice.URL+"/api/v1", nil),
+	})
+
+	api, trace := detectVia(t, litellm.URL, "Gemma-4-31b", DefaultOptions())
+	require.Equal(t, "venice", api.Stack, "the deployment's dotted id is venice's dashed one")
+	require.Equal(t, "litellm", api.Via)
+	require.Equal(t, "gemma", api.ModelFamily)
+	require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
+	require.Equal(t, "venice_parameters.disable_thinking", api.Bindings[system.IntentReasoningDisable].Param)
+	effort := api.Bindings[system.IntentReasoningEffort]
+	require.Equal(t, "reasoning.effort", effort.Param)
+	require.Equal(t, []string{"none", "low", "medium", "high"}, effort.EnumValues)
+	require.Contains(t, trace, `lists "google.gemma-4-31b-it" as "google-gemma-4-31b-it" (same name, other separators)`)
+	veniceLog.requireAnonymous(t)
+}
