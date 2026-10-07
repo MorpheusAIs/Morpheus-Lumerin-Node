@@ -1,0 +1,4 @@
+// Copy to Config/Local.xcconfig (git-ignored) and fill in. The App ID must have
+// the App Attest opt-in (CDhash) capability; Xcode automatic signing can add it.
+DEVELOPMENT_TEAM = XXXXXXXXXX
+PRODUCT_BUNDLE_IDENTIFIER = com.example.sealedengine
