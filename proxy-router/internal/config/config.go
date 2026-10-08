@@ -39,8 +39,9 @@ type Config struct {
 	}
 	Environment string `env:"ENVIRONMENT" flag:"environment"`
 	IPFS        struct {
-		Disabled bool   `env:"IPFS_DISABLED" flag:"ipfs-disabled" desc:"disable IPFS"`
-		Address  string `env:"IPFS_MULTADDR" flag:"ipfs-multaddr" validate:"omitempty" desc:"IPFS API multiaddress"`
+		Disabled    bool   `env:"IPFS_DISABLED" flag:"ipfs-disabled" desc:"disable IPFS"`
+		Address     string `env:"IPFS_MULTADDR" flag:"ipfs-multaddr" validate:"omitempty" desc:"IPFS API multiaddress"`
+		AllowedDirs string `env:"IPFS_ALLOWED_DIRS" flag:"ipfs-allowed-dirs" validate:"omitempty" desc:"OS path list of directories that API users without full access may read from (ipfs_add) and write into (ipfs_get); empty refuses them"`
 	}
 	Marketplace struct {
 		DiamondContractAddress *common.Address `env:"DIAMOND_CONTRACT_ADDRESS" flag:"diamond-address"   validate:"omitempty,eth_addr"`

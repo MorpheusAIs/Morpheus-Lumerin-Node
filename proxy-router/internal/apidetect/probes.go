@@ -225,7 +225,10 @@ func (d *Detector) probeLMStudio(ctx context.Context, base, modelName, apiKey st
 	}
 	ev.Stack = "lmstudio"
 	tracef(ctx, "identified lmstudio by /api/v0/models")
-	if entry := matchModelEntry(data, modelName); entry != nil {
+	if entry, bySpelling := findModelEntry(data, modelName); entry != nil {
+		if bySpelling {
+			traceSpelledEntry(ctx, "lmstudio /api/v0/models", modelName, entry)
+		}
 		if arch, ok := entry["arch"].(string); ok {
 			ev.Architecture = arch
 		}
@@ -364,7 +367,10 @@ func (d *Detector) probeVLLM(ctx context.Context, base, modelName, apiKey string
 
 	if list := d.getJSON(ctx, base+"/v1/models", apiKey); list != nil {
 		if data, ok := list["data"].([]any); ok {
-			if entry := matchModelEntry(data, modelName); entry != nil {
+			if entry, bySpelling := findModelEntry(data, modelName); entry != nil {
+				if bySpelling {
+					traceSpelledEntry(ctx, "vllm /v1/models", modelName, entry)
+				}
 				id, _ := entry["id"].(string)
 				root, _ := entry["root"].(string)
 				ev.ServedModelID = vllmWeightsName(ctx, id, root)
@@ -403,7 +409,11 @@ func localPath(root string) bool {
 	return strings.HasPrefix(root, "/") || strings.HasPrefix(root, ".") || strings.HasPrefix(root, "~") || strings.Count(root, "/") != 1
 }
 
-func matchModelEntry(data []any, modelName string) map[string]any {
+// findModelEntry looks modelName up in a model listing: by id (any case, also
+// without inline parameters), as the only entry, under an org/ prefix, and
+// last by spelling alone, an id that names the model once separators, case
+// and inline parameters are ignored. bySpelling reports that last kind.
+func findModelEntry(data []any, modelName string) (entry map[string]any, bySpelling bool) {
 	var entries []map[string]any
 	for _, item := range data {
 		if m, ok := item.(map[string]any); ok {
@@ -420,21 +430,46 @@ func matchModelEntry(data []any, modelName string) map[string]any {
 	for _, name := range candidates {
 		for _, m := range entries {
 			if id, ok := m["id"].(string); ok && strings.EqualFold(id, name) {
-				return m
+				return m, false
 			}
 		}
 	}
 	if len(entries) == 1 {
-		return entries[0]
+		return entries[0], false
 	}
 	for _, name := range candidates {
 		for _, m := range entries {
 			if id, ok := m["id"].(string); ok && strings.HasSuffix(strings.ToLower(id), "/"+strings.ToLower(name)) {
-				return m
+				return m, false
 			}
 		}
 	}
-	return nil
+
+	// Hubs spell one model with different separators: a LiteLLM deployment of
+	// google.gemma-4-31b-it reaches Venice, which lists google-gemma-4-31b-it.
+	// Only an unambiguous match counts.
+	want := apispec.NormalizeModelName(modelName)
+	if want == "" {
+		return nil, false
+	}
+	matches := 0
+	for _, m := range entries {
+		if id, ok := m["id"].(string); ok {
+			if norm := apispec.NormalizeModelName(id); norm == want || strings.HasSuffix(norm, "/"+want) {
+				entry = m
+				matches++
+			}
+		}
+	}
+	if matches != 1 {
+		return nil, false
+	}
+	return entry, true
+}
+
+func traceSpelledEntry(ctx context.Context, listing, modelName string, entry map[string]any) {
+	id, _ := entry["id"].(string)
+	tracef(ctx, "%s lists %q as %q (same name in normalized spelling)", listing, bareModelID(modelName), id)
 }
 
 var veniceCapabilityNames = map[string]string{
@@ -456,10 +491,13 @@ func (d *Detector) probeRegistryShape(ctx context.Context, bases []string, model
 		if !ok {
 			continue
 		}
-		entry := matchModelEntry(data, modelName)
+		entry, bySpelling := findModelEntry(data, modelName)
 		if entry == nil {
 			tracef(ctx, "model listing at %s/models has %d entries but none matches model %q (config drift?)", base, len(data), modelName)
 			continue
+		}
+		if bySpelling {
+			traceSpelledEntry(ctx, "model listing at "+base+"/models", modelName, entry)
 		}
 
 		if params, ok := entry["supported_parameters"].([]any); ok {

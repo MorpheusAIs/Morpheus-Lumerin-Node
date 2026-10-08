@@ -166,3 +166,43 @@ func TestDetectLiteLLMTwoHopCarriesVeniceNoEffort(t *testing.T) {
 	require.Equal(t, "venice_parameters.disable_thinking", api.Bindings[system.IntentReasoningDisable].Param)
 	require.Contains(t, trace, "upstream venice listing says the model takes no effort level")
 }
+
+func TestDetectLiteLLMTwoHopFindsVeniceEntryBySpelling(t *testing.T) {
+	gemma := veniceEntryWithEfforts("google-gemma-4-31b-it", "none", "low", "medium", "high")
+	llama := map[string]any{"id": "llama-3.3-70b", "model_spec": map[string]any{"capabilities": map[string]any{"supportsReasoning": false}}}
+	venice, veniceLog := registryServerMulti(t, gemma, llama)
+	mapHostToVendor(t, venice.URL, "venice")
+	group := map[string]any{"model_group": "Gemma-4-31b", "supported_openai_params": []string{"temperature", "tools"}, "supports_reasoning": false}
+	litellm, _ := litellmServer(t, group, []map[string]any{
+		deployment("Gemma-4-31b", "openai/google.gemma-4-31b-it:include_venice_system_prompt=false", venice.URL+"/api/v1", nil),
+	})
+
+	api, trace := detectVia(t, litellm.URL, "Gemma-4-31b", DefaultOptions())
+	require.Equal(t, "venice", api.Stack, "the deployment's dotted id is venice's dashed one")
+	require.Equal(t, "litellm", api.Via)
+	require.Equal(t, "gemma", api.ModelFamily)
+	require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
+	require.Equal(t, "venice_parameters.disable_thinking", api.Bindings[system.IntentReasoningDisable].Param)
+	effort := api.Bindings[system.IntentReasoningEffort]
+	require.Equal(t, "reasoning.effort", effort.Param)
+	require.Equal(t, []string{"none", "low", "medium", "high"}, effort.EnumValues)
+	require.Contains(t, trace, `lists "google.gemma-4-31b-it" as "google-gemma-4-31b-it" (same name in normalized spelling)`)
+	veniceLog.requireAnonymous(t)
+}
+
+func TestDetectVLLMTracesASpellingMatch(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/version", jsonHandler(map[string]any{"version": "0.18.0"}))
+	mux.HandleFunc("/v1/models", jsonHandler(map[string]any{"object": "list", "data": []map[string]any{
+		{"id": "google-gemma-4-31b-it", "root": "google/gemma-4-31B-it"},
+		{"id": "support-lora", "root": "/adapters/support", "parent": "google-gemma-4-31b-it"},
+	}}))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	d := NewDetector(lib.NewTestLogger(), DefaultOptions())
+	api, trace := d.DetectWithTrace(context.Background(), config.ModelConfig{ModelName: "google.gemma-4-31b-it", ApiType: "openai", ApiURL: srv.URL + "/v1/chat/completions"})
+	require.Equal(t, "vllm", api.Stack)
+	require.Equal(t, "gemma", api.ModelFamily)
+	require.Contains(t, strings.Join(trace, "\n"), `vllm /v1/models lists "google.gemma-4-31b-it" as "google-gemma-4-31b-it" (same name in normalized spelling)`)
+}

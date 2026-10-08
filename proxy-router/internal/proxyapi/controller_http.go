@@ -56,6 +56,7 @@ type ProxyController struct {
 	log                      lib.ILogger
 	authConfig               system.HTTPAuthConfig
 	ipfsManager              *IpfsManager
+	ipfsAllowedDirs          []string
 	dockerManager            *DockerManager
 	backendAttestationStatus BackendAttestationStatusProvider
 }
@@ -601,9 +602,9 @@ func (c *ProxyController) DownloadFile(ctx *gin.Context) {
 		return
 	}
 
-	destinationPath := ctx.Query("dest")
-	if destinationPath == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "destination path is required"})
+	destinationPath, err := resolveIPFSDownloadDest(ctx.Query("dest"), c.authConfig.HasFullAccess(ctx.GetString("username")), c.ipfsAllowedDirs)
+	if err != nil {
+		ctx.JSON(ipfsPathErrorStatus(err), gin.H{"error": err.Error()})
 		return
 	}
 
@@ -641,9 +642,9 @@ func (c *ProxyController) StreamDownloadFile(ctx *gin.Context) {
 		return
 	}
 
-	destinationPath := ctx.Query("dest")
-	if destinationPath == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "destination path is required"})
+	destinationPath, err := resolveIPFSDownloadDest(ctx.Query("dest"), c.authConfig.HasFullAccess(ctx.GetString("username")), c.ipfsAllowedDirs)
+	if err != nil {
+		ctx.JSON(ipfsPathErrorStatus(err), gin.H{"error": err.Error()})
 		return
 	}
 
@@ -804,7 +805,13 @@ func (c *ProxyController) AddFile(ctx *gin.Context) {
 		return
 	}
 
-	result, err := c.ipfsManager.AddFile(ctx, req.FilePath, req.Tags, req.ID.Hex(), req.ModelName)
+	filePath, err := resolveIPFSSourcePath(req.FilePath, c.authConfig.HasFullAccess(ctx.GetString("username")), c.ipfsAllowedDirs)
+	if err != nil {
+		ctx.JSON(ipfsPathErrorStatus(err), gin.H{"error": err.Error()})
+		return
+	}
+
+	result, err := c.ipfsManager.AddFile(ctx, filePath, req.Tags, req.ID.Hex(), req.ModelName)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
