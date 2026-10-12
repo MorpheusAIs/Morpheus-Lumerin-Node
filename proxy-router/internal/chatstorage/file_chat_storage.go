@@ -10,6 +10,7 @@ import (
 	"time"
 
 	gcs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 )
 
 // ChatStorage handles storing conversations to files.
@@ -33,13 +34,37 @@ func NewChatStorage(dirPath string) *ChatStorage {
 	}
 }
 
+// chatFilePath builds a path under dirPath from a sanitized identifier.
+// Rejects empty ids and any path that would escape the storage directory.
+func (cs *ChatStorage) chatFilePath(identifier string) (string, error) {
+	id := strings.TrimSpace(identifier)
+	if id == "" {
+		return "", fmt.Errorf("chat id required")
+	}
+	if strings.ContainsAny(id, `/\`) || strings.Contains(id, "..") || strings.ContainsRune(id, filepath.Separator) {
+		return "", fmt.Errorf("invalid chat id")
+	}
+	safe := lib.SanitizeFilename(id)
+	if safe == "" || safe == "." || safe == ".." {
+		return "", fmt.Errorf("invalid chat id")
+	}
+	filePath := filepath.Join(cs.dirPath, safe+".json")
+	if !lib.PathUnderDir(filePath, cs.dirPath) {
+		return "", fmt.Errorf("chat path escapes storage dir")
+	}
+	return filePath, nil
+}
+
 // StorePromptResponseToFile stores the prompt and response to a file.
 func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isLocal bool, modelId string, prompt interface{}, responses []gcs.Chunk, promptAt time.Time, responseAt time.Time) error {
 	if err := ensurePrivateDirectory(cs.dirPath); err != nil {
 		return err
 	}
 
-	filePath := filepath.Join(cs.dirPath, identifier+".json")
+	filePath, err := cs.chatFilePath(identifier)
+	if err != nil {
+		return err
+	}
 	fileMutex := cs.getFileMutex(filePath)
 
 	// Lock the file mutex
@@ -202,7 +227,10 @@ func (cs *ChatStorage) DeleteChat(identifier string) error {
 	if err := ensurePrivateDirectory(cs.dirPath); err != nil {
 		return err
 	}
-	filePath := filepath.Join(cs.dirPath, identifier+".json")
+	filePath, err := cs.chatFilePath(identifier)
+	if err != nil {
+		return err
+	}
 	fileMutex := cs.getFileMutex(filePath)
 
 	fileMutex.Lock()
@@ -219,7 +247,10 @@ func (cs *ChatStorage) UpdateChatTitle(identifier string, title string) error {
 		return err
 	}
 
-	filePath := filepath.Join(cs.dirPath, identifier+".json")
+	filePath, err := cs.chatFilePath(identifier)
+	if err != nil {
+		return err
+	}
 	fileMutex := cs.getFileMutex(filePath)
 
 	fileMutex.Lock()
@@ -252,7 +283,10 @@ func (cs *ChatStorage) LoadChatFromFile(identifier string) (*gcs.ChatHistory, er
 	if err := ensurePrivateDirectory(cs.dirPath); err != nil {
 		return nil, err
 	}
-	filePath := filepath.Join(cs.dirPath, identifier+".json")
+	filePath, err := cs.chatFilePath(identifier)
+	if err != nil {
+		return nil, err
+	}
 	fileMutex := cs.getFileMutex(filePath)
 
 	fileMutex.Lock()

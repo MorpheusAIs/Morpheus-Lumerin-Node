@@ -51,7 +51,7 @@ When managed mode is on (`GATEWAY_JOURNAL_PATH` set) **or** the request carries 
 - rounds the stake **up** with one basis point (0.01%) of headroom, so the contract's round-down of stipend and duration cannot deliver fewer seconds than requested;
 - rejects `sessionDuration` below the contract minimum of 300 seconds up front instead of letting the open revert.
 
-Unmanaged opens keep the historical `supply × price × duration / budget` calculation unchanged. The headroom is small but non-zero, so a companion that quotes users a stake figure should apply the same rounding (`ceil(supply × price × duration × 10001 / (budget × 10000))`) rather than a bare multiplication, or set `maxStakeWei` a little above its own estimate.
+Unmanaged opens use the stock formula, `ceil(supply × price × (duration + 1) / budget)` — one second of headroom and a round-up, described in [How much MOR does an open lock?](/concepts/sessions-stake-close-recover#how-much-mor-does-an-open-lock). The two formulas differ by well under a tenth of a percent on any normal session, but they are not byte-identical, so a companion that quotes users a stake figure should either call [`GET /blockchain/models/:id/session/estimate`](/reference/api-endpoints#estimate-a-session-before-opening) on a node running in managed mode (the estimate then uses the gateway formula; on an unmanaged node it returns the stock figure), apply the gateway rounding itself (`ceil(supply × price × duration × 10001 / (budget × 10000))`), or set `maxStakeWei` a little above its own estimate.
 
 ## Operation journal (`X-Gateway-Operation`)
 

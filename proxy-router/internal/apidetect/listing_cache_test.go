@@ -48,11 +48,11 @@ func TestCachedListingServesTwoModelsFromOneRequest(t *testing.T) {
 	const key = "sk-secret-listing-key"
 	first := d.cachedListing(context.Background(), base, key)
 	require.NotNil(t, first)
-	require.NotNil(t, matchModelEntry(first["data"].([]any), "deepseek/deepseek-chat-v3.1"))
+	require.NotNil(t, matchedEntry(first["data"].([]any), "deepseek/deepseek-chat-v3.1"))
 
 	ctx, trace := withTrace(context.Background())
 	second := d.cachedListing(ctx, base, key)
-	require.NotNil(t, matchModelEntry(second["data"].([]any), "qwen/qwen3-235b-a22b"))
+	require.NotNil(t, matchedEntry(second["data"].([]any), "qwen/qwen3-235b-a22b"))
 	require.Equal(t, int32(1), atomic.LoadInt32(&calls), "one listing per host and key")
 	require.Contains(t, strings.Join(trace.lines, "\n"), "served from the listing cache")
 	require.NotContains(t, strings.Join(trace.lines, "\n"), key, "the trace never carries the key")

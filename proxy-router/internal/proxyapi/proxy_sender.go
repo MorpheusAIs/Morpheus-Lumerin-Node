@@ -1361,8 +1361,10 @@ func (p *ProxyServiceSender) SendAudioTranscriptionV2(ctx context.Context, sessi
 		// Record start time for session stats
 		startTime = time.Now().Unix()
 
-		// Step 1: Start streaming session
-		err = p.sendStreamStart(ctx, provider, sessionID, streamID, totalChunks, fileSize, contentType, prKey)
+		// Step 1: Start streaming session. Continue with whatever stream ID the
+		// provider acknowledged (today providers echo ours; this keeps us
+		// compatible if a provider ever issues its own).
+		streamID, err = p.sendStreamStart(ctx, provider, sessionID, streamID, totalChunks, fileSize, contentType, prKey)
 		if err != nil {
 			return nil, fmt.Errorf("failed to start streaming session: %w", err)
 		}
@@ -1408,42 +1410,55 @@ func (p *ProxyServiceSender) SendAudioTranscriptionV2(ctx context.Context, sessi
 	return result, nil
 }
 
-// sendStreamStart initiates the streaming session
-func (p *ProxyServiceSender) sendStreamStart(ctx context.Context, provider *storages.User, sessionID common.Hash, streamID string, totalChunks uint32, fileSize uint64, contentType string, prKey lib.HexString) error {
+// sendStreamStart initiates the streaming session and returns the stream ID
+// acknowledged by the provider, which must be used for subsequent chunk/end
+// messages.
+func (p *ProxyServiceSender) sendStreamStart(ctx context.Context, provider *storages.User, sessionID common.Hash, streamID string, totalChunks uint32, fileSize uint64, contentType string, prKey lib.HexString) (string, error) {
 	requestID := lib.RequestIDFromContext(ctx)
 	if requestID == "" {
 		requestID = lib.GenerateRequestID()
 	}
 	message, err := p.morRPC.SessionPromptStreamStartRequest(sessionID, streamID, totalChunks, contentType, fileSize, prKey, requestID)
 	if err != nil {
-		return fmt.Errorf("failed to create stream start request: %w", err)
+		return "", fmt.Errorf("failed to create stream start request: %w", err)
 	}
 
 	response, _, err := p.rpcRequest(provider.Url, message)
 	if err != nil {
-		return fmt.Errorf("failed to send stream start request: %w", err)
+		return "", fmt.Errorf("failed to send stream start request: %w", err)
+	}
+
+	if response.Error != nil {
+		return "", fmt.Errorf("stream start failed: %s", response.Error.Message)
+	}
+	if response.Result == nil {
+		return "", fmt.Errorf("stream start failed: empty result")
 	}
 
 	var typedMsg msgs.SessionPromptStreamStartRes
 	err = json.Unmarshal(*response.Result, &typedMsg)
 	if err != nil {
-		return fmt.Errorf("failed to unmarshal stream start response: %w", err)
+		return "", fmt.Errorf("failed to unmarshal stream start response: %w", err)
 	}
 
 	signature := typedMsg.Signature
 	typedMsg.Signature = lib.HexString{}
 
 	hexPubKey, err := lib.StringToHexString(provider.PubKey)
+	if err != nil {
+		return "", lib.WrapError(ErrCreateReq, err)
+	}
 	if !p.validateMsgSignature(typedMsg, signature, hexPubKey) {
-		return fmt.Errorf("invalid signature for stream start response")
+		return "", fmt.Errorf("invalid signature for stream start response")
 	}
 
-	if response.Error != nil {
-		return fmt.Errorf("stream start failed: %s", response.Error.Message)
+	ackedStreamID := typedMsg.StreamID
+	if ackedStreamID == "" {
+		ackedStreamID = streamID
 	}
 
-	p.log.With("request_id", requestID).Infof("Stream start successful for stream ID: %s", streamID)
-	return nil
+	p.log.With("request_id", requestID).Infof("Stream start successful for stream ID: %s", ackedStreamID)
+	return ackedStreamID, nil
 }
 
 // sendStreamChunks sends the audio file in chunks
@@ -1550,23 +1565,7 @@ func (p *ProxyServiceSender) sendStreamEnd(ctx context.Context, provider *storag
 func detectAudioContentType(filePath string) string {
 	ext := strings.ToLower(filepath.Ext(filePath))
 
-	contentTypes := map[string]string{
-		".mp3":  "audio/mpeg",
-		".wav":  "audio/wav",
-		".wave": "audio/wav",
-		".ogg":  "audio/ogg",
-		".flac": "audio/flac",
-		".aac":  "audio/aac",
-		".m4a":  "audio/mp4",
-		".webm": "audio/webm",
-		".opus": "audio/opus",
-		".wma":  "audio/x-ms-wma",
-		".amr":  "audio/amr",
-		".3gp":  "audio/3gpp",
-		".aiff": "audio/aiff",
-	}
-
-	if contentType, exists := contentTypes[ext]; exists {
+	if contentType, exists := audioExtensionContentTypes[ext]; exists {
 		return contentType
 	}
 	return "audio/mpeg" // default

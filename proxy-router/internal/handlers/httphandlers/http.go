@@ -66,9 +66,10 @@ func CreateHTTPServer(log lib.ILogger, authConfig system.HTTPAuthConfig, control
 	// wildcard is the wrong default for an admin surface that is documented as
 	// localhost-only (see AGENTS.md: the :8082 port should not be public).
 	//
-	// Default: any loopback origin, plus Electron's null/file origins. Override
-	// with PROXY_CORS_ALLOWED_ORIGINS (comma-separated) if you front the API
-	// with something else; set it to "*" to restore the old behaviour.
+	// Default: any loopback origin, Electron's null/file origins, and the
+	// official Morpheus browser tools in defaultCORSOrigins. Add more with
+	// PROXY_CORS_ALLOWED_ORIGINS (comma-separated) if you front the API with
+	// something else; set it to "*" to restore the old behaviour.
 	r.Use(cors.New(cors.Config{
 		AllowOriginFunc: newCORSOriginChecker(log),
 		AllowMethods:    []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
@@ -109,17 +110,29 @@ func CreateHTTPServer(log lib.ILogger, authConfig system.HTTPAuthConfig, control
 	return r
 }
 
+// defaultCORSOrigins are official Morpheus browser tools that call a node's
+// HTTP API directly from the user's browser with Basic Auth. They are allowed
+// by default so an operator who upgrades does not lose the MyProvider GUI
+// without warning. Operators can still add their own with
+// PROXY_CORS_ALLOWED_ORIGINS.
+var defaultCORSOrigins = []string{
+	"https://myprovider.mor.org", // MyProvider — provider/model/bid management GUI
+}
+
 // newCORSOriginChecker builds the AllowOriginFunc used above.
 //
 // Loopback origins are always permitted (the desktop app, local agents and the
-// Swagger UI all live there). PROXY_CORS_ALLOWED_ORIGINS adds explicit extra
-// origins, and the literal "*" restores the previous allow-everything
-// behaviour for anyone who depends on it.
+// Swagger UI all live there), as are defaultCORSOrigins.
+// PROXY_CORS_ALLOWED_ORIGINS adds explicit extra origins, and the literal "*"
+// restores the previous allow-everything behaviour for anyone who depends on it.
 func newCORSOriginChecker(log lib.ILogger) func(origin string) bool {
 	raw := strings.TrimSpace(os.Getenv("PROXY_CORS_ALLOWED_ORIGINS"))
 
 	allowAll := false
 	extra := map[string]struct{}{}
+	for _, o := range defaultCORSOrigins {
+		extra[strings.ToLower(o)] = struct{}{}
+	}
 	for _, o := range strings.Split(raw, ",") {
 		o = strings.TrimSpace(o)
 		if o == "" {
@@ -137,8 +150,8 @@ func newCORSOriginChecker(log lib.ILogger) func(origin string) bool {
 		return func(string) bool { return true }
 	}
 
-	if len(extra) > 0 {
-		log.Infof("CORS: allowing loopback origins plus %d configured origin(s)", len(extra))
+	if configured := len(extra) - len(defaultCORSOrigins); configured > 0 {
+		log.Infof("CORS: allowing loopback origins, %d built-in Morpheus origin(s), plus %d configured origin(s)", len(defaultCORSOrigins), configured)
 	}
 
 	return func(origin string) bool {

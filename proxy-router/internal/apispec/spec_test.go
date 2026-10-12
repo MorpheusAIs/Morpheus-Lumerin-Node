@@ -204,11 +204,19 @@ func TestBuildResultDeepCopiesNestedValues(t *testing.T) {
 	require.Equal(t, []string{"low", "medium", "high"}, b.Bindings[system.IntentReasoningEffort].EnumValues)
 }
 
-func TestBuildThinkingNameOverridesFamilyDefault(t *testing.T) {
+func TestBuildThinkingNameMarksCapabilityNotAlwaysOn(t *testing.T) {
 	api := build("vllm", "qwen3-235b-a22b-thinking-2507", "")
 	require.NotNil(t, api.Thinking)
-	require.Equal(t, system.ThinkingModeAlwaysOn, api.Thinking.Mode)
-	require.Nil(t, api.Bindings[system.IntentReasoningDisable])
+	require.Equal(t, system.ThinkingModeTunable, api.Thinking.Mode)
+	require.Nil(t, api.Bindings[system.IntentReasoningDisable], "the family's enable_thinking toggle is not assumed for a thinking checkpoint")
+	require.Nil(t, api.Bindings[system.IntentReasoningEnable])
+	require.Equal(t, "thinking_token_budget", api.Bindings[system.IntentReasoningBudget].Param)
+
+	for _, name := range []string{"glm-5.1-non-thinking", "glm-5.1-non-thinking:web", "zai-org/GLM-5.1-no-thinking"} {
+		api := build("vllm", name, "")
+		require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode, name)
+		require.Equal(t, "chat_template_kwargs.enable_thinking", api.Bindings[system.IntentReasoningDisable].Param, name)
+	}
 }
 
 func TestBuildNameAwareFamilies(t *testing.T) {

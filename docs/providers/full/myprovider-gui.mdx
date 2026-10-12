@@ -3,7 +3,7 @@ title: "MyProvider GUI"
 description: "Use myprovider.mor.org to onboard providers: look up models on active.mor.org, craft SecretVM/Venice secrets, register, bid, and sync MODELS_CONFIG_CONTENT."
 audience: ["provider-full", "provider-resale"]
 product: ["proxy-router"]
-last_verified: "v7.5.0"
+last_verified: "2026-09-25"
 source_url: "https://myprovider.mor.org"
 ---
 
@@ -63,6 +63,10 @@ The hosted app at [myprovider.mor.org](https://myprovider.mor.org) can only call
 | SecretVM (Traefik TLS on `:443`) | Point MyProvider at `https://<your-secretvm-url>/` |
 | Other HTTPS reverse proxy / ALB | Point at that HTTPS admin URL |
 | HTTP-only `:8082` | Use the [desktop release](https://github.com/MorpheusAIs/Morpheus-MyProvider/releases) or run `npm run dev` locally and connect to `http://…:8082` |
+
+## CORS
+
+The proxy-router no longer answers browser CORS preflights with `*`. Out of the box it accepts loopback origins, the desktop app, and the hosted `https://myprovider.mor.org`, so the table above works on a stock node. If you self-host MyProvider on another origin, add it to [`PROXY_CORS_ALLOWED_ORIGINS`](/reference/env-proxy-router#network-ports--urls) on the node (comma-separated). A local `npm run dev` on `localhost` needs nothing extra.
 
 ## When to use it vs Swagger / API
 

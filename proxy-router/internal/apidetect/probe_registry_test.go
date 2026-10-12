@@ -212,7 +212,7 @@ func TestOpenRouterEntryVariants(t *testing.T) {
 		require.Nil(t, api.Capabilities.MaxOutput)
 	})
 
-	t.Run("mandatory reasoning is always_on and drops the toggles", func(t *testing.T) {
+	t.Run("mandatory reasoning is always_on, drops the toggles and keeps listed effort levels", func(t *testing.T) {
 		api, trace := detectListing(t, "openrouter", openrouterEntry("vendor/thinker", map[string]any{
 			"reasoning": map[string]any{
 				"mandatory": true, "default_enabled": true, "supported_efforts": []string{"low", "medium", "high"},
@@ -222,11 +222,14 @@ func TestOpenRouterEntryVariants(t *testing.T) {
 		require.Equal(t, system.ThinkingModeAlwaysOn, api.Thinking.Mode)
 		require.Equal(t, "on", api.Thinking.Default)
 		require.Equal(t, "openrouter:/models.reasoning.default_enabled", api.Evidence["thinking.default"])
-		for _, intent := range []string{system.IntentReasoningDisable, system.IntentReasoningEnable, system.IntentReasoningEffort, system.IntentReasoningBudget} {
+		for _, intent := range []string{system.IntentReasoningDisable, system.IntentReasoningEnable, system.IntentReasoningBudget} {
 			require.Nil(t, api.Bindings[intent], "%s has no knob on an always-on model", intent)
 		}
+		effort := api.Bindings[system.IntentReasoningEffort]
+		require.NotNil(t, effort, "the listing names effort levels: it cannot stop, but it can think less")
+		require.Equal(t, []string{"low", "medium", "high"}, effort.EnumValues)
+		require.Equal(t, "openrouter:/models.reasoning.supported_efforts", api.Evidence["bindings.reasoning.effort"])
 		require.Equal(t, "reasoning.exclude", api.Bindings[system.IntentReasoningFormat].Param)
-		require.NotContains(t, api.Evidence, "bindings.reasoning.effort")
 		require.Equal(t, true, *api.Capabilities.Reasoning)
 		require.Equal(t, "derived:thinking.mode", api.Evidence["capabilities.reasoning"])
 		require.Contains(t, trace, "/models.reasoning.mandatory -> reasoning cannot be disabled")
@@ -422,7 +425,7 @@ func TestVeniceSpecCapabilities(t *testing.T) {
 
 	require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
 	require.Equal(t, "medium", api.Thinking.Default)
-	require.Equal(t, "reasoning_effort", api.Bindings[system.IntentReasoningEffort].Param)
+	require.Equal(t, "reasoning.effort", api.Bindings[system.IntentReasoningEffort].Param, "the object form, which LiteLLM forwards")
 	require.Equal(t, []string{"low", "medium", "high"}, api.Bindings[system.IntentReasoningEffort].EnumValues)
 	require.Equal(t, "venice_parameters.disable_thinking", api.Bindings[system.IntentReasoningDisable].Param, "the toggle is on another param; the effort list does not drop it")
 
@@ -463,7 +466,7 @@ func TestVeniceSpecVariants(t *testing.T) {
 	t.Run("effort options need supportsReasoningEffort", func(t *testing.T) {
 		api, _ := detectListing(t, "venice", veniceSpecEntry("qwen3-235b", map[string]any{"supportsReasoningEffort": false}))
 		require.NotContains(t, api.Evidence, "bindings.reasoning.effort")
-		require.Contains(t, api.Bindings[system.IntentReasoningEffort].EnumValues, "xhigh", "the stack table's enum stands")
+		require.Nil(t, api.Bindings[system.IntentReasoningEffort], "venice says the model takes no effort level")
 	})
 
 	t.Run("false flags set no modality and the not-available placeholder no quantization", func(t *testing.T) {

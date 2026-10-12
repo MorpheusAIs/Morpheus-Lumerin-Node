@@ -18,7 +18,11 @@ func (d *Detector) probeLMStudio(ctx context.Context, base, modelName, apiKey st
 		if models, ok := list["models"].([]any); ok {
 			ev.Stack = "lmstudio"
 			tracef(ctx, "identified lmstudio by /api/v1/models")
-			if entry := matchModelEntryBy(models, modelName, "key"); entry != nil {
+			if entry, bySpelling := findModelEntryBy(models, modelName, "key"); entry != nil {
+				if bySpelling {
+					key, _ := entry["key"].(string)
+					traceSpelledEntry(ctx, "lmstudio /api/v1/models", modelName, key)
+				}
 				readLMStudioV1(ctx, entry, ev)
 			} else {
 				tracef(ctx, "lmstudio /api/v1/models lists no entry for the configured model; no capability facts")
@@ -37,7 +41,11 @@ func (d *Detector) probeLMStudio(ctx context.Context, base, modelName, apiKey st
 	}
 	ev.Stack = "lmstudio"
 	tracef(ctx, "identified lmstudio by /api/v0/models")
-	if entry := matchModelEntry(data, modelName); entry != nil {
+	if entry, bySpelling := findModelEntry(data, modelName); entry != nil {
+		if bySpelling {
+			id, _ := entry["id"].(string)
+			traceSpelledEntry(ctx, "lmstudio /api/v0/models", modelName, id)
+		}
 		readLMStudioV0(ctx, entry, ev)
 	}
 	return true

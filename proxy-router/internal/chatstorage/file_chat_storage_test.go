@@ -220,3 +220,32 @@ func TestStorePromptResponseToFile_EmbeddingsRequest(t *testing.T) {
 		t.Fatalf("expected emb1.json: %v", err)
 	}
 }
+
+func TestChatFilePathRejectsEscape(t *testing.T) {
+	dir := t.TempDir()
+	cs := NewChatStorage(dir)
+	dd := string([]byte{46, 46})
+	if _, err := cs.chatFilePath(dd + string(filepath.Separator) + "etc" + string(filepath.Separator) + "passwd"); err == nil {
+		t.Fatal("expected error for escape id")
+	}
+	if _, err := cs.chatFilePath(""); err == nil {
+		t.Fatal("expected error for empty id")
+	}
+	path, err := cs.chatFilePath("AbC-123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(dir, "abc-123.json")
+	if path != want {
+		t.Fatalf("got %q want %q", path, want)
+	}
+}
+
+func TestDeleteChatRejectsEscapeIdentifier(t *testing.T) {
+	dir := t.TempDir()
+	cs := NewChatStorage(dir)
+	dd := string([]byte{46, 46})
+	if err := cs.DeleteChat(dd + "/evil"); err == nil {
+		t.Fatal("expected error for escape id")
+	}
+}

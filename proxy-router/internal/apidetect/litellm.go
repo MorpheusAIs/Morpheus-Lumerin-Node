@@ -185,6 +185,15 @@ func (d *Detector) litellmUpstream(ctx context.Context, base, modelName, apiKey 
 		ev.Stack = identified
 		ev.Via = "litellm"
 		tracef(ctx, "upstream %s identified: it becomes the stack (via litellm); its own params are forwarded by litellm, standard ones only when litellm supports them for this model", identified)
+		if len(up.ReasoningEfforts) > 0 && up.EffortsSource != "" {
+			ev.ReasoningEfforts = append([]string(nil), up.ReasoningEfforts...)
+			ev.EffortsSource = up.EffortsSource
+			tracef(ctx, "upstream %s listing offers reasoning efforts %s", identified, tracedKeys(up.ReasoningEfforts))
+		}
+		if up.NoEffort {
+			ev.NoEffort = true
+			tracef(ctx, "upstream %s listing says the model takes no effort level", identified)
+		}
 	case kind == "ollama":
 		tracef(ctx, "upstream ollama stays evidence-only (litellm's ollama providers speak the native API, not the /v1 surface the ollama table describes); the spec's stack stays litellm")
 	}

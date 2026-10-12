@@ -90,7 +90,10 @@ func TestComposeFamilyEvidenceChain(t *testing.T) {
 	api = Compose(Evidence{Stack: "lmstudio", ModelName: "some-embedder", Architecture: "bert"})
 	require.Equal(t, "", api.ModelFamily)
 	api = Compose(Evidence{Stack: "vllm", ModelName: "alias", ServedModelID: "Qwen/Qwen3-235B-A22B-Thinking-2507"})
-	require.Equal(t, system.ThinkingModeAlwaysOn, api.Thinking.Mode)
+	require.Equal(t, "qwen3", api.ModelFamily)
+	require.Equal(t, system.ThinkingModeTunable, api.Thinking.Mode, "a thinking checkpoint reasons; vLLM's budget knob applies, no on/off toggle is assumed")
+	require.Nil(t, api.Bindings[system.IntentReasoningDisable])
+	require.Equal(t, "thinking_token_budget", api.Bindings[system.IntentReasoningBudget].Param)
 }
 
 func TestComposeDetectedGatewayNeedsReasoningEvidence(t *testing.T) {
@@ -313,14 +316,14 @@ func TestComposeViaIsStamped(t *testing.T) {
 func TestComposeLiteLLMForwardingFilter(t *testing.T) {
 	supported := []string{"temperature", "tools", "response_format", "stream_options", "max_tokens"}
 
-	t.Run("venice behind litellm, reasoning_effort not forwarded", func(t *testing.T) {
+	t.Run("venice behind litellm: effort travels in the reasoning object", func(t *testing.T) {
 		api, lines := ComposeWithTrace(Evidence{Stack: "venice", Via: "litellm", ModelName: "my-chat", ServedModelID: "deepseek-v4-pro", GatewayReasoning: true, LiteLLMSeen: true, LiteLLMSupportedParams: supported})
 		require.NotNil(t, api)
 		require.Equal(t, "venice", api.Stack)
 		require.Equal(t, "litellm", api.Via)
 		require.Equal(t, "venice_parameters.disable_thinking", api.Bindings[system.IntentReasoningDisable].Param, "upstream-native root: forwarded as a provider kwarg")
 		require.Equal(t, "venice_parameters.strip_thinking_response", api.Bindings[system.IntentReasoningFormat].Param)
-		require.Nil(t, api.Bindings[system.IntentReasoningEffort], "standard root not in supported_openai_params")
+		require.Equal(t, "reasoning.effort", api.Bindings[system.IntentReasoningEffort].Param, "the reasoning object is not a standard root: forwarded")
 		require.Equal(t, "top_k", api.Bindings[system.IntentSamplingTopK].Param, "non-standard root is kept")
 		require.Equal(t, "min_p", api.Bindings[system.IntentSamplingMinP].Param)
 		require.Equal(t, "response_format", api.Bindings[system.IntentResponseFormatJSON].Param, "standard root listed as supported")
@@ -332,17 +335,17 @@ func TestComposeLiteLLMForwardingFilter(t *testing.T) {
 		require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
 		require.Equal(t, []string{"max_tokens", "response_format", "stream_options", "temperature", "tools"}, api.Parameters, "venice's documented list ∩ supported, sorted")
 		joined := strings.Join(lines, "\n")
-		require.Contains(t, joined, "bindings: reasoning.effort dropped — litellm does not forward reasoning_effort for this model")
+		require.NotContains(t, joined, "bindings: reasoning.effort dropped")
 		require.Contains(t, joined, "bindings: tools.parallel dropped — litellm does not forward parallel_tool_calls for this model")
 		require.NotContains(t, joined, "does not forward venice_parameters")
 		require.NotContains(t, joined, "does not forward top_k")
 	})
 
-	t.Run("reasoning_effort in the supported list survives", func(t *testing.T) {
+	t.Run("reasoning_effort in the supported list: the effort binding still uses the object", func(t *testing.T) {
 		api := Compose(Evidence{Stack: "venice", Via: "litellm", ModelName: "deepseek-v4-pro", GatewayReasoning: true, LiteLLMSeen: true, LiteLLMSupportedParams: append([]string{"reasoning_effort"}, supported...)})
 		effort := api.Bindings[system.IntentReasoningEffort]
 		require.NotNil(t, effort)
-		require.Equal(t, "reasoning_effort", effort.Param)
+		require.Equal(t, "reasoning.effort", effort.Param)
 		require.Equal(t, stackBindings["venice"][system.IntentReasoningEffort].EnumValues, effort.EnumValues, "venice's enum, not litellm's efforts fixup")
 		require.Contains(t, api.Parameters, "reasoning_effort")
 	})
@@ -382,9 +385,9 @@ func TestComposeLiteLLMForwardingFilter(t *testing.T) {
 		require.Nil(t, llama.Thinking)
 	})
 
-	t.Run("supported list unknown: only reasoning_effort roots are dropped", func(t *testing.T) {
+	t.Run("supported list unknown: only reasoning_effort roots are dropped, the reasoning object stays", func(t *testing.T) {
 		api, lines := ComposeWithTrace(Evidence{Stack: "venice", Via: "litellm", ModelName: "deepseek-v4-pro", GatewayReasoning: true, LiteLLMSeen: true})
-		require.Nil(t, api.Bindings[system.IntentReasoningEffort])
+		require.Equal(t, "reasoning.effort", api.Bindings[system.IntentReasoningEffort].Param)
 		require.Equal(t, "venice_parameters.disable_thinking", api.Bindings[system.IntentReasoningDisable].Param)
 		require.Equal(t, "response_format", api.Bindings[system.IntentResponseFormatJSON].Param, "kept: the list is unknown, response_format is not the demonstrated failure")
 		require.Equal(t, "parallel_tool_calls", api.Bindings[system.IntentToolsParallel].Param)
@@ -393,7 +396,7 @@ func TestComposeLiteLLMForwardingFilter(t *testing.T) {
 		require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
 		joined := strings.Join(lines, "\n")
 		require.Contains(t, joined, "litellm supported_openai_params unavailable")
-		require.Contains(t, joined, "bindings: reasoning.effort dropped — litellm does not forward reasoning_effort for this model")
+		require.NotContains(t, joined, "bindings: reasoning.effort dropped")
 
 		plain := Compose(Evidence{Stack: "litellm", ModelName: "qwen3-32b", GatewayReasoning: true, LiteLLMSeen: true})
 		require.Nil(t, plain.Bindings[system.IntentReasoningDisable])
@@ -405,14 +408,14 @@ func TestComposeLiteLLMForwardingFilter(t *testing.T) {
 	t.Run("a known but empty list forwards no standard param", func(t *testing.T) {
 		api := Compose(Evidence{Stack: "venice", Via: "litellm", ModelName: "deepseek-v4-pro", GatewayReasoning: true, LiteLLMSeen: true, LiteLLMSupportedParams: []string{}})
 		require.Nil(t, api.Bindings[system.IntentResponseFormatJSON])
-		require.Nil(t, api.Bindings[system.IntentReasoningEffort])
+		require.Equal(t, "reasoning.effort", api.Bindings[system.IntentReasoningEffort].Param, "not a standard root")
 		require.Equal(t, "venice_parameters.disable_thinking", api.Bindings[system.IntentReasoningDisable].Param)
 		require.Empty(t, api.Parameters)
 	})
 
 	t.Run("without LiteLLM on the path nothing is filtered", func(t *testing.T) {
 		api := Compose(Evidence{Stack: "venice", ModelName: "deepseek-v4-pro", GatewayReasoning: true, LiteLLMSupportedParams: []string{"temperature"}})
-		require.Equal(t, "reasoning_effort", api.Bindings[system.IntentReasoningEffort].Param)
+		require.Equal(t, "reasoning.effort", api.Bindings[system.IntentReasoningEffort].Param)
 		require.Equal(t, "parallel_tool_calls", api.Bindings[system.IntentToolsParallel].Param)
 		require.Equal(t, stackParameters["venice"], api.Parameters)
 	})

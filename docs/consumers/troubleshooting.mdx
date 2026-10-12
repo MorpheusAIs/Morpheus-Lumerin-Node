@@ -3,7 +3,7 @@ title: "Consumer troubleshooting"
 description: "The most common consumer-side problems and their fixes."
 audience: ["consumer"]
 product: ["proxy-router", "ui-desktop"]
-last_verified: "v7.11.0"
+last_verified: "2026-09-25"
 ---
 
 This page focuses on consumer-side symptoms. For provider-side or deeper proxy-router operational issues, see the full [Reference: troubleshooting](/reference/troubleshooting).
@@ -17,10 +17,11 @@ You almost certainly opened a session. The MOR is escrowed in the Diamond contra
 
 ## MorpheusUI shows zero balance after recovering my wallet
 
-You probably recovered a **derived** address from your mnemonic. MorpheusUI only resolves the top-level address from a mnemonic. Use a tier-1 wallet, or import the private key directly.
+You probably recovered at the wrong **account index**. A mnemonic import defaults to index 0; if your funds sit on MetaMask "Account 2" (index `1`) or later, that is a different address. On MorpheusUI 7.12+ open the wallet switcher and **add an HD account** — the node re-derives from the phrase it already holds (`POST /wallet/derivationPath`) and you can flip between accounts without re-entering it. On older builds, re-import with the right index or import the private key directly.
 
 ## "Provider not responding" or stuck mid-prompt
 
+- A provider that accepts the connection but never answers the session handshake or ping now fails after **30 s** with `504 provider did not respond within 30s` instead of spinning forever. Chat itself is bounded by `CNODE_PNODE_TIMEOUT × CNODE_PNODE_MAX_RETRIES` (default 90 s × 3).
 - Confirm the proxy-router is still running (`http://localhost:8082/healthcheck`, or check the Proxy Router entry on MorpheusUI's startup screen).
 - The provider may be down. Close the session; unused stake returns immediately, and the used stipend in `userStakesOnHold` becomes claimable after ~1 UTC day via `POST /blockchain/stakes/withdraw` (or `withdrawUserStakes` on the Diamond):
   ```bash

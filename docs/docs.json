@@ -66,6 +66,7 @@
                 ]
               },
               "consumers/install-from-source",
+              "consumers/morpheusui",
               "consumers/buy-bid",
               "consumers/chat",
               "consumers/decisions",

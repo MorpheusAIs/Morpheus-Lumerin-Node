@@ -102,9 +102,20 @@ func TestMatchModelEntryBy(t *testing.T) {
 		map[string]any{"key": "Model-B"},
 		"not an object",
 	}
-	require.Equal(t, "Model-B", matchModelEntryBy(data, "model-b", "key")["key"], "exact match is case-insensitive")
-	require.Equal(t, "org/model-a", matchModelEntryBy(data, "model-a:tee=1", "key")["key"], "bare id, then a prefix/ suffix match")
-	require.Nil(t, matchModelEntryBy(data, "model-c", "key"))
-	require.Nil(t, matchModelEntryBy(data, "model-b", "id"), "the identifier field is the caller's")
-	require.Equal(t, "Model-B", matchModelEntryBy(data[1:2], "anything", "key")["key"], "a lone entry matches any name")
+	require.Equal(t, "Model-B", entryBy(data, "model-b", "key")["key"], "exact match is case-insensitive")
+	require.Equal(t, "org/model-a", entryBy(data, "model-a:tee=1", "key")["key"], "bare id, then a prefix/ suffix match")
+	require.Nil(t, entryBy(data, "model-c", "key"))
+	require.Nil(t, entryBy(data, "model-b", "id"), "the identifier field is the caller's")
+	require.Equal(t, "Model-B", entryBy(data[1:2], "anything", "key")["key"], "a lone entry matches any name")
+}
+
+// entryBy and matchedEntry keep only the entry of findModelEntryBy.
+func entryBy(data []any, modelName, field string) map[string]any {
+	entry, _ := findModelEntryBy(data, modelName, field)
+	return entry
+}
+
+func matchedEntry(data []any, modelName string) map[string]any {
+	entry, _ := findModelEntry(data, modelName)
+	return entry
 }

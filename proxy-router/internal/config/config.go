@@ -39,8 +39,9 @@ type Config struct {
 	}
 	Environment string `env:"ENVIRONMENT" flag:"environment"`
 	IPFS        struct {
-		Disabled bool   `env:"IPFS_DISABLED" flag:"ipfs-disabled" desc:"disable IPFS"`
-		Address  string `env:"IPFS_MULTADDR" flag:"ipfs-multaddr" validate:"omitempty" desc:"IPFS API multiaddress"`
+		Disabled    bool   `env:"IPFS_DISABLED" flag:"ipfs-disabled" desc:"disable IPFS"`
+		Address     string `env:"IPFS_MULTADDR" flag:"ipfs-multaddr" validate:"omitempty" desc:"IPFS API multiaddress"`
+		AllowedDirs string `env:"IPFS_ALLOWED_DIRS" flag:"ipfs-allowed-dirs" validate:"omitempty" desc:"OS path list of directories that API users without full access may read from (ipfs_add) and write into (ipfs_get); empty refuses them"`
 	}
 	Marketplace struct {
 		DiamondContractAddress *common.Address `env:"DIAMOND_CONTRACT_ADDRESS" flag:"diamond-address"   validate:"omitempty,eth_addr"`
@@ -236,11 +237,10 @@ func (cfg *Config) SetDefaults() {
 		cfg.Proxy.CNodePNodeTimeout = 90 * time.Second
 	}
 	// A provider that accepts the connection and then goes silent should fail
-	// with an error the user can act on, not hang forever. Anyone who needs an
-	// unbounded budget for a genuinely slow reasoning model can opt out
-	// explicitly with LLM_TIMEOUT= or CNODE_PNODE_TIMEOUT= (empty) in their
-	// .env; that is a deliberate choice per deployment, not a silent default
-	// change for everyone already running this.
+	// with an error the user can act on, not hang forever. Note that an empty
+	// or zero LLM_TIMEOUT / CNODE_PNODE_TIMEOUT does NOT disable the deadline:
+	// the zero-value checks above put the default back. Operators who run a
+	// genuinely slow reasoning model raise the value instead.
 	if cfg.Proxy.CNodePNodeMaxRetries == 0 {
 		cfg.Proxy.CNodePNodeMaxRetries = 3
 	}

@@ -104,11 +104,18 @@ func (d *Detector) probeSGLang(ctx context.Context, base, apiKey string, ev *api
 			// The base card's id is served_model_name; LoRA adapters are listed
 			// beside it with max_model_len null (http_server.py available_models).
 			var entry map[string]any
+			var bySpelling bool
+			lookedUp := served
 			if served != "" {
-				entry = matchModelEntry(data, served)
+				entry, bySpelling = findModelEntry(data, served)
 			}
 			if entry == nil {
-				entry = matchModelEntry(data, ev.ModelName)
+				lookedUp = ev.ModelName
+				entry, bySpelling = findModelEntry(data, ev.ModelName)
+			}
+			if bySpelling {
+				id, _ := entry["id"].(string)
+				traceSpelledEntry(ctx, "sglang /v1/models", lookedUp, id)
 			}
 			if entry != nil {
 				if n, ok := jsonWholeNumber(entry["max_model_len"]); ok {

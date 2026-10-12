@@ -193,18 +193,22 @@ func (d *Detector) getText(ctx context.Context, urlStr, apiKey string) string {
 	return text
 }
 
-// matchModelEntry finds the listing entry for modelName by its "id" field.
-func matchModelEntry(data []any, modelName string) map[string]any {
-	return matchModelEntryBy(data, modelName, "id")
+// findModelEntry finds the listing entry for modelName by its "id" field.
+func findModelEntry(data []any, modelName string) (map[string]any, bool) {
+	return findModelEntryBy(data, modelName, "id")
 }
 
-// matchModelEntryBy is the listing matcher for self-hosted engines: the
-// configured name, then its bare id (inline parameters stripped), each
-// exactly (case-insensitive), then a lone entry, then a "<prefix>/<name>"
-// suffix match. field names the identifier key ("id" for OpenAI-shaped
-// listings, "key" for LM Studio v1). Hosted listings go through vendorEntry,
-// which keeps only the exact-id rule.
-func matchModelEntryBy(data []any, modelName, field string) map[string]any {
+// findModelEntryBy is the listing matcher for self-hosted engines and model
+// registries: the configured name, then its bare id (inline parameters
+// stripped), each exactly (case-insensitive), then a lone entry, then a
+// "<prefix>/<name>" suffix match, and last an id that names the model once
+// separators, case and inline parameters are ignored, counted only when it is
+// the only one (a LiteLLM deployment of google.gemma-4-31b-it reaches Venice,
+// which lists google-gemma-4-31b-it). bySpelling reports that last kind.
+// field names the identifier key ("id" for OpenAI-shaped listings, "key" for
+// LM Studio v1). Hosted listings go through vendorEntry, which keeps only the
+// exact-id rule.
+func findModelEntryBy(data []any, modelName, field string) (entry map[string]any, bySpelling bool) {
 	var entries []map[string]any
 	for _, item := range data {
 		if m, ok := item.(map[string]any); ok {
@@ -221,21 +225,42 @@ func matchModelEntryBy(data []any, modelName, field string) map[string]any {
 	for _, name := range candidates {
 		for _, m := range entries {
 			if id, ok := m[field].(string); ok && strings.EqualFold(id, name) {
-				return m
+				return m, false
 			}
 		}
 	}
 	if len(entries) == 1 {
-		return entries[0]
+		return entries[0], false
 	}
 	for _, name := range candidates {
 		for _, m := range entries {
 			if id, ok := m[field].(string); ok && strings.HasSuffix(strings.ToLower(id), "/"+strings.ToLower(name)) {
-				return m
+				return m, false
 			}
 		}
 	}
-	return nil
+
+	want := apispec.NormalizeModelName(modelName)
+	if want == "" {
+		return nil, false
+	}
+	matches := 0
+	for _, m := range entries {
+		if id, ok := m[field].(string); ok {
+			if norm := apispec.NormalizeModelName(id); norm == want || strings.HasSuffix(norm, "/"+want) {
+				entry = m
+				matches++
+			}
+		}
+	}
+	if matches != 1 {
+		return nil, false
+	}
+	return entry, true
+}
+
+func traceSpelledEntry(ctx context.Context, listing, modelName, id string) {
+	tracef(ctx, "%s lists %q as %q (same name in normalized spelling)", listing, bareModelID(modelName), id)
 }
 
 // jsonWholeNumber reads a decoded JSON number (float64) as an integer: only

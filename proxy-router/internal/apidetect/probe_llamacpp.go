@@ -103,7 +103,11 @@ func (d *Detector) llamaCppModelsFacts(ctx context.Context, base, apiKey string,
 	}
 
 	if data, ok := list["data"].([]any); ok {
-		if entry := matchModelEntry(data, ev.ModelName); entry != nil {
+		if entry, bySpelling := findModelEntry(data, ev.ModelName); entry != nil {
+			if bySpelling {
+				id, _ := entry["id"].(string)
+				traceSpelledEntry(ctx, "llamacpp /v1/models", ev.ModelName, id)
+			}
 			// meta is null while the model is still loading.
 			if meta, ok := entry["meta"].(map[string]any); ok {
 				d.llamaCppMetaFacts(ctx, meta, ev)

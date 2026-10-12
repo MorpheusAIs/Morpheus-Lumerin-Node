@@ -9,7 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	badger "github.com/dgraph-io/badger/v4"
+	"github.com/ethereum/go-ethereum/common"
 )
 
 // Default TTL values for stored data
@@ -49,6 +51,27 @@ func (s *SessionStorage) GetUser(addr string) (*User, error) {
 	return user, nil
 }
 
+// AddUserBound stores a user record only if its public key derives to its
+// address. This is the write path for records learned from untrusted inbound
+// peers (MORRPC session.request): the store itself enforces key<->wallet
+// binding, so a later write for the same address can only come from the
+// wallet owner, and an owner can replace a stale record on the next request.
+func (s *SessionStorage) AddUserBound(user *User) error {
+	derived, err := lib.PubKeyHexToAddr(user.PubKey)
+	if err != nil {
+		return fmt.Errorf("invalid user pubkey: %w", err)
+	}
+	if derived != common.HexToAddress(user.Addr) {
+		return fmt.Errorf("user pubkey does not derive to address")
+	}
+	return s.AddUser(user)
+}
+
+// AddUser stores a user record without binding the key to the address.
+// Use AddUserBound for records learned from inbound peers. This unbound path
+// exists for consumer-side provider records, where a contract provider's
+// record legitimately holds the owner's key under the contract address and
+// the caller has already validated the key against the resolved signer.
 func (s *SessionStorage) AddUser(user *User) error {
 	addr := strings.ToLower(user.Addr)
 	key := fmt.Sprintf("user:%s", addr)

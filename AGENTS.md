@@ -68,7 +68,7 @@ Read the **AI knowledge** pages before answering user questions:
 6. **Never tell users to call a `recover` RPC.** It does not exist. Closing the session is the recovery path. Day-locked used stipend is claimed with `POST /blockchain/stakes/withdraw` (or `withdrawUserStakes` on the Diamond) after `releaseAt` — that is not recover.
 7. **For TEE questions, distinguish Phase 1 (consumer → P-Node) from Phase 2 (P-Node → backend).** Phase 2 runs *inside* the v7+ provider's P-Node — a v6+ consumer benefits transparently with no client-side upgrade.
 8. **The proxy-router's `:8082` admin port should not be public** — only `:3333` (TCP) is public, and only on provider nodes.
-9. **MorpheusUI mnemonic-recover only works for tier-1 (index 0) addresses.** Don't suggest it for derived addresses; suggest private-key import instead.
+9. **A mnemonic import derives account index 0 unless the user sets the index.** "Zero balance after recovery" almost always means the funded address is a derived sub-account (MetaMask "Account 2" = index `1`). Tell the user to set the index on import, add the HD account from the wallet switcher (MorpheusUI 7.12+, backed by `POST /wallet/derivationPath`), or import the private key. Never claim derived accounts are unsupported outright.
 10. **When uncertain, cite a docs page or say so.** Don't guess.
 
 ## Common-question quick lookup

@@ -29,6 +29,20 @@ WARN  balance read failed, retrying (1/5) in 2s: 429 Too Many Requests …
 
 The startup wallet-balance read is retried up to five times with doubling back-off (2 s → 16 s, about 30 s total) before the node gives up. It fires when the RPC endpoint throttles the boot burst — the model pre-flight issues one call per configured model against the same endpoint moments earlier. On earlier releases that first `429` exited the process and, under `Restart=always`, looped. If you see it on every start, your `ETH_NODE_ADDRESS` is the public fallback or a free tier: [set a real endpoint](/reference/env-proxy-router#blockchain).
 
+Two more boot-time lines that are warnings, not failures:
+
+```
+WARN  cannot get provider 0x…: <rpc error>
+```
+
+The post-start provider lookup is diagnostic. It used to abort startup when the RPC call failed (for example when a retired public endpoint answered `410 Gone`), which took consumer nodes down for a check that only matters to providers. It now logs and continues; provider operators should still treat a persistent one as an RPC problem.
+
+```
+WARN  subscription error, retrying in 4s (3/30): …
+```
+
+Only with `ETH_NODE_USE_SUBSCRIPTIONS=true`. The WSS resubscribe loop backs off from 0.5 s to a 30 s cap (it previously retried in a hot loop, which got nodes rate-limited) and resumes from the block after the last event it saw.
+
 ---
 
 ## Proxy-router is not starting / crashing immediately
@@ -70,10 +84,25 @@ Full reference: [Env: proxy-router](/reference/env-proxy-router).
 
 ## Wallet shows zero MOR / ETH after recovering from mnemonic
 
-You probably recovered a **derived address**. The MorpheusUI mnemonic flow only works with **top-level (tier-1)** addresses. Either:
+You probably recovered at the wrong **account index**. A mnemonic import derives index 0 unless told otherwise; MetaMask "Account 2" is index `1`, and so on. Either:
 
-- Use a wallet that was originally created from this mnemonic at index 0, or
+- Enter the right index in MorpheusUI's import screen, or
+- On MorpheusUI 7.12+, add the account from the wallet switcher — the node re-derives from the phrase it already stores via `POST /wallet/derivationPath` (`GET /wallet` shows `kind` and the active `derivationPath`), or
 - Import the **private key** directly instead of the mnemonic.
+
+A wallet imported as a raw private key (`kind: privateKey`) or supplied through `WALLET_PRIVATE_KEY` (`kind: env`) has no seed to derive from; `POST /wallet/derivationPath` returns `400` for those.
+
+---
+
+## Chat returns `504 provider did not respond within 30s`
+
+The C-Node → P-Node control calls (session handshake, ping, session report, agent tools, audio upload chunks) carry a fixed 30 s read deadline. The provider accepted the TCP connection and then went silent — a wedged process or a firewall black-holing replies. Close the session and open against another provider (or pass `omitProvider` on the next open). Streaming chat is governed by `CNODE_PNODE_TIMEOUT` instead.
+
+---
+
+## Open session returns `409 { "existingSessionID": … }`
+
+The caller sent `rejectExisting: true` and this wallet already has a live session for that model. Reuse the returned session, or omit `rejectExisting` if running parallel sessions is intended. MorpheusUI sets it so a double-click cannot lock stake twice.
 
 ---
 

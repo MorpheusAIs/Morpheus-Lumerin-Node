@@ -40,7 +40,7 @@ Used by the `test` branch and `*-test` releases.
 
 <Steps>
   <Step title="Pick a wallet">
-    Use a top-level (non-derived) ERC-20 wallet. The MorpheusUI's mnemonic recover flow does **not** support secondary/derived addresses.
+    Any ERC-20 wallet works. If you import a mnemonic whose funded address is a derived sub-account (MetaMask "Account 2" and up), enter that account index during import — the default is index 0 — or add the account later from the wallet switcher (MorpheusUI 7.12+). Importing the private key directly avoids the question.
   </Step>
   <Step title="Get ETH on BASE">
     Bridge ETH to BASE Mainnet (or use a BASE Sepolia faucet for testnet). ETH pays gas.

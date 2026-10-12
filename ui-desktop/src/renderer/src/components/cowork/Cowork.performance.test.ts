@@ -1,5 +1,11 @@
 import { createElement } from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import Cowork, {
@@ -1038,6 +1044,78 @@ describe('Cowork marketplace session selection', () => {
       view.unmount();
       scrollHeight.mockRestore();
       clientHeight.mockRestore();
+      Object.defineProperty(window, 'cowork', {
+        configurable: true,
+        writable: true,
+        value: previousCowork,
+      });
+    }
+  });
+
+  it('shows the rebind card when the expiry timer fires a millisecond before the wall clock', async () => {
+    // Timers and Date.now() run on different clocks, so the expiry timeout
+    // can fire while Date.now() still reads sessionEndsAt - 1. The session
+    // then still counts as active and nothing reschedules the check, which
+    // is why the real-timer test above flaked on CI.
+    const previousCowork = window.cowork;
+    const endsAt = Date.now() + 60_000;
+    const expiringModel = activeModel({ sessionEndsAt: endsAt });
+    const task = persistedTask({ model: expiringModel, status: 'paused' });
+    let expiryTimer: (() => void) | undefined;
+    const realSetTimeout = window.setTimeout.bind(window);
+    const setTimeoutSpy = vi.spyOn(window, 'setTimeout').mockImplementation(((
+      handler: TimerHandler,
+      delay?: number,
+      ...args: unknown[]
+    ) => {
+      if (typeof handler === 'function' && (delay ?? 0) > 30_000) {
+        expiryTimer = handler as () => void;
+        return 0;
+      }
+      return realSetTimeout(handler, delay, ...args);
+    }) as typeof window.setTimeout);
+    Object.defineProperty(window, 'cowork', {
+      configurable: true,
+      writable: true,
+      value: {
+        getApprovalPolicy: vi.fn(async () => persistedApprovalPolicy),
+        listModelOptions: vi.fn(async () => [expiringModel]),
+        listProjects: vi.fn(async () => [persistedProject]),
+        listTasks: vi.fn(async () => [taskSummary({ status: 'paused' })]),
+        getTask: vi.fn(async () => task),
+        listSchedules: vi.fn(async () => []),
+        listExtensions: vi.fn(async () => emptyExtensions),
+        onTaskEvent: vi.fn(() => () => undefined),
+      } as unknown as Window['cowork'],
+    });
+    const view = render(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ['/workspace'] },
+        createElement(Cowork),
+      ),
+    );
+
+    try {
+      await screen.findByText('The latest saved result.');
+      await waitFor(() => expect(expiryTimer).toBeDefined());
+      expect(
+        screen.queryByText('The original task session has ended'),
+      ).toBeNull();
+
+      const dateNow = vi.spyOn(Date, 'now').mockReturnValue(endsAt - 1);
+      try {
+        act(() => expiryTimer!());
+      } finally {
+        dateNow.mockRestore();
+      }
+
+      expect(
+        screen.getByText('The original task session has ended'),
+      ).toBeInTheDocument();
+    } finally {
+      view.unmount();
+      setTimeoutSpy.mockRestore();
       Object.defineProperty(window, 'cowork', {
         configurable: true,
         writable: true,

@@ -3,7 +3,7 @@ title: "Chat, audio, and embeddings"
 description: "Send prompts to a remote Morpheus model: streaming chat completions, audio transcription / TTS, and embeddings — all with OpenAI-compatible payloads."
 audience: ["consumer", "developer"]
 product: ["proxy-router"]
-last_verified: "v7.9.0"
+last_verified: "2026-09-25"
 ---
 
 Once a session is open, you talk to the proxy-router exactly like you would talk to OpenAI: same routes, same body schemas. The only difference is the `session_id` header and the BasicAuth header for the local API.
@@ -15,6 +15,7 @@ Once a session is open, you talk to the proxy-router exactly like you would talk
 | `Authorization: Basic <base64(user:pass)>` | Yes | Auth to your local proxy-router. See [API auth](/reference/api-auth). |
 | `session_id: 0x...` | Yes (for remote) | Which open Morpheus session to route through. Omit for the bundled local model. |
 | `Content-Type` | As needed | `application/json` or `multipart/form-data`. |
+| `x-morpheus-history: off` | No | Skip storing this exchange and do not prepend stored history to it, for one request only. Useful for agent / tool calls that must not pollute a chat. `on` / `default` keep the node's `PROXY_STORE_CHAT_CONTEXT` / `PROXY_FORWARD_CHAT_CONTEXT` policy; the header cannot enable history the operator turned off. |
 
 ## Chat completions
 
@@ -35,6 +36,8 @@ curl -X POST 'http://localhost:8082/v1/chat/completions' \
 ```
 
 Streaming responses are SSE (`text/event-stream`); non-streaming returns `application/json`.
+
+Vision-capable models accept the OpenAI multimodal shape — a `content` array of `{"type":"text"}` and `{"type":"image_url","image_url":{"url":"data:image/png;base64,…"}}` parts. The parts are forwarded to the provider and, when history is stored, kept in the saved chat. Whether a given model actually handles images is up to its provider.
 
 ## Audio transcriptions
 

@@ -80,10 +80,14 @@ func (d *Detector) probeRegistryShape(ctx context.Context, bases []string, model
 		if !ok {
 			continue
 		}
-		entry := matchModelEntry(data, modelName)
+		entry, bySpelling := findModelEntry(data, modelName)
 		if entry == nil {
 			tracef(ctx, "model listing at %s/models has %d entries but none matches model %q (config drift?)", base, len(data), modelName)
 			continue
+		}
+		if bySpelling {
+			id, _ := entry["id"].(string)
+			traceSpelledEntry(ctx, "model listing at "+base+"/models", modelName, id)
 		}
 
 		if params, ok := entry["supported_parameters"].([]any); ok {
@@ -300,12 +304,21 @@ func readVeniceSpec(ctx context.Context, spec map[string]any, ev *apispec.Eviden
 			tracef(ctx, "/models.model_spec.capabilities.supportsReasoning false -> reasoning false")
 		}
 	}
-	if effortful, ok := caps["supportsReasoningEffort"].(bool); ok && effortful {
-		if efforts := jsonStrings(caps["reasoningEffortOptions"]); efforts != nil {
-			ev.ReasoningEfforts = efforts
-			ev.EffortsSource = veniceCapsSource + ".reasoningEffortOptions"
-			tracef(ctx, "/models.model_spec.capabilities.reasoningEffortOptions %v -> reasoning.effort levels", efforts)
-		}
+	// supportsReasoningEffort says whether the model takes an effort level at
+	// all; the levels count only when it does.
+	options := jsonStrings(caps["reasoningEffortOptions"])
+	takesEffort, flagged := caps["supportsReasoningEffort"].(bool)
+	switch {
+	case takesEffort && options != nil:
+		ev.ReasoningEfforts = options
+		ev.EffortsSource = veniceCapsSource + ".reasoningEffortOptions"
+		tracef(ctx, "/models.model_spec.capabilities.reasoningEffortOptions %v -> reasoning.effort levels", options)
+	case flagged && !takesEffort:
+		ev.NoEffort = true
+		tracef(ctx, "/models.model_spec.capabilities.supportsReasoningEffort false -> the model takes no effort level")
+	}
+	if !takesEffort && len(options) > 0 {
+		tracef(ctx, "venice listing names reasoning effort levels but not supportsReasoningEffort; levels ignored")
 	}
 	if effort, ok := caps["defaultReasoningEffort"].(string); ok && effort != "" {
 		ev.ThinkingDefault = effort
