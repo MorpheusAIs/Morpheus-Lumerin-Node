@@ -22,6 +22,8 @@ type WorkloadResult struct {
 	VMType       string
 	ArtifactsVer string
 	Env          string
+	// RTMR3Scheme is the replay scheme that matched (TDX only).
+	RTMR3Scheme RTMR3Scheme
 }
 
 // composeCandidates returns the docker-compose byte interpretations to try
@@ -39,7 +41,11 @@ func composeCandidates(compose string) []string {
 	return []string{compose}
 }
 
-func VerifyTdxWorkload(registry *ArtifactRegistry, cpuQuoteHex string, dockerComposeYaml string, log lib.ILogger) WorkloadResult {
+// VerifyTdxWorkload replays RTMR3 from the compose and the registry rootfs for
+// every artifact entry matching the quote's MRTD/RTMR0-2. dstackAppID is the
+// VM's self-reported app-id from GET /info ("" for pre-dstack images); it
+// selects the replay scheme (see rtmr.go). Mirrors secretvm-verify 0.13.0.
+func VerifyTdxWorkload(registry *ArtifactRegistry, cpuQuoteHex string, dockerComposeYaml string, dstackAppID string, log lib.ILogger) WorkloadResult {
 	fields, err := ParseTdxQuoteFields(cpuQuoteHex)
 	if err != nil {
 		if log != nil {
@@ -58,19 +64,21 @@ func VerifyTdxWorkload(registry *ArtifactRegistry, cpuQuoteHex string, dockerCom
 
 	best := registry.PickNewestVersion(candidates)
 
+	appID := NormalizeDstackAppID(dstackAppID)
+	scheme := RTMR3SchemeFor(appID)
 	composeVariants := composeCandidates(dockerComposeYaml)
 	if log != nil {
 		composeHash := sha256.Sum256([]byte(dockerComposeYaml))
-		log.Infof("workload: compose size=%d bytes, sha256=%s, variants=%d, quote RTMR3=%s, candidates=%d",
-			len(dockerComposeYaml), hex.EncodeToString(composeHash[:]), len(composeVariants), fields.RTMR3, len(candidates))
+		log.Infof("workload: compose size=%d bytes, sha256=%s, variants=%d, scheme=%s, app_id=%q, quote RTMR3=%s, candidates=%d",
+			len(dockerComposeYaml), hex.EncodeToString(composeHash[:]), len(composeVariants), scheme, appID, fields.RTMR3, len(candidates))
 	}
 
 	for i, entry := range candidates {
 		for _, variant := range composeVariants {
-			expected := CalculateRTMR3([]byte(variant), entry.RootfsData)
+			expected := CalculateRTMR3WithAppID([]byte(variant), entry.RootfsData, appID)
 			if log != nil {
-				log.Infof("workload: candidate[%d] template=%s ver=%s rootfs=%s calculated_rtmr3=%s match=%v",
-					i, entry.TemplateName, entry.ArtifactsVer, entry.RootfsData, expected, expected == fields.RTMR3)
+				log.Infof("workload: candidate[%d] template=%s ver=%s rootfs=%s scheme=%s calculated_rtmr3=%s match=%v",
+					i, entry.TemplateName, entry.ArtifactsVer, entry.RootfsData, scheme, expected, expected == fields.RTMR3)
 			}
 			if expected == fields.RTMR3 {
 				return WorkloadResult{
@@ -79,6 +87,7 @@ func VerifyTdxWorkload(registry *ArtifactRegistry, cpuQuoteHex string, dockerCom
 					VMType:       entry.VMType,
 					ArtifactsVer: entry.ArtifactsVer,
 					Env:          entry.VMType,
+					RTMR3Scheme:  scheme,
 				}
 			}
 		}
@@ -90,10 +99,14 @@ func VerifyTdxWorkload(registry *ArtifactRegistry, cpuQuoteHex string, dockerCom
 		VMType:       best.VMType,
 		ArtifactsVer: best.ArtifactsVer,
 		Env:          best.VMType,
+		RTMR3Scheme:  scheme,
 	}
 }
 
-func VerifyWorkload(registry *ArtifactRegistry, sevRegistry *SevArtifactRegistry, cpuQuoteData string, dockerComposeYaml string, log lib.ILogger) WorkloadResult {
+// VerifyWorkload dispatches on quote type. dstackAppID only affects TDX: the
+// SEV-SNP launch digest has no app-id event (dstack KMS on AMD governs key
+// release, not the measurement), so the SEV path ignores it.
+func VerifyWorkload(registry *ArtifactRegistry, sevRegistry *SevArtifactRegistry, cpuQuoteData string, dockerComposeYaml string, dstackAppID string, log lib.ILogger) WorkloadResult {
 	if IsTdxQuote(cpuQuoteData) {
 		if registry == nil || !registry.IsLoaded() {
 			if log != nil {
@@ -101,7 +114,7 @@ func VerifyWorkload(registry *ArtifactRegistry, sevRegistry *SevArtifactRegistry
 			}
 			return WorkloadResult{Status: ArtifactRegistryNotAvailable}
 		}
-		return VerifyTdxWorkload(registry, cpuQuoteData, dockerComposeYaml, log)
+		return VerifyTdxWorkload(registry, cpuQuoteData, dockerComposeYaml, dstackAppID, log)
 	}
 	if sevRegistry == nil || !sevRegistry.IsLoaded() {
 		if log != nil {

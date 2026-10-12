@@ -170,7 +170,11 @@ This is how the docker-compose content gets measured into the SEV launch digest 
 
 ## SEV artifact registry
 
-The SEV registry is a JSON array shipped in [secretvm-verify](https://www.npmjs.com/package/secretvm-verify) ([sev.json via jsDelivr](https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/sev.json); also on [PyPI](https://pypi.org/project/secretvm-verify/)). Each entry contains all the data needed to recompute the GCTX launch digest:
+The SEV registry is a JSON array maintained in [scrtlabs/secretvm-verify](https://github.com/scrtlabs/secretvm-verify) (`node/data/sev.json`; also bundled in the npm/PyPI packages, which lag GitHub). The proxy-router default is pinned to a specific commit via jsDelivr — see `DefaultSevRegistryURL` in `sev_registry.go`. Each entry contains all the data needed to recompute the GCTX launch digest:
+
+<Note>
+The dstack KMS introduced with SecretVM artifacts v0.0.34+ changes how **TDX** measures RTMR3 (a per-VM app-id becomes the first event). It does **not** change the SEV-SNP launch digest: dstack KMS on AMD governs key release, not the measurement. The SEV flow on this page is the same for v0.0.31 and v0.0.35 VMs; only the registry entry differs.
+</Note>
 
 | Field | Description |
 |-------|-------------|
@@ -202,7 +206,7 @@ The `family_id` field encodes the VM template name, which maps to a vCPU count:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SEV_ARTIFACT_REGISTRY_URL` | [sev.json via npm](https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/sev.json) | URL for the SEV-SNP artifact registry JSON ([secretvm-verify](https://www.npmjs.com/package/secretvm-verify)) |
+| `SEV_ARTIFACT_REGISTRY_URL` | [sev.json via jsDelivr (pinned commit)](https://cdn.jsdelivr.net/gh/scrtlabs/secretvm-verify@a5d0d7c21cceef8305dbbb0589cf10dabe7a2047/node/data/sev.json) | URL for the SEV-SNP artifact registry JSON ([secretvm-verify](https://github.com/scrtlabs/secretvm-verify)) |
 | `ARTIFACT_REGISTRY_REFRESH_INTERVAL` | `1h` | Shared refresh interval for both TDX and SEV registries |
 
 ## Code structure

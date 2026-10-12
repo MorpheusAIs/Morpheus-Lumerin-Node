@@ -241,8 +241,10 @@ Key fields:
 | `tee_image_digest` | Immutable `sha256:...` of this image |
 | `compose_sha256` | Hash of the deployed compose (digest-pinned) |
 | `compose_image_reference` | The exact `image@sha256:` reference inside the compose |
-| `measurements.intel_tdx.rtmr3` | Expected RTMR3 — compare against live hardware quote |
-| `measurements.intel_tdx.secretvm_release` | SecretVM release the RTMR3 was computed against |
+| `measurements.intel_tdx.rtmr3` | Expected RTMR3 under the attest-tool scheme — matches SecretVM images that report no `dstack_app_id` on `/info` |
+| `measurements.intel_tdx.rtmr3_scheme` | `attest-tool` — the scheme `rtmr3` was computed with |
+| `measurements.intel_tdx.compose_sha256` / `rootfs_sha256` | Inputs for the dstack replay. Images with a dstack KMS (portal artifacts v0.0.34+) fold a per-VM app-id into RTMR3, so verifiers recompute it from these plus the VM's app-id (see [RTMR3 schemes](/providers/full/tee-backend-verification#rtmr3-schemes-attest-tool-vs-dstack)) |
+| `measurements.intel_tdx.secretvm_release` | SecretVM release the measurements were computed against |
 | `build.commit` | Git commit that produced this image |
 | `build.run_url` | Direct link to the GitHub Actions run |
 | `baked_env.network` | `mainnet` or `testnet` |
@@ -272,25 +274,28 @@ If the provider is on SecretVM:
 
 Three layers must pass: hardware (genuine Intel TDX / AMD SEV-SNP), VM (firmware + kernel + initramfs match a known SecretVM release), software (RTMR3: rootfs + Docker Compose match what was deployed).
 
-The expected RTMR3 is published in the signed manifest at `measurements.intel_tdx.rtmr3`. Compare it against the value reported by the hardware quote.
+For a pre-dstack SecretVM the expected RTMR3 is published in the signed manifest at `measurements.intel_tdx.rtmr3`. For a dstack-KMS SecretVM (portal artifacts v0.0.34+, which report `dstack_app_id` on `https://<vm>:29343/info`) RTMR3 is per-VM; recompute it as in Step 5.
 
 ### Step 5: Verify RTMR3 independently (optional)
 
 ```bash
-# Check the pinned version and rootfs variant
+# Check the pinned version and rootfs digest
 cat .github/tee/secretvm.env
-# → SECRETVM_RELEASE=v0.0.25
-# → SECRETVM_ROOTFS_VARIANT=rootfs-prod-tdx
+# → SECRETVM_RELEASE=v0.0.35
+# → SECRETVM_ROOTFS_TDX_SHA256=bfde9932…
 
-# Download the same rootfs used by CI/CD
-curl -L -o rootfs-prod-tdx.iso \
-  "$(grep SECRETVM_ROOTFS_TDX_URL .github/tee/secretvm.env | cut -d= -f2-)"
+# attest-tool scheme (VM reports no dstack_app_id): one value per image
+python3 proxy-router/scripts/compute-rtmr3.py docker-compose.tee.deployed.yml \
+  --rootfs-sha256="$(grep ^SECRETVM_ROOTFS_TDX_SHA256 .github/tee/secretvm.env | cut -d= -f2-)"
 
-# Compute RTMR3 from the deployed compose + rootfs
-python3 proxy-router/scripts/compute-rtmr3.py docker-compose.tee.deployed.yml rootfs-prod-tdx.iso
+# dstack scheme (VM reports a dstack_app_id): per-VM value
+APP_ID=$(curl -sk https://<vm-domain>:29343/info | jq -r .dstack_app_id)
+python3 proxy-router/scripts/compute-rtmr3.py docker-compose.tee.deployed.yml \
+  --rootfs-sha256="$(grep ^SECRETVM_ROOTFS_TDX_SHA256 .github/tee/secretvm.env | cut -d= -f2-)" \
+  --dstack-app-id="$APP_ID"
 ```
 
-Output should match `measurements.intel_tdx.rtmr3`. If not, check that you're using the same rootfs version as the CI/CD build.
+The attest-tool output should match `measurements.intel_tdx.rtmr3`; the dstack output should match the live quote's RTMR3 for that VM. If neither matches, check that you're using the same rootfs version as the CI/CD build and the exact deployed compose bytes.
 
 ---
 
@@ -300,37 +305,41 @@ See the conceptual breakdown in [TEE overview](/concepts/tee-overview), which mi
 
 ## Upgrading SecretVM artifacts
 
-When SCRT Labs publishes a new SecretVM release (e.g. `v0.0.31 → v0.0.32`), the rootfs changes and all RTMR3 / SEV measurements must be recomputed. The CI/CD pipeline is fully variabilized so updating requires only editing `.github/tee/secretvm.env`.
+When the SecretVM portal moves its Production artifacts version (e.g. `v0.0.31 → v0.0.35`), the rootfs changes and all RTMR3 / SEV measurements must be recomputed. The CI/CD pipeline is fully variabilized so updating requires only editing `.github/tee/secretvm.env` — plus the two Go registry defaults noted below.
 
 ### When to upgrade
 
-Source of truth for the Production artifacts version is the **SecretVM portal**. Cross-check digests against the published [secretvm-verify](https://www.npmjs.com/package/secretvm-verify) package (`data/tdx.csv` / `data/sev.json` — also on [PyPI](https://pypi.org/project/secretvm-verify/)):
+Source of truth for the Production artifacts version is the **SecretVM portal**. Cross-check digests against the [secretvm-verify](https://github.com/scrtlabs/secretvm-verify) registries (`node/data/tdx.csv` / `node/data/sev.json`). The npm/PyPI packages lag GitHub: `secretvm-verify@0.13.0` stops at TDX v0.0.34 / SEV v0.0.33, so v0.0.35 is pinned to a GitHub commit via jsDelivr:
 
 ```bash
+REG=https://cdn.jsdelivr.net/gh/scrtlabs/secretvm-verify@a5d0d7c21cceef8305dbbb0589cf10dabe7a2047/node/data
 # TDX rootfs_data for prod / <release>
-curl -fsSL https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/tdx.csv | head
+curl -fsSL $REG/tdx.csv | awk -F, '$2=="prod" && $3=="v0.0.35"{print $8}' | sort -u
 # SEV rootfs_hash for prod / <release>
-curl -fsSL https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/sev.json | jq '.[0]'
+curl -fsSL $REG/sev.json | jq -r '.[] | select(.vm_type=="prod" and .artifacts_ver=="v0.0.35") | .rootfs_hash'
 ```
 
-Bump `SECRETVM_VERIFY_NPM_VERSION` (and the registry URLs) when SCRT publishes a newer package that includes the release you are pinning.
+Move the pin (npm version or GitHub commit) whenever SCRT publishes a registry set that includes the release you are pinning.
 
 ### How to upgrade
 
 <Steps>
   <Step title="Edit secretvm.env">
     ```bash
-    SECRETVM_RELEASE=v0.0.31
-    SECRETVM_VERIFY_NPM_VERSION=0.13.0
-    SECRETVM_TDX_REGISTRY_URL=https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/tdx.csv
-    SECRETVM_SEV_REGISTRY_URL=https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/sev.json
-    SECRETVM_ROOTFS_TDX_SHA256=<rootfs_data from tdx.csv for prod/v0.0.31>
-    SECRETVM_ROOTFS_SEV_SHA256=<rootfs_hash from sev.json for prod/v0.0.31>
+    SECRETVM_RELEASE=v0.0.35
+    SECRETVM_VERIFY_NPM_VERSION=a5d0d7c2     # npm version or git sha; also the CI cache key
+    SECRETVM_TDX_REGISTRY_URL=https://cdn.jsdelivr.net/gh/scrtlabs/secretvm-verify@<sha>/node/data/tdx.csv
+    SECRETVM_SEV_REGISTRY_URL=https://cdn.jsdelivr.net/gh/scrtlabs/secretvm-verify@<sha>/node/data/sev.json
+    SECRETVM_ROOTFS_TDX_SHA256=<rootfs_data from tdx.csv for prod/v0.0.35>
+    SECRETVM_ROOTFS_SEV_SHA256=<rootfs_hash from sev.json for prod/v0.0.35>
     ```
     `SECRETVM_ROOTFS_VARIANT` stays `rootfs-prod` unless naming changes. ISO download URLs are optional; CI uses the pinned SHA when the ISO host is unavailable.
   </Step>
+  <Step title="Update the runtime registry defaults">
+    `DefaultRegistryURL` in `proxy-router/internal/attestation/artifacts_registry.go` and `DefaultSevRegistryURL` in `sev_registry.go` must point at the same registry set, or nodes that leave `ARTIFACT_REGISTRY_URL` / `SEV_ARTIFACT_REGISTRY_URL` unset will not recognise the new MRTD/RTMR0-2 rows.
+  </Step>
   <Step title="Push and run CI/CD">
-    The pipeline fetches the registries from the npm CDN, verifies the pins match, computes RTMR3 (from the pin or ISO) and SEV measurements, and embeds them in the signed manifest.
+    The pipeline fetches the registries, verifies the pins match, computes the attest-tool RTMR3 and the per-template SEV measurements, and embeds them with the compose/rootfs digests in the signed manifest. The post-deploy check reads the VM's `dstack_app_id` from `/info` and verifies whichever RTMR3 scheme the VM uses.
   </Step>
   <Step title="Rebuild providers">
     Providers running older SecretVM versions will have mismatched measurements. They should redeploy on the current SecretVM release.

@@ -28,20 +28,20 @@ const parityFixtureArtifactsVer = "parity-test-fixture-v1"
 // both implementations produce identical SHA-384 chains given identical
 // inputs — so any well-formed entry suffices.
 //
-// Byte values mirror the scrtlabs/secretvm-verify SEV registry `prod`/`v0.0.31`
-// entry (snapshotted 2026-07) so the fixture stays realistic and in step with the
-// current pin in `.github/tee/secretvm.env`. This is provenance only — the parity
-// assertion is release-agnostic (it checks Go ↔ Python equivalence given identical
-// inputs), so future SecretVM bumps do NOT require refreshing these bytes. If you
-// want a freshness check against the live registry, write a separate
-// (network-gated) integration test.
+// Byte values mirror the scrtlabs/secretvm-verify SEV registry `prod`/`v0.0.35`
+// entry (commit a5d0d7c2, snapshotted 2026-10) so the fixture stays realistic and
+// in step with the current pin in `.github/tee/secretvm.env`. This is provenance
+// only — the parity assertion is release-agnostic (it checks Go ↔ Python
+// equivalence given identical inputs), so future SecretVM bumps do NOT require
+// refreshing these bytes. If you want a freshness check against the live
+// registry, write a separate (network-gated) integration test.
 var parityFixtureSevEntry = &SevArtifactEntry{
 	VMType:            "prod",
 	ArtifactsVer:      parityFixtureArtifactsVer,
-	KernelHash:        "ca7645b25cb4f9af4e5c1a0ec8c182b6c5dea4462ab31cccb46427874356baae",
-	InitrdHash:        "9cfb7ac809ff9d5e972bf77edbbf2db80f74f741d62e1486d3daf64a47b4a555",
+	KernelHash:        "76f6ed31d9e48a919f001cbb269de9b05a40ef6ba93ceff6253770f665188a6e",
+	InitrdHash:        "2e637cd1667795c0d7d99cc8a90f79a55802b3b722a36fd2716a9d01b2c17a71",
 	VcpuType:          "EPYC",
-	RootfsHash:        "4e11fcb840d9dffe2b33868314d33bac337f82a25f09b3ca990e21f3002a59d2",
+	RootfsHash:        "893fc9fde55aa21e6b0fad3c60031517f98165c6993b74a94e68eba1fba02950",
 	OvmfHash:          "c581d3eaebf2941beb1f757de97497279b953a6999921cab05f9ed5268f9c0505d741f4021b5a3995c9893851cde190e",
 	SevHashesTableGPA: 8457216,
 	SevEsResetEIP:     8433668,

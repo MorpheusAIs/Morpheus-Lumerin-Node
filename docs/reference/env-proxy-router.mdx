@@ -224,8 +224,8 @@ These are only consulted when at least one model in the marketplace is `tee`-tag
 |----------|---------|-------|
 | `TEE_PORTAL_URL` | `https://secretai.scrtlabs.com/api/quote-parse` | SecretAI Portal used to verify raw TDX CPU quotes |
 | `TEE_IMAGE_REPO` | `ghcr.io/morpheusais/morpheus-lumerin-node-tee` | GHCR repo where the consumer-side P-Node attestation fetches the signed golden manifest via cosign |
-| `ARTIFACT_REGISTRY_URL` | `https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/tdx.csv` | SecretVM TDX artifact registry CSV (MRTD + RTMR0-2 lookup). Served from the published [secretvm-verify](https://www.npmjs.com/package/secretvm-verify) package after the GitHub repo was removed. |
-| `SEV_ARTIFACT_REGISTRY_URL` | `https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/sev.json` | SecretVM SEV-SNP artifact registry JSON |
+| `ARTIFACT_REGISTRY_URL` | `https://cdn.jsdelivr.net/gh/scrtlabs/secretvm-verify@a5d0d7c21cceef8305dbbb0589cf10dabe7a2047/node/data/tdx.csv` | SecretVM TDX artifact registry CSV (MRTD + RTMR0-2 lookup). Pinned to a [secretvm-verify](https://github.com/scrtlabs/secretvm-verify) commit via jsDelivr because the npm package lags GitHub (0.13.0 lacks v0.0.35). |
+| `SEV_ARTIFACT_REGISTRY_URL` | `https://cdn.jsdelivr.net/gh/scrtlabs/secretvm-verify@a5d0d7c21cceef8305dbbb0589cf10dabe7a2047/node/data/sev.json` | SecretVM SEV-SNP artifact registry JSON |
 | `ARTIFACT_REGISTRY_REFRESH_INTERVAL` | `1h` | How often the proxy-router re-downloads the artifact registry |
 
 See [TEE overview](/concepts/tee-overview) and [TEE reference](/providers/full/tee-reference).
