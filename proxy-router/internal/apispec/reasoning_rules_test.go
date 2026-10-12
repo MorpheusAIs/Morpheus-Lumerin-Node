@@ -219,3 +219,21 @@ func TestComposeNoEffortDropsTheEffortKnob(t *testing.T) {
 	require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
 	require.Contains(t, strings.Join(lines, "\n"), "takes no effort level")
 }
+
+func TestComposeOllamaListedNoneLiftsFamilyAlwaysOn(t *testing.T) {
+	api := Compose(Evidence{Stack: "ollama", ModelName: "qwq:32b", OllamaThinking: true, ReasoningEfforts: []string{"none", "low", "high"}, EffortsSource: "ollama:/api/show.thinking.values"})
+	require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode, "ollama accepts think=false for this model")
+	require.Equal(t, "reasoning_effort", api.Bindings[system.IntentReasoningDisable].Param)
+	require.Equal(t, "none", api.Bindings[system.IntentReasoningDisable].Value)
+
+	always := Compose(Evidence{Stack: "ollama", ModelName: "qwq:32b", OllamaThinking: true, ReasoningEfforts: []string{"low", "high"}, EffortsSource: "ollama:/api/show.thinking.values"})
+	require.Equal(t, system.ThinkingModeAlwaysOn, always.Thinking.Mode, "without none the family rule stands")
+}
+
+func TestComposeMandatoryReasoningWithholdsListedNone(t *testing.T) {
+	api := Compose(Evidence{Stack: "openrouter", ModelName: "vendor/thinker", GatewayReasoning: true, MandatoryReasoning: true,
+		ReasoningEfforts: []string{"none", "low", "high"}, EffortsSource: "openrouter:/models.reasoning.supported_efforts"})
+	require.Equal(t, system.ThinkingModeAlwaysOn, api.Thinking.Mode)
+	require.Nil(t, api.Bindings[system.IntentReasoningDisable])
+	require.Equal(t, []string{"low", "high"}, api.Bindings[system.IntentReasoningEffort].EnumValues, "a mandatory-reasoning model rejects none")
+}

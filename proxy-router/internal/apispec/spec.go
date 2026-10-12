@@ -132,6 +132,18 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 		tracef("thinking: the configured name %q says the model reasons; the served id %q names no checkpoint, so its family's toggles stay", ev.ModelName, name)
 	}
 
+	// Rule 5's list, a source-less one being LiteLLM's. Only levels the
+	// serving stack lists for this very model say that it reasons (and, with
+	// none, that the backend turns it off): LiteLLM's group info reports what
+	// the provider accepts, so its list stays out of those decisions.
+	effortsLabel, effortsStack := ev.EffortsSource, sourceStack(ev.EffortsSource)
+	if effortsLabel == "" {
+		effortsLabel, effortsStack = "litellm supported_reasoning_efforts", "litellm"
+	}
+	var listedEfforts []string
+	if effortsStack == stack && effortsStack != "litellm" {
+		listedEfforts = ev.ReasoningEfforts
+	}
 	alwaysOn := false
 	var bindings bindingSet
 	if len(ev.RegistryBindings) > 0 {
@@ -166,6 +178,9 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 		// a family fact.
 		famAlwaysOn, fam := bindingsForFamily(family, name)
 		switch {
+		case famAlwaysOn && containsString(listedEfforts, "none") && !thinkingCheckpoint:
+			bindings = ollamaThinkBindings()
+			tracef("bindings: ollama reports the 'thinking' capability; family %q reasons unconditionally, but %s offers none -> /v1 reasoning_effort (none = off)", family, effortsLabel)
 		case famAlwaysOn:
 			alwaysOn = true
 			tracef("bindings: ollama reports the 'thinking' capability; family %q reasons unconditionally", family)
@@ -221,18 +236,6 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 		}
 	}
 
-	// Rule 5's list, a source-less one being LiteLLM's. Only levels the
-	// serving stack lists for this very model say that it reasons (and, with
-	// none, that the backend turns it off): LiteLLM's group info reports what
-	// the provider accepts, so its list stays out of those decisions.
-	effortsLabel, effortsStack := ev.EffortsSource, sourceStack(ev.EffortsSource)
-	if effortsLabel == "" {
-		effortsLabel, effortsStack = "litellm supported_reasoning_efforts", "litellm"
-	}
-	var listedEfforts []string
-	if effortsStack == stack && effortsStack != "litellm" {
-		listedEfforts = ev.ReasoningEfforts
-	}
 	// Family always-on facts describe the weights; a backend that offers effort
 	// none for the model has its own off switch (Venice turns MiniMax-M2.7 off).
 	if alwaysOn && containsString(listedEfforts, "none") {
@@ -364,6 +367,15 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 	if ev.NoEffort && api.Bindings[system.IntentReasoningEffort] != nil {
 		delete(api.Bindings, system.IntentReasoningEffort)
 		tracef("bindings: reasoning.effort dropped — the %s listing says the model takes no effort level", stack)
+	}
+
+	// An always-on model takes no none (OpenRouter rejects it for mandatory
+	// reasoning), even when a listing names it.
+	if alwaysOn {
+		if effort := api.Bindings[system.IntentReasoningEffort]; effort != nil && containsString(effort.EnumValues, "none") {
+			effort.EnumValues = withoutString(effort.EnumValues, "none")
+			tracef("bindings: reasoning.effort none withheld — the model reasons unconditionally")
+		}
 	}
 
 	// Ollama's effort none is think=false, the toggle a checkpoint is not given.

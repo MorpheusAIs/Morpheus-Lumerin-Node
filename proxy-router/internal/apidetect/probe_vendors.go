@@ -139,7 +139,7 @@ func (d *Detector) vendorList(ctx context.Context, urlStr string, headers map[st
 
 // A hosted listing is keyed by id: a lone entry whose id is not the
 // configured model describes a different model (a key scoped to one
-// dedicated endpoint, a filtered listing), so matchModelEntry's
+// dedicated endpoint, a filtered listing), so findModelEntry's
 // single-entry rule for self-hosted engines does not apply here.
 func vendorEntry(ctx context.Context, list []any, endpoint, modelName string) map[string]any {
 	if list == nil {
