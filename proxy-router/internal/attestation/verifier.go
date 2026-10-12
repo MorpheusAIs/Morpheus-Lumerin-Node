@@ -182,6 +182,11 @@ type AttestationResult struct {
 	RTMR1 string
 	RTMR2 string
 	RTMR3 string
+	// DstackAppID is the VM's self-reported dstack app-id (GET /info),
+	// normalized hex, or "" for pre-dstack images. On TDX it selects the
+	// RTMR3 replay scheme used by CompareRegisters; it is not itself attested
+	// until a replay that includes it reproduces the quote's RTMR3.
+	DstackAppID string
 
 	// SEV-SNP registers
 	Measurement string
@@ -302,6 +307,13 @@ func (v *Verifier) VerifyProvider(ctx context.Context, providerEndpoint string, 
 
 	if result.Type == TEETypeSEV {
 		result.SEVTemplate = SevTemplateFromQuote(cpuQuote)
+	}
+	if result.Type == TEETypeTDX {
+		// Newer SecretVM images measure a per-VM dstack app-id as RTMR3's
+		// first event. Fetch it from /info so the golden comparison can
+		// replay the right scheme; "" on older images keeps the legacy path.
+		result.DstackAppID = FetchDstackAppID(ctx, v.attestationClient, attestationURL)
+		v.log.Infof("TDX RTMR3 scheme for %s: %s (app_id=%q)", providerEndpoint, RTMR3SchemeFor(result.DstackAppID), result.DstackAppID)
 	}
 
 	golden, err := v.goldenSrc.FetchGoldenValues(ctx, version)
@@ -458,6 +470,56 @@ func (v *Verifier) fullVerifyWithPing(ctx context.Context, providerEndpoint stri
 	return v.VerifyProvider(ctx, providerEndpoint, version)
 }
 
+// compareTDXRTMR3 binds a TDX quote to the released image.
+//
+// Two SecretVM RTMR3 schemes are in the field (see rtmr.go). The published
+// golden RTMR3 is the attest-tool value and matches pre-dstack VMs directly.
+// A dstack VM (app-id reported on /info) folds its own app-id into RTMR3, so
+// the expected value is recomputed here from the manifest's compose and
+// rootfs digests plus the live app-id. Either path fails closed: a dstack VM
+// against a manifest without those digests is a mismatch, not a skip, and a
+// VM that reports no app-id is held to the exact published value.
+func compareTDXRTMR3(result *AttestationResult, golden *GoldenValues, log lib.ILogger) error {
+	if result.RTMR3 == "" {
+		return fmt.Errorf("register mismatch: RTMR3 not present in quote")
+	}
+	if golden.RTMR3 == "" && !golden.SupportsDstackRTMR3() {
+		return fmt.Errorf("register mismatch: golden values publish no RTMR3 for TDX")
+	}
+
+	appID := NormalizeDstackAppID(result.DstackAppID)
+
+	// A dstack VM's RTMR3 cannot equal the attest-tool golden, and vice versa,
+	// but accept the legacy equality first so a manifest that only carries
+	// RTMR3 keeps working for the pre-dstack fleet regardless of /info.
+	if golden.RTMR3 != "" && strings.EqualFold(golden.RTMR3, result.RTMR3) {
+		if log != nil {
+			log.Infof("register RTMR3: matches golden value (scheme=%s)", RTMR3SchemeAttestTool)
+		}
+		return nil
+	}
+
+	if appID == "" {
+		if golden.SupportsDstackRTMR3() {
+			return fmt.Errorf("register mismatch: RTMR3: expected %s (scheme=%s), got %s; VM reported no dstack_app_id on /info",
+				golden.RTMR3, RTMR3SchemeAttestTool, result.RTMR3)
+		}
+		return fmt.Errorf("register mismatch: RTMR3: expected %s, got %s", golden.RTMR3, result.RTMR3)
+	}
+
+	expected, scheme := golden.ExpectedTDXRTMR3(appID)
+	if expected == "" {
+		return fmt.Errorf("register mismatch: VM reports dstack_app_id %s but golden manifest publishes no compose/rootfs digests for the %s RTMR3 replay (rebuild the TEE image with a current pipeline)", appID, scheme)
+	}
+	if !strings.EqualFold(expected, result.RTMR3) {
+		return fmt.Errorf("register mismatch: RTMR3: expected %s (scheme=%s, app_id=%s), got %s", expected, scheme, appID, result.RTMR3)
+	}
+	if log != nil {
+		log.Infof("register RTMR3: matches golden value (scheme=%s, app_id=%s)", scheme, appID)
+	}
+	return nil
+}
+
 // CompareRegisters checks the software-identity register of the quote's TEE
 // type against the golden values: RTMR3 for TDX, the launch measurement for
 // SEV-SNP. It fails closed. A golden manifest that carries no value for the
@@ -479,19 +541,7 @@ func CompareRegisters(result *AttestationResult, golden *GoldenValues, log lib.I
 
 	switch result.Type {
 	case TEETypeTDX:
-		if result.RTMR3 == "" {
-			return fmt.Errorf("register mismatch: RTMR3 not present in quote")
-		}
-		if golden.RTMR3 == "" {
-			return fmt.Errorf("register mismatch: golden values publish no RTMR3 for TDX")
-		}
-		if !strings.EqualFold(golden.RTMR3, result.RTMR3) {
-			return fmt.Errorf("register mismatch: RTMR3: expected %s, got %s", golden.RTMR3, result.RTMR3)
-		}
-		if log != nil {
-			log.Infof("register RTMR3: matches golden value")
-		}
-		return nil
+		return compareTDXRTMR3(result, golden, log)
 
 	case TEETypeSEV:
 		if result.Measurement == "" {
