@@ -358,7 +358,7 @@ This is a **release cadence** concern, not a clock-based TTL. A version doesn't 
    - Can be run locally by providers/consumers for independent verification
 
 2. **SecretVM artifact config:** `.github/tee/secretvm.env`
-   - Pins SecretVM release version (currently **`v0.0.31`** — the SecretVM portal's Production "Artifacts version" as of 2026-07, which GitHub still labels a pre-release) and rootfs variant base (`rootfs-prod`)
+   - Pins SecretVM release version (currently **`v0.0.35`** — the SecretVM portal's Production "Artifacts version" as of 2026-10; the only version the portal offers for new deploys) and rootfs variant base (`rootfs-prod`)
    - Pins TDX **and** SEV rootfs URLs + their expected SHA-256 hashes
    - Pins the SEV artifact registry URL (`SECRETVM_SEV_REGISTRY_URL`) and the registry vm_type (`SECRETVM_SEV_REGISTRY_VM_TYPE=prod`) — used by `compute-sev-measurement.py` to find the right entry
    - All pipeline references to rootfs filenames are derived from `SECRETVM_ROOTFS_VARIANT` (no hardcoded filenames in `build.yml`); the platform suffix (`-tdx` / `-sev`) is appended at use site
@@ -474,7 +474,7 @@ This is a **release cadence** concern, not a clock-based TTL. A version doesn't 
    - Mirrors the GCTX page-update chain (AMD SNP spec §8.17.2 Table 67): `PAGE_INFO = ld(48) || contents(48) || u16_LE(0x70) || page_type(1) || zeros(5) || gpa_LE(8); ld_next = SHA-384(PAGE_INFO)`.
    - Inputs: SEV registry JSON entry (kernel/initrd/ovmf hashes, OVMF section table, sev_hashes_table_gpa, sev_es_reset_eip), the deployed `docker-compose.tee.yml`, and a vCPU template.
    - Emits one `measurement` per template (small=1, medium=2, large=4, 2xlarge=8, 4xlarge=16).
-   - Parity-tested against the Go runtime via `internal/attestation/sev_python_parity_test.go` (uses `t.TempDir()` + a frozen fixture snapshotted from the v0.0.31 prod registry entry; the test runs the Python script as a subprocess and asserts identical hex output for all 5 templates).
+   - Parity-tested against the Go runtime via `internal/attestation/sev_python_parity_test.go` (uses `t.TempDir()` + a frozen fixture snapshotted from the v0.0.35 prod registry entry; the test runs the Python script as a subprocess and asserts identical hex output for all 5 templates). `compute-rtmr3.py` has the same guard in `rtmr3_python_parity_test.go`, driven by SCRT's live small/v0.0.34 dstack vectors.
 
 2. **Pipeline integration (`GHCR-Build-and-Push-TEE`):**
    - Downloads SEV rootfs (URL + SHA from `secretvm.env`) into the same cache as the TDX rootfs.
@@ -486,11 +486,13 @@ This is a **release cadence** concern, not a clock-based TTL. A version doesn't 
 
 **Effort:** M — **DONE** (this PR)
 
-### 6.4 SecretVM release version tracking — DONE (current pin: v0.0.31)
+### 6.4 SecretVM release version tracking — DONE (current pin: v0.0.35)
 
 **Implementation:** `.github/tee/secretvm.env` pins the release version, rootfs variant, and BOTH the TDX and SEV rootfs URLs + SHA-256s. The pipeline derives all artifact filenames, cache keys, and download paths from `SECRETVM_RELEASE` and `SECRETVM_ROOTFS_VARIANT` (with the platform suffix `-tdx`/`-sev` appended). The attestation manifest includes `measurements.intel_tdx.{secretvm_release, rootfs_variant, rootfs_sha256}` and `measurements.amd_sev_snp.{secretvm_release, rootfs_sha256, kernel_hash, initrd_hash, ovmf_hash, …}`.
 
-**Current pin (2026-07):** `v0.0.31`. The **source of truth is the SecretVM portal's Production "Artifacts version"** (what new prod deploys actually boot), which is `v0.0.31`. Note this diverges from GitHub's release labels: GitHub marks `v0.0.31` (and `v0.0.29`) as **pre-release** and marks `v0.0.28` as its "Latest" stable — but the portal only offers `v0.0.31` for new production deploys, so we pin `v0.0.31` to match what runs. The SEV verify registry publishes a matching `prod`/`v0.0.31` entry. TDX rootfs (`rootfs-prod-v0.0.31-tdx.iso`, sha256 `9d1ace11…`) and SEV rootfs (`rootfs-prod-v0.0.31-sev.iso`, sha256 `4e11fcb8…`) are pinned in `secretvm.env` (values are the GitHub release asset digests).
+**Current pin (2026-10):** `v0.0.35`. The **source of truth is the SecretVM portal's Production "Artifacts version"** (what new prod deploys actually boot); the portal offers only `v0.0.35` for new machines. Registries come from `scrtlabs/secretvm-verify` **GitHub commit `a5d0d7c2`** (2026-09-17) via jsDelivr, not the npm package: `secretvm-verify@0.13.0` (2026-07-21) stops at TDX v0.0.34 / SEV v0.0.33 and SCRT did not republish after adding v0.0.35. TDX prod rootfs `bfde9932…` (identical across the small/medium/large rows on both hosts) and SEV prod rootfs `893fc9fd…` are pinned in `secretvm.env`; `DefaultRegistryURL` / `DefaultSevRegistryURL` in Go point at the same commit so nodes with unset `*_REGISTRY_URL` recognise v0.0.35 MRTD/RTMR0-2 rows.
+
+**RTMR3 scheme change (v0.0.34+):** images with a dstack KMS report `dstack_app_id` on `GET /info` and extend RTMR3 with dstack event digests — `app-id`, `compose-hash`, `os-image-hash` — instead of the raw `sha256(compose)`, `rootfs` extends. The app-id is per VM, so no single RTMR3 can be published at build time. The manifest keeps the attest-tool `rtmr3` for the pre-dstack fleet and adds `rtmr3_scheme`, `compose_sha256`, `rootfs_sha256`; `CompareRegisters` / `VerifyTdxWorkload` fetch `/info` and replay whichever scheme applies (`rtmr.go: CalculateRTMR3FromHashes`). CI's post-deploy check (`.github/tee/verify-rtmr3.sh`) does the same against the live VM. SEV-SNP is unchanged (no app-id in the launch digest). Mirrors `secretvm-verify` 0.13.0 `rtmr.ts`; ground-truth vectors in `rtmr_dstack_test.go`.
 
 **Upgrade procedure:** When SCRT Labs publishes a new release:
 
@@ -500,7 +502,7 @@ This is a **release cadence** concern, not a clock-based TTL. A version doesn't 
 4. Pin those SHA-256s back into `secretvm.env` and re-push.
 5. Confirm the SEV registry (`scrtlabs/secretvm-verify/artifacts_registry/sev.json`) has been updated with the new release's `(vm_type, artifacts_ver)` entry — without it the SEV measurement compute will fail with `no SEV registry entry found`. SCRT Labs typically publishes the registry alongside the build artifacts; check by `curl ${SECRETVM_SEV_REGISTRY_URL} | jq '.[] | select(.artifacts_ver == "${SECRETVM_RELEASE}")'`.
 
-**Version detection:** There is no SCRT Labs push notification or dedicated API for new releases. The authoritative signal is the **SecretVM portal's Production "Artifacts version"** — pin whatever it offers for new prod deploys. Cross-check against the GitHub Releases API (`https://api.github.com/repos/scrtlabs/secret-vm-build/releases`) and the `secretvm-verify/artifacts_registry/{tdx.csv,sev.json}` `(vm_type, artifacts_ver)` entries to obtain URLs, asset digests, and the SEV registry entry. Note: GitHub and the portal can disagree in *either* direction — `/releases/latest` currently returns `v0.0.28` (stable) while the portal already provisions `v0.0.31` (which GitHub still flags pre-release). Trust the portal for what to pin. Future consideration: a scheduled GitHub Action that polls for new releases AND registry entries, opens an issue or PR.
+**Version detection:** There is no SCRT Labs push notification or dedicated API for new releases. The authoritative signal is the **SecretVM portal's Production "Artifacts version"** — pin whatever it offers for new prod deploys. Cross-check against `scrtlabs/secretvm-verify` `node/data/{tdx.csv,sev.json}` on GitHub (`gh api repos/scrtlabs/secretvm-verify/commits`) for the `(vm_type, artifacts_ver)` rows; the GitHub Releases API for `secret-vm-build` now 404s and the npm/PyPI packages lag GitHub, so neither is a reliable signal. Trust the portal for what to pin. Future consideration: a scheduled GitHub Action that polls the registry commits for new `artifacts_ver` entries and opens an issue or PR.
 
 ### 6.5 Auto-deploy to SecretVM test instance — DONE
 
@@ -937,7 +939,7 @@ See also: [TEE backend verification](https://nodedocs.mor.org/providers/full/tee
 | SCRT Labs reproduce-mr | https://github.com/scrtlabs/reproduce-mr |
 | SCRT Labs secret-vm-build (rootfs/bzImage/ovmf/initramfs releases) | https://github.com/scrtlabs/secret-vm-build |
 | **SCRT Labs secretvm-verify (TS reference verifier + TDX/SEV registries)** | https://github.com/scrtlabs/secretvm-verify |
-| Current SecretVM release pin | https://github.com/scrtlabs/secret-vm-build/releases/tag/v0.0.31 |
+| Current SecretVM release pin (registry commit) | https://github.com/scrtlabs/secretvm-verify/commit/a5d0d7c21cceef8305dbbb0589cf10dabe7a2047 (`v0.0.35`) |
 | SCRT Labs TDX quote parser API | `POST https://secretai.scrtlabs.com/api/quote-parse` |
 | SCRT Labs SEV-SNP quote parser API | `POST https://secretai.scrtlabs.com/api/quote-parse-sev` |
 | **Sigstore / supply-chain tools** | |
