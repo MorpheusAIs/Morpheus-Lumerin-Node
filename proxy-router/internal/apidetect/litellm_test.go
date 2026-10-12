@@ -222,7 +222,7 @@ func TestDetectLiteLLMTwoHopVeniceReasoning(t *testing.T) {
 	require.NotContains(t, trace, "sk-litellm")
 }
 
-// Multi-entry listing, so matchModelEntry's single-entry fallback cannot
+// Multi-entry listing, so findModelEntry's single-entry fallback cannot
 // mask a matching bug.
 func registryServerMulti(t *testing.T, entries ...map[string]any) (*httptest.Server, *requestLog) {
 	t.Helper()

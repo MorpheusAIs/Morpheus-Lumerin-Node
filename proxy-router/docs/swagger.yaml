@@ -200,6 +200,11 @@ definitions:
     - token
     - username
     type: object
+  authapi.ErrorRes:
+    properties:
+      error:
+        type: string
+    type: object
   authapi.RemoveUserReq:
     properties:
       username:
@@ -1492,7 +1497,9 @@ info:
 paths:
   /auth/allowance/confirm:
     post:
-      description: 'Permission: agent_requests'
+      description: 'Permission: agent_requests, and the caller must have full access
+        ("*"): allowances are spending caps, so only the operator approves them. Other
+        callers return 403.'
       parameters:
       - description: Confirm Token Allowance Request
         in: body
@@ -1507,6 +1514,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/authapi.AuthRes'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/authapi.ErrorRes'
       security:
       - BasicAuth: []
       summary: Confirm or Decline Token Allowance Request
@@ -1528,7 +1539,9 @@ paths:
       tags:
       - auth
     post:
-      description: 'Permission: request_allowance'
+      description: 'Permission: request_allowance. A caller without full access ("*")
+        may only request an allowance for its own username; other usernames return
+        403.'
       parameters:
       - description: Request Allowance Request with token and amount
         in: body
@@ -1543,6 +1556,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/authapi.AuthRes'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/authapi.ErrorRes'
       security:
       - BasicAuth: []
       summary: Request Allowance for Agent
@@ -1550,7 +1567,9 @@ paths:
       - auth
   /auth/allowance/revoke:
     post:
-      description: 'Permission: agent_requests'
+      description: 'Permission: agent_requests, and the caller must have full access
+        ("*"): allowances are spending caps, so only the operator changes them. Other
+        callers return 403.'
       parameters:
       - description: Revoke Token Allowance Request
         in: body
@@ -1565,6 +1584,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/authapi.AuthRes'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/authapi.ErrorRes'
       security:
       - BasicAuth: []
       summary: Revoke Token Allowance for Agent
@@ -1581,7 +1604,9 @@ paths:
       - auth
   /auth/users:
     delete:
-      description: 'Permission: remove_user'
+      description: 'Permission: remove_user. admin can never be removed. A caller
+        without full access ("*") may only remove users whose permissions are a subset
+        of its own; such requests return 403.'
       parameters:
       - description: Remove User Request
         in: body
@@ -1596,6 +1621,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/authapi.AuthRes'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/authapi.ErrorRes'
       security:
       - BasicAuth: []
       summary: Remove User from Proxy API
@@ -1616,7 +1645,9 @@ paths:
       tags:
       - auth
     post:
-      description: 'Permission: add_user'
+      description: 'Permission: add_user. A caller without full access ("*") may only
+        create or update users whose permissions are a subset of its own, may not
+        grant "*", and may not touch admin; such requests return 403.'
       parameters:
       - description: Add User Request
         in: body
@@ -1631,6 +1662,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/authapi.AuthRes'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/authapi.ErrorRes'
       security:
       - BasicAuth: []
       summary: Add/Update User in Proxy Conf
@@ -1653,7 +1688,9 @@ paths:
       - auth
   /auth/users/confirm:
     post:
-      description: 'Permission: agent_requests'
+      description: 'Permission: agent_requests. Confirming grants the perms the agent
+        asked for, so a caller without full access ("*") may only confirm requests
+        whose perms are a subset of its own; such requests return 403.'
       parameters:
       - description: Confirm Agent User Request
         in: body
@@ -1668,6 +1705,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/authapi.AuthRes'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/authapi.ErrorRes'
       security:
       - BasicAuth: []
       summary: Confirm or Decline Agent User

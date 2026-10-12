@@ -185,6 +185,10 @@ type AttestationResult struct {
 
 	// SEV-SNP registers
 	Measurement string
+	// SEVTemplate is the SecretVM size ("small", "medium", ...) named by the
+	// quote's family_id, when present. It selects the per-template golden
+	// launch digest; empty means "match any published template".
+	SEVTemplate string
 
 	ReportData string
 }
@@ -295,6 +299,10 @@ func (v *Verifier) VerifyProvider(ctx context.Context, providerEndpoint string, 
 	}
 
 	v.log.Infof("TLS certificate matches reportdata via %s digest (anti-spoofing check passed)", bindingKind)
+
+	if result.Type == TEETypeSEV {
+		result.SEVTemplate = SevTemplateFromQuote(cpuQuote)
+	}
 
 	golden, err := v.goldenSrc.FetchGoldenValues(ctx, version)
 	if err != nil {
@@ -450,59 +458,110 @@ func (v *Verifier) fullVerifyWithPing(ctx context.Context, providerEndpoint stri
 	return v.VerifyProvider(ctx, providerEndpoint, version)
 }
 
-// CompareRegisters checks every register present in the golden values against
-// the values extracted from the attestation quote.
+// CompareRegisters checks the software-identity register of the quote's TEE
+// type against the golden values: RTMR3 for TDX, the launch measurement for
+// SEV-SNP. It fails closed. A golden manifest that carries no value for the
+// quote's TEE type is a mismatch, not a skip, because this comparison is the
+// only step that binds the attested VM to the released image; everything
+// before it only proves "some genuine TEE with some software".
+//
+// SEV-SNP goldens come in two shapes. Legacy manifests publish one
+// Measurement. Current manifests publish SEVPerTemplate, one launch digest per
+// SecretVM size, because the digest folds in one VMSA page per vCPU. The quote
+// must equal the entry for its template (family_id) when it names one,
+// otherwise any published entry; a legacy Measurement is accepted alongside.
+// Before this the SEV branch read only the legacy field, so a
+// per-template-only manifest made the check pass for any measurement.
 func CompareRegisters(result *AttestationResult, golden *GoldenValues, log lib.ILogger) error {
-	type regPair struct {
-		name   string
-		golden string
-		actual string
+	if result == nil || golden == nil {
+		return fmt.Errorf("register mismatch: missing quote result or golden values")
 	}
-
-	var pairs []regPair
 
 	switch result.Type {
 	case TEETypeTDX:
-		pairs = []regPair{
-			// {"MRTD", golden.MRTD, result.MRTD},
-			// {"RTMR0", golden.RTMR0, result.RTMR0},
-			// {"RTMR1", golden.RTMR1, result.RTMR1},
-			// {"RTMR2", golden.RTMR2, result.RTMR2},
-			{"RTMR3", golden.RTMR3, result.RTMR3},
+		if result.RTMR3 == "" {
+			return fmt.Errorf("register mismatch: RTMR3 not present in quote")
 		}
+		if golden.RTMR3 == "" {
+			return fmt.Errorf("register mismatch: golden values publish no RTMR3 for TDX")
+		}
+		if !strings.EqualFold(golden.RTMR3, result.RTMR3) {
+			return fmt.Errorf("register mismatch: RTMR3: expected %s, got %s", golden.RTMR3, result.RTMR3)
+		}
+		if log != nil {
+			log.Infof("register RTMR3: matches golden value")
+		}
+		return nil
+
 	case TEETypeSEV:
-		pairs = []regPair{
-			{"measurement", golden.Measurement, result.Measurement},
+		if result.Measurement == "" {
+			return fmt.Errorf("register mismatch: measurement not present in quote")
 		}
-	}
-
-	var mismatches []string
-	for _, p := range pairs {
-		if p.golden == "" {
-			if log != nil {
-				log.Debugf("register %s: golden value empty, skipping", p.name)
+		candidates, err := sevGoldenCandidates(golden, result.SEVTemplate)
+		if err != nil {
+			return err
+		}
+		if len(candidates) == 0 {
+			return fmt.Errorf("register mismatch: golden values publish no measurement for SEV")
+		}
+		for _, c := range candidates {
+			if strings.EqualFold(c.value, result.Measurement) {
+				if log != nil {
+					log.Infof("register measurement: matches golden value (%s)", c.name)
+				}
+				return nil
 			}
-			continue
 		}
-		if p.actual == "" {
-			mismatches = append(mismatches, fmt.Sprintf("%s: expected %s but not present in quote", p.name, p.golden))
-			continue
-		}
-		if !strings.EqualFold(p.golden, p.actual) {
-			mismatches = append(mismatches, fmt.Sprintf("%s: expected %s, got %s", p.name, p.golden, p.actual))
-		} else if log != nil {
-			log.Infof("register %s: matches golden value", p.name)
-		}
-	}
+		return fmt.Errorf("register mismatch: measurement: %s matches none of the published golden values (%s)",
+			result.Measurement, describeSEVCandidates(candidates))
 
-	if len(mismatches) > 0 {
-		return fmt.Errorf("register mismatch: %s", strings.Join(mismatches, "; "))
+	default:
+		return fmt.Errorf("register mismatch: unsupported TEE type %q", result.Type)
 	}
+}
 
-	if log != nil {
-		log.Infof("all checked registers match golden values")
+type sevGoldenCandidate struct {
+	name  string // template name, or "legacy" for the single Measurement
+	value string
+}
+
+// sevGoldenCandidates lists the golden SEV launch digests a quote may match:
+// the per-template entry for its template when it names one (an error when
+// that template is not published and there is no legacy value to fall back
+// on), otherwise every per-template entry, plus the legacy single Measurement
+// when present.
+func sevGoldenCandidates(golden *GoldenValues, template string) ([]sevGoldenCandidate, error) {
+	var out []sevGoldenCandidate
+	if len(golden.SEVPerTemplate) > 0 {
+		if template != "" {
+			v := golden.SEVPerTemplate[template]
+			if v == "" && golden.Measurement == "" {
+				return nil, fmt.Errorf("register mismatch: measurement: no golden value for VM template %q (published: %s)",
+					template, strings.Join(sevTemplateNames(golden.SEVPerTemplate), ","))
+			}
+			if v != "" {
+				out = append(out, sevGoldenCandidate{name: template, value: v})
+			}
+		} else {
+			for _, name := range sevTemplateNames(golden.SEVPerTemplate) {
+				if v := golden.SEVPerTemplate[name]; v != "" {
+					out = append(out, sevGoldenCandidate{name: name, value: v})
+				}
+			}
+		}
 	}
-	return nil
+	if golden.Measurement != "" {
+		out = append(out, sevGoldenCandidate{name: "legacy", value: golden.Measurement})
+	}
+	return out, nil
+}
+
+func describeSEVCandidates(cs []sevGoldenCandidate) string {
+	parts := make([]string, 0, len(cs))
+	for _, c := range cs {
+		parts = append(parts, c.name+"="+c.value)
+	}
+	return strings.Join(parts, " ")
 }
 
 // LoadAttestationQuote fetches a raw attestation quote (hex for TDX, base64 for SEV)

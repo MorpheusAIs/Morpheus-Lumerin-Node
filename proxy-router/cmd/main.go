@@ -381,6 +381,7 @@ func start() error {
 	}
 	proxyController := proxyapi.NewProxyController(proxyRouterApi, aiEngine, chatStorage, *cfg.Proxy.StoreChatContext.Bool, *cfg.Proxy.ForwardChatContext.Bool, *authCfg, ipfsManager, log)
 	proxyController.SetBackendAttestationStatus(backendVerifier)
+	proxyController.SetIPFSAllowedDirs(cfg.IPFS.AllowedDirs)
 	walletController := walletapi.NewWalletController(wallet, *authCfg)
 	var modelHealthChecker *modelhealth.Checker
 	// keep the interface nil when the checker is disabled to avoid a typed-nil

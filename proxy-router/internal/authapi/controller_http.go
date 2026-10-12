@@ -1,6 +1,7 @@
 package authapi
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -28,6 +29,20 @@ func NewAuthController(authConfig *system.HTTPAuthConfig, environment string, lo
 	return a
 }
 
+// authErrorStatus maps a system auth error to an HTTP status: a refused
+// delegation is 403, a malformed username or perm list is 400, anything else
+// is 500.
+func authErrorStatus(err error) int {
+	switch {
+	case errors.Is(err, system.ErrUserChangeForbidden):
+		return http.StatusForbidden
+	case errors.Is(err, system.ErrInvalidUserSpec):
+		return http.StatusBadRequest
+	default:
+		return http.StatusInternalServerError
+	}
+}
+
 func (s *AuthController) RegisterRoutes(r interfaces.Router) {
 	r.POST("/auth/users", s.authConfig.CheckAuth("add_user"), s.AddUser)
 	r.DELETE("/auth/users", s.authConfig.CheckAuth("remove_user"), s.DeleteUser)
@@ -48,11 +63,12 @@ func (s *AuthController) RegisterRoutes(r interfaces.Router) {
 // AddUser godoc
 //
 //	@Summary		Add/Update User in Proxy Conf
-//	@Description	Permission: add_user
+//	@Description	Permission: add_user. A caller without full access ("*") may only create or update users whose permissions are a subset of its own, may not grant "*", and may not touch admin; such requests return 403.
 //	@Tags			auth
 //	@Produce		json
 //	@Param			addUserReq	body		authapi.AddUserReq	true	"Add User Request"
 //	@Success		200			{object}	authapi.AuthRes
+//	@Failure		403			{object}	authapi.ErrorRes
 //	@Security		BasicAuth
 //	@Router			/auth/users [post]
 func (a *AuthController) AddUser(ctx *gin.Context) {
@@ -62,13 +78,18 @@ func (a *AuthController) AddUser(ctx *gin.Context) {
 		return
 	}
 
-	err := a.authConfig.AddUser(req.Username, req.Password, req.Perms)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	if err := a.authConfig.AuthorizeUserChange(ctx.GetString("username"), req.Username, req.Perms); err != nil {
+		ctx.JSON(authErrorStatus(err), gin.H{"error": err.Error()})
 		return
 	}
 
-	if req.Username == "admin" {
+	err := a.authConfig.AddUser(req.Username, req.Password, req.Perms)
+	if err != nil {
+		ctx.JSON(authErrorStatus(err), gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.Username == system.AdminUsername {
 		err = a.authConfig.UpdateCookieContent(fmt.Sprintf("admin:%s\n", req.Password))
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -82,17 +103,23 @@ func (a *AuthController) AddUser(ctx *gin.Context) {
 // RemoveUser godoc
 //
 //	@Summary		Remove User from Proxy API
-//	@Description	Permission: remove_user
+//	@Description	Permission: remove_user. admin can never be removed. A caller without full access ("*") may only remove users whose permissions are a subset of its own; such requests return 403.
 //	@Tags			auth
 //	@Produce		json
 //	@Param			removeUserReq	body		authapi.RemoveUserReq	true	"Remove User Request"
 //	@Success		200				{object}	authapi.AuthRes
+//	@Failure		403				{object}	authapi.ErrorRes
 //	@Security		BasicAuth
 //	@Router			/auth/users [delete]
 func (a *AuthController) DeleteUser(ctx *gin.Context) {
 	var req *RemoveUserReq
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := a.authConfig.AuthorizeUserRemoval(ctx.GetString("username"), req.Username); err != nil {
+		ctx.JSON(authErrorStatus(err), gin.H{"error": err.Error()})
 		return
 	}
 
@@ -122,7 +149,7 @@ func (a *AuthController) RequestAgentUser(ctx *gin.Context) {
 
 	err := a.authConfig.RequestAgentUser(req.Username, req.Password, req.Perms, req.Allowances)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(authErrorStatus(err), gin.H{"error": err.Error()})
 		return
 	}
 
@@ -162,10 +189,11 @@ func (a *AuthController) GetAgentUsers(ctx *gin.Context) {
 // ConfirmAgentRequest godoc
 //
 //	@Summary		Confirm or Decline Agent User
-//	@Description	Permission: agent_requests
+//	@Description	Permission: agent_requests. Confirming grants the perms the agent asked for, so a caller without full access ("*") may only confirm requests whose perms are a subset of its own; such requests return 403.
 //	@Tags			auth
 //	@Produce		json
 //	@Success		200					{object}	authapi.AuthRes
+//	@Failure		403					{object}	authapi.ErrorRes
 //	@Param			confirmAgentUserReq	body		authapi.ConfirmAgentReq	true	"Confirm Agent User Request"
 //	@Security		BasicAuth
 //	@Router			/auth/users/confirm [post]
@@ -176,18 +204,16 @@ func (a *AuthController) ConfirmAgentRequest(ctx *gin.Context) {
 		return
 	}
 
+	caller := ctx.GetString("username")
+	var err error
 	if req.Confirm {
-		err := a.authConfig.ConfirmAgentUser(req.Username)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
+		err = a.authConfig.ConfirmAgentUserAs(caller, req.Username)
 	} else {
-		err := a.authConfig.DeclineAgentUser(req.Username)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
+		err = a.authConfig.DeclineAgentUserAs(caller, req.Username)
+	}
+	if err != nil {
+		ctx.JSON(authErrorStatus(err), gin.H{"error": err.Error()})
+		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"result": true})
 }
@@ -195,17 +221,23 @@ func (a *AuthController) ConfirmAgentRequest(ctx *gin.Context) {
 // RequestAllowance godoc
 //
 //	@Summary		Request Allowance for Agent
-//	@Description	Permission: request_allowance
+//	@Description	Permission: request_allowance. A caller without full access ("*") may only request an allowance for its own username; other usernames return 403.
 //	@Tags			auth
 //	@Produce		json
 //	@Param			requestAllowanceReq	body		authapi.RequestAllowanceReq	true	"Request Allowance Request with token and amount"
 //	@Success		200					{object}	authapi.AuthRes
+//	@Failure		403					{object}	authapi.ErrorRes
 //	@Security		BasicAuth
 //	@Router			/auth/allowance/requests [post]
 func (a *AuthController) RequestAllowance(ctx *gin.Context) {
 	var req *RequestAllowanceReq
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if caller := ctx.GetString("username"); req.Username != caller && !a.authConfig.HasFullAccess(caller) {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "an agent may only request an allowance for itself"})
 		return
 	}
 
@@ -220,17 +252,23 @@ func (a *AuthController) RequestAllowance(ctx *gin.Context) {
 // ConfirmAllowance godoc
 //
 //	@Summary		Confirm or Decline Token Allowance Request
-//	@Description	Permission: agent_requests
+//	@Description	Permission: agent_requests, and the caller must have full access ("*"): allowances are spending caps, so only the operator approves them. Other callers return 403.
 //	@Tags			auth
 //	@Produce		json
 //	@Param			confirmAllowanceReq	body		authapi.ConfirmAllowanceReq	true	"Confirm Token Allowance Request"
 //	@Success		200					{object}	authapi.AuthRes
+//	@Failure		403					{object}	authapi.ErrorRes
 //	@Security		BasicAuth
 //	@Router			/auth/allowance/confirm [post]
 func (a *AuthController) ConfirmAllowance(ctx *gin.Context) {
 	var req *ConfirmAllowanceReq
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if !a.authConfig.HasFullAccess(ctx.GetString("username")) {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "only a full-access user may confirm or decline spending allowances"})
 		return
 	}
 
@@ -274,17 +312,23 @@ func (a *AuthController) GetAllowanceRequests(ctx *gin.Context) {
 // RevokeAllowance godoc
 //
 //	@Summary		Revoke Token Allowance for Agent
-//	@Description	Permission: agent_requests
+//	@Description	Permission: agent_requests, and the caller must have full access ("*"): allowances are spending caps, so only the operator changes them. Other callers return 403.
 //	@Tags			auth
 //	@Produce		json
 //	@Param			revokeAllowanceReq	body		authapi.RevokeAllowanceReq	true	"Revoke Token Allowance Request"
 //	@Success		200					{object}	authapi.AuthRes
+//	@Failure		403					{object}	authapi.ErrorRes
 //	@Security		BasicAuth
 //	@Router			/auth/allowance/revoke [post]
 func (a *AuthController) RevokeAllowance(ctx *gin.Context) {
 	var req *RevokeAllowanceReq
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if !a.authConfig.HasFullAccess(ctx.GetString("username")) {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "only a full-access user may revoke spending allowances"})
 		return
 	}
 
