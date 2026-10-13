@@ -60,3 +60,7 @@ In the repository:
 - [ ] Open issues added to the project in Triage
 - [ ] After this workflow is on `dev`, the **PR target** check is required on `dev`
 - [ ] Later, the missing-issue reminder becomes a required check
+
+Project status moves need a token. The built-in Actions token cannot edit an org project.
+
+- [ ] Repository secret `MORPHEUS_WORK_TOKEN`: a fine-grained token with organization Projects read and write, and repository Issues and Pull requests read and write. Without it the workflow still comments and closes, and skips the status move.
