@@ -55,8 +55,8 @@ In the repository:
 - [x] Workflow comments on the linked issue and closes it only on `main`
 - [x] Labels created: `needs-triage`, `needs-info`, `needs-issue`, and the `area:` labels
 - [x] Discussions enabled
-- [ ] Public project **Morpheus work** exists, with Priority, Status, and the Inbox, Backlog, and In flight views
-- [ ] Repository variable `MORPHEUS_WORK_PROJECT` is the project number
+- [x] Public project **Morpheus Work** is https://github.com/orgs/MorpheusAIs/projects/3
+- [x] Repository variable `MORPHEUS_WORK_PROJECT` is `3`
 - [ ] Open issues added to the project in Triage
 - [ ] After this workflow is on `dev`, the **PR target** check is required on `dev`
 - [ ] Later, the missing-issue reminder becomes a required check
