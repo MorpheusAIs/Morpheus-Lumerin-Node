@@ -1,0 +1,43 @@
+name: Feature request
+description: A change or a design proposal for the node, the desktop app, the CLI, or the contracts
+labels:
+  - enhancement
+  - needs-triage
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      options:
+        - Feature
+        - Proposal
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - proxy-router
+        - ui-desktop
+        - cli
+        - docs
+        - contracts
+        - agents
+        - not sure
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Who has this problem, and what they cannot do today
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Outcome
+      description: What is true when this is done
+    validations:
+      required: true
