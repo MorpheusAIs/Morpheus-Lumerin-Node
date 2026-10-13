@@ -75,6 +75,14 @@ Prefer conventional prefixes so history stays scannable:
   go test ./internal/... -count=1
   ```
 
+## Issues
+
+File a bug, a feature request, or a docs correction with the issue forms. Questions go to [Discussions](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/discussions).
+
+An issue closes when the change is on `main` and production has deployed. The local rules and the setup checklist are in [`.ai-docs/issue-tracker.md`](.ai-docs/issue-tracker.md). Maintainers follow the practice in `MorpheusMaintainerContext` (`.ai-docs/how-we-work.md`).
+
+A feature or fix pull request targets `dev`. The body contains `Refs #123`, or the no-issue line for a chore, revert, or CI-only change. A promote pull request targets `test` or `main` and its title starts with `promote:`.
+
 ## Review expectations
 
 - Green Docs / lint checks on the PR when applicable.

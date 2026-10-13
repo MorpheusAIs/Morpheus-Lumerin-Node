@@ -1,0 +1,76 @@
+name: Bug report
+description: Something in the node, the desktop app, the CLI, or the docs behavior is broken
+labels:
+  - bug
+  - needs-triage
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - proxy-router
+        - ui-desktop
+        - cli
+        - docs
+        - contracts
+        - agents
+        - not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: Role
+      options:
+        - Consumer
+        - Provider
+        - Both
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: proxy-router v7.14.0, MorpheusUI version, or a git SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: network
+    attributes:
+      label: Network
+      options:
+        - Base mainnet
+        - Base Sepolia
+        - Local only
+    validations:
+      required: true
+  - type: dropdown
+    id: model
+    attributes:
+      label: Model
+      options:
+        - On-chain Morpheus model
+        - Bundled tinyllama demo
+        - Not applicable
+    validations:
+      required: true
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Remove secrets, keys, and mnemonics before pasting
+    validations:
+      required: false
