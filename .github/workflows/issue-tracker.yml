@@ -1,0 +1,52 @@
+name: Issue tracker
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, closed]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  projects: write
+
+jobs:
+  pr-target:
+    name: PR target
+    runs-on: ubuntu-latest
+    steps:
+      - name: Feature PRs target dev
+        env:
+          BASE: ${{ github.base_ref }}
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -eu
+          title_lc=$(printf '%s' "$TITLE" | tr '[:upper:]' '[:lower:]')
+          if [ "$BASE" = "dev" ]; then
+            exit 0
+          fi
+          case "$BASE" in
+            test|main)
+              case "$title_lc" in
+                promote:*) exit 0 ;;
+              esac
+              ;;
+          esac
+          echo "Feature and fix pull requests target dev."
+          echo "A promote pull request targets test or main and its title starts with 'promote:'."
+          exit 1
+
+  track:
+    name: Track linked issue
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/github-script@v7
+        env:
+          PROJECT_NUMBER: ${{ vars.MORPHEUS_WORK_PROJECT }}
+        with:
+          script: |
+            const path = require('path')
+            const { main } = require(path.join(process.env.GITHUB_WORKSPACE, '.github/scripts/issue-tracker.js'))
+            await main({ github, context, core })
