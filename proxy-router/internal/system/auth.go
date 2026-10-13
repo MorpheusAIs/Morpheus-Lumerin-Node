@@ -234,7 +234,7 @@ func (cfg *HTTPAuthConfig) EnsureConfigFilesExist() error {
 			matches = true
 		}
 		if !matches {
-			cookieLine := fmt.Sprintf("%s:%s\n", AdminUsername, pass)
+			cookieLine := AdminUsername + ":" + pass
 			if err := os.WriteFile(cfg.CookieFilePath, []byte(cookieLine), 0600); err != nil {
 				return fmt.Errorf("failed writing cookie file: %v", err)
 			}
