@@ -27,7 +27,7 @@ module.exports.main = async function main({ github, context, core }) {
     for (const commit of commits) {
       for (const n of refsIn(commit.commit.message || '')) refs.add(n)
     }
-    const status = base === 'main' ? 'Shipped' : base === 'test' ? 'On test' : base === 'dev' ? 'On dev' : null
+    const status = base === 'main' ? 'Shipped' : base === 'test' ? 'On Test' : base === 'dev' ? 'On Dev' : null
     for (const n of refs) {
       if (base === 'main') {
         await note(github, core, owner, repo, n, `Shipped on \`main\` in #${pr.number}.`)
