@@ -227,6 +227,56 @@ func TestProbeJSONSchemaAndImage(t *testing.T) {
 	})
 }
 
+// An account or rate-limit status judges the caller, not the feature: every
+// probe reads it as unknown before the body (here the one that probe would
+// otherwise turn into a rejection or a refusal), and Fold publishes nothing
+// from it.
+func TestAccountStatusIsUnknown(t *testing.T) {
+	const namesParam = `{"error":{"message":"Unrecognized request argument supplied: response_format"}}`
+	probes := []struct {
+		name string
+		body string
+		run  func(*Verifier) Verdict
+	}{
+		{ProbeReasoningDisable, kwargRejected, func(v *Verifier) Verdict { return v.VerifyReasoningDisable(context.Background(), qwen3Spec()) }},
+		{ProbeTools, toolChoiceError, func(v *Verifier) Verdict { return v.ProbeTools(context.Background()) }},
+		{ProbeJSONSchema, namesParam, func(v *Verifier) Verdict { return v.ProbeJSONSchema(context.Background()) }},
+		{ProbeImage, namesParam, func(v *Verifier) Verdict { return v.ProbeImage(context.Background()) }},
+		{ProbeRender, kwargRejected, func(v *Verifier) Verdict { return v.RenderThinkingToggle(context.Background(), qwen3Spec()) }},
+	}
+	for _, status := range []int{http.StatusUnauthorized, http.StatusPaymentRequired, http.StatusForbidden, http.StatusTooManyRequests} {
+		for _, p := range probes {
+			t.Run(p.name+" "+http.StatusText(status), func(t *testing.T) {
+				b := newScriptedBackend(t, always(status, p.body))
+				v := p.run(b.verifier("vllm"))
+				require.Equal(t, OutcomeUnknown, v.Outcome)
+				require.Equal(t, status, v.Status)
+				require.Equal(t, "account or rate limit", v.Reason)
+				require.Empty(t, v.RejectedParams)
+				require.Equal(t, 1, v.Requests, "the render check stops at the first answer")
+				require.True(t, v.AccountLimited())
+
+				var rt apispec.Runtime
+				Fold(&rt, v)
+				require.Equal(t, apispec.Runtime{}, rt)
+			})
+		}
+	}
+
+	t.Run("other statuses keep their verdicts", func(t *testing.T) {
+		for status, want := range map[int]Outcome{
+			http.StatusBadRequest:         OutcomeRejected,
+			http.StatusNotFound:           OutcomeRejected,
+			http.StatusServiceUnavailable: OutcomeUnknown,
+		} {
+			b := newScriptedBackend(t, always(status, namesParam))
+			v := b.verifier("vllm").ProbeJSONSchema(context.Background())
+			require.Equal(t, want, v.Outcome, status)
+			require.False(t, v.AccountLimited(), status)
+		}
+	})
+}
+
 // renderScript renders a template whose default is thinking on: the plain
 // prompt and the enable_thinking:true prompt are the same, the
 // enable_thinking:false prompt differs when differ is set.

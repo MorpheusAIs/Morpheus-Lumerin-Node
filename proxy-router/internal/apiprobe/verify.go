@@ -20,9 +20,11 @@ import (
 // The verifier and the capability probes of design contract §5: each method
 // sends one probe request (the render check two) through the model's own
 // adapter and reads a verdict from the status, the error body and the
-// response metadata. Fold turns the verdicts into apispec.Runtime, which
-// MergeRuntime publishes; the caller owns pacing, the once-per-TTL state and
-// the hosted-vendor gate.
+// response metadata. An account or rate-limit status (401, 402, 403, 429)
+// is unknown before the body is read: it judges the caller, not the
+// feature. Fold turns the verdicts into apispec.Runtime, which MergeRuntime
+// publishes; the caller owns pacing, the once-per-TTL state and the
+// hosted-vendor gate.
 
 // Probe names: the verify:<what>@<at> evidence sources (contract §1) except
 // ProbeReasoningDisable and ProbeRender, whose verdicts land on a binding
@@ -55,8 +57,9 @@ const (
 type Outcome int
 
 const (
-	// OutcomeUnknown: no usable answer (transport error, 5xx, a 4xx naming
-	// nothing this package recognises, an adapter without response metadata).
+	// OutcomeUnknown: no usable answer (transport error, 5xx, an account or
+	// rate-limit status, a 4xx naming nothing this package recognises, an
+	// adapter without response metadata).
 	OutcomeUnknown Outcome = iota
 	// OutcomeAccepted: the backend served the request (2xx) and the response
 	// supports the claim.
@@ -66,7 +69,8 @@ const (
 	// unchanged).
 	OutcomeRefuted
 	// OutcomeRefused: a documented refusal of the feature (vLLM's tool_choice
-	// "auto" error) or a 4xx of a feature request that names no parameter.
+	// "auto" error) or another 4xx of a feature request that names no
+	// parameter.
 	OutcomeRefused
 	// OutcomeRejected: a 4xx naming request parameters (RejectedParams).
 	OutcomeRejected
@@ -102,6 +106,11 @@ type Verdict struct {
 	Err      error
 	Meta     *aiengine.ResponseMeta
 }
+
+// AccountLimited reports a verdict drawn from an account or rate-limit
+// status (401, 402, 403, 429): the answer is about the caller, so the probes
+// after it would meet the same one and a runner stops there.
+func (v Verdict) AccountLimited() bool { return accountStatus(v.Status) }
 
 // Verifier sends the probes for one model. Adapter is the model's own
 // engine (the OpenAI adapter fills Meta; another adapter yields acceptance
@@ -242,6 +251,22 @@ func (v *Verifier) send(ctx context.Context, req *gcs.OpenAICompletionRequestExt
 func is2xx(status int) bool { return status >= 200 && status < 300 }
 func is4xx(status int) bool { return status >= 400 && status < 500 }
 
+// accountStatus is a 4xx about the caller rather than the request: a key the
+// backend refuses (401, 403), an account out of credit (402), a rate limit
+// or a spent quota (429; OpenAI reports an exhausted quota as 429
+// insufficient_quota). The probe's feature was never judged, so the verdict
+// is unknown whatever the body names.
+func accountStatus(status int) bool {
+	switch status {
+	case http.StatusUnauthorized, http.StatusPaymentRequired, http.StatusForbidden, http.StatusTooManyRequests:
+		return true
+	}
+	return false
+}
+
+// accountReason is the reason of a verdict drawn from an account status.
+const accountReason = "account or rate limit"
+
 // httpReason labels a status this package draws no verdict from (a 3xx the
 // redirect policy stopped, a 5xx) so the trace names what the backend sent.
 func httpReason(status int) string { return "HTTP " + strconv.Itoa(status) }
@@ -253,7 +278,7 @@ func (v *Verifier) unknown(probe, reason string, err error) Verdict {
 // VerifyReasoningDisable resends the probe with the reasoning.disable
 // binding applied (contract §5 a): 2xx without reasoning content verifies
 // the binding, 2xx with reasoning content refutes it, a 4xx naming the
-// parameter rejects it.
+// parameter (not an account or rate-limit status) rejects it.
 func (v *Verifier) VerifyReasoningDisable(ctx context.Context, spec *system.ModelApiSpec) Verdict {
 	b := ReasoningDisableBinding(spec)
 	if b == nil {
@@ -269,6 +294,8 @@ func (v *Verifier) VerifyReasoningDisable(ctx context.Context, spec *system.Mode
 	status, meta, err := v.send(ctx, req)
 	out := Verdict{Probe: ProbeReasoningDisable, Status: status, Requests: 1, At: v.now(), Meta: meta, Err: err}
 	switch {
+	case accountStatus(status):
+		out.Reason = accountReason
 	case err != nil:
 		out.Reason = "no response"
 	case meta.StatusCode == 0:
@@ -306,8 +333,9 @@ func (v *Verifier) ProbeTools(ctx context.Context) Verdict {
 }
 
 // ProbeJSONSchema sends the probe with response_format json_schema: 2xx
-// means the backend accepts the format. A 4xx is a refusal that publishes
-// nothing: structured is a list, and a probe proves only what it saw.
+// means the backend accepts the format. A 4xx other than an account or
+// rate-limit status is a refusal that publishes nothing: structured is a
+// list, and a probe proves only what it saw.
 func (v *Verifier) ProbeJSONSchema(ctx context.Context) Verdict {
 	return v.acceptance(ctx, ProbeJSONSchema, WithJSONSchema(NewProbeRequest(v.prompt())), refusal)
 }
@@ -333,6 +361,8 @@ func (v *Verifier) acceptance(ctx context.Context, probe string, req *gcs.OpenAI
 	status, meta, err := v.send(ctx, req)
 	out := Verdict{Probe: probe, Status: status, Requests: 1, At: v.now(), Meta: meta, Err: err}
 	switch {
+	case accountStatus(status):
+		out.Reason = accountReason
 	case err != nil:
 		out.Reason = "no response"
 	case is2xx(status):
@@ -403,6 +433,10 @@ func (v *Verifier) RenderThinkingToggle(ctx context.Context, spec *system.ModelA
 		out.Requests++
 		out.Status = status
 		switch {
+		case accountStatus(status):
+			out.Reason = accountReason
+			out.Err = err
+			return out
 		case err != nil:
 			out.Reason = "no response"
 			out.Err = err

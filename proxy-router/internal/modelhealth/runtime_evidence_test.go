@@ -992,6 +992,303 @@ func TestVerifyCancelledRunRecordsNothing(t *testing.T) {
 	require.True(t, *llm.Api.Bindings[system.IntentReasoningDisable].Verified)
 }
 
+// An account or rate-limit answer (an account out of credit mid-run, a burst
+// tripping a rate limit) stops the run at that probe: what the run
+// established before it is published, nothing is read from the answer
+// itself, and the model stays due, so the next sweep asks the rest within
+// the TTL (not the completion the stopped run already answered).
+func TestVerifyAccountLimitStopsRunKeepingItsFacts(t *testing.T) {
+	for _, status := range []int{http.StatusUnauthorized, http.StatusPaymentRequired, http.StatusForbidden, http.StatusTooManyRequests} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			h := newVerifyHarness(t, detectedQwen3Both(), verifyFlags{verify: true, caps: true})
+			render := renderScript(true)
+			h.backend.setScript(func(r probeRequest) (int, string, bool) {
+				if r.has("tool_choice") {
+					// Under a 400 this body would publish tools: false.
+					return status, toolChoiceRefusal, true
+				}
+				return render(r)
+			})
+			llm := h.sweep(t)
+			require.Equal(t, system.ModelHealthStatusHealthy, llm.Status)
+			require.Equal(t, []string{"health", "reasoning.disable", "tools"}, kinds(h.backend.recorded()), "nothing is sent after the account answer")
+			require.Len(t, h.sleeps, 2)
+			b := llm.Api.Bindings[system.IntentReasoningDisable]
+			require.NotNil(t, b.Verified, "the verdict before the stop is published")
+			require.True(t, *b.Verified)
+			require.Nil(t, llm.Api.Capabilities, "nothing is published from the account answer")
+
+			// Well within the TTL, the next sweep asks what is still unknown.
+			h.backend.setScript(render)
+			h.clock = h.clock.Add(time.Minute)
+			llm = h.sweep(t)
+			require.Equal(t, []string{"health", "reasoning.disable", "tools", "health", "tools", "json_schema", "image"}, kinds(h.backend.recorded()))
+			b = llm.Api.Bindings[system.IntentReasoningDisable]
+			require.True(t, *b.Verified)
+			require.Equal(t, verifyClock, b.VerifiedAt, "kept from the stopped run, not asked again")
+			require.True(t, *llm.Api.Capabilities.Tools)
+			require.Equal(t, []string{"json_schema"}, llm.Api.Capabilities.Structured)
+
+			// That run completed: the next sweep sends the health probe alone.
+			h.clock = h.clock.Add(time.Minute)
+			h.sweep(t)
+			require.Len(t, h.backend.recorded(), 8)
+		})
+	}
+}
+
+// A stopped run is resumed once: the resumed run keeps every answer it did
+// not give itself and counts as done even when it is stopped again, so a
+// backend that keeps refusing is asked once per TTL, which then runs from
+// the resumed run.
+func TestVerifyStoppedRunIsResumedOnce(t *testing.T) {
+	h := newVerifyHarness(t, detectedQwen3(), verifyFlags{verify: true, caps: true})
+	h.backend.setScript(func(r probeRequest) (int, string, bool) {
+		if r.has("response_format") {
+			return http.StatusTooManyRequests, `{"error":{"message":"rate limit exceeded"}}`, true
+		}
+		return 0, "", false
+	})
+	llm := h.sweep(t)
+	require.Equal(t, []string{"health", "reasoning.disable", "tools", "json_schema"}, kinds(h.backend.recorded()))
+	require.True(t, *llm.Api.Bindings[system.IntentReasoningDisable].Verified)
+	require.True(t, *llm.Api.Capabilities.Tools)
+
+	h.clock = h.clock.Add(time.Minute)
+	llm = h.sweep(t)
+	require.Equal(t, []string{"health", "reasoning.disable", "tools", "json_schema", "health", "json_schema"}, kinds(h.backend.recorded()),
+		"only the unknown is asked, and it is refused again")
+	b := llm.Api.Bindings[system.IntentReasoningDisable]
+	require.True(t, *b.Verified, "kept from the stopped run")
+	require.Equal(t, verifyClock, b.VerifiedAt)
+	require.Equal(t, "verify:tools@1700000000", llm.Api.Evidence["capabilities.tools"])
+	require.Nil(t, llm.Api.Capabilities.Structured)
+
+	// The resumed run counted as done: within the TTL from it (although
+	// past one TTL from the stopped run) only the health probe goes out.
+	h.clock = time.Unix(verifyClock, 0).Add(2 * time.Minute)
+	h.sweep(t)
+	h.clock = time.Unix(verifyClock, 0).Add(60*time.Minute + 30*time.Second)
+	llm = h.sweep(t)
+	require.Len(t, h.backend.recorded(), 8)
+	require.True(t, *llm.Api.Bindings[system.IntentReasoningDisable].Verified)
+
+	h.backend.setScript(func(probeRequest) (int, string, bool) { return 0, "", false })
+	h.clock = time.Unix(verifyClock, 0).Add(62 * time.Minute)
+	llm = h.sweep(t)
+	require.Equal(t, []string{"health", "reasoning.disable", "tools", "json_schema", "image"}, kinds(h.backend.recorded())[8:])
+	require.Equal(t, []string{"json_schema"}, llm.Api.Capabilities.Structured)
+}
+
+// The resumed run sends neither the completion the stopped run answered
+// nor the render check, so a render cannot override the completion's
+// verdict, and the reasoning that verdict saw stays published with its own
+// time.
+func TestVerifyResumedRunKeepsTheCompletionVerdict(t *testing.T) {
+	h := newVerifyHarness(t, detectedQwen3Both(), verifyFlags{verify: true, caps: true})
+	render := renderScript(true)
+	h.backend.setScript(func(r probeRequest) (int, string, bool) {
+		switch {
+		case r.path == chatPath && r.has("chat_template_kwargs"):
+			return http.StatusOK, reasoningCompletion, true
+		case r.has("tool_choice"):
+			return http.StatusTooManyRequests, `{"error":{"message":"rate limit exceeded"}}`, true
+		}
+		return render(r)
+	})
+	llm := h.sweep(t)
+	require.Equal(t, []string{"health", "reasoning.disable", "tools"}, kinds(h.backend.recorded()))
+	require.False(t, *llm.Api.Bindings[system.IntentReasoningDisable].Verified)
+	require.Equal(t, system.ThinkingModeAlwaysOn, llm.Api.Thinking.Mode)
+
+	h.backend.setScript(render)
+	h.clock = h.clock.Add(5 * time.Minute)
+	llm = h.sweep(t)
+	require.Equal(t, []string{"health", "reasoning.disable", "tools", "health", "tools", "json_schema", "image"}, kinds(h.backend.recorded()),
+		"no completion and no render: the stopped run decided the binding")
+	b := llm.Api.Bindings[system.IntentReasoningDisable]
+	require.False(t, *b.Verified)
+	require.Equal(t, "verify:reasoning_content_still_present@1700000000", llm.Api.Evidence[system.EvidenceKeyBinding(system.IntentReasoningDisable)])
+	require.Equal(t, system.ThinkingModeAlwaysOn, llm.Api.Thinking.Mode, "the reasoning seen with the disable applied is carried")
+	require.Equal(t, "verify:reasoning_seen_with_disable@1700000000", llm.Api.Evidence["capabilities.reasoning"])
+	require.Nil(t, llm.Api.Bindings[system.IntentReasoningEnable].Verified)
+	require.True(t, *llm.Api.Capabilities.Tools)
+}
+
+// A resumed run's own refutation or rejection is stamped with the resumed
+// run's time, not the stopped run's.
+func TestVerifyResumedRunStampsItsOwnBindingFacts(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		status   int
+		body     string
+		evidence map[string]string
+	}{
+		{"refutation", http.StatusOK, reasoningCompletion, map[string]string{
+			system.EvidenceKeyBinding(system.IntentReasoningDisable): "reasoning_content_still_present",
+			"capabilities.reasoning":                                 "reasoning_seen_with_disable",
+		}},
+		{"rejection", http.StatusBadRequest, kwargRejectedBody, map[string]string{
+			system.EvidenceKeyBinding(system.IntentReasoningDisable): "rejected:chat_template_kwargs",
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newVerifyHarness(t, detectedQwen3(), verifyFlags{verify: true})
+			answer := func(status int, body string) func(r probeRequest) (int, string, bool) {
+				return func(r probeRequest) (int, string, bool) {
+					if r.has("chat_template_kwargs") {
+						return status, body, true
+					}
+					return 0, "", false
+				}
+			}
+			h.backend.setScript(answer(http.StatusTooManyRequests, `{"error":{"message":"rate limit exceeded"}}`))
+			h.sweep(t)
+			require.Equal(t, []string{"health", "reasoning.disable"}, kinds(h.backend.recorded()))
+
+			h.backend.setScript(answer(tc.status, tc.body))
+			h.clock = h.clock.Add(5 * time.Minute)
+			llm := h.sweep(t)
+			require.Equal(t, []string{"health", "reasoning.disable", "health", "reasoning.disable", "tools"}, kinds(h.backend.recorded()))
+			for key, what := range tc.evidence {
+				require.Equal(t, fmt.Sprintf("verify:%s@%d", what, h.clock.Unix()), llm.Api.Evidence[key], key)
+			}
+		})
+	}
+}
+
+// With the defaults (TTL = sweep interval) a stopped run is resumed about
+// one TTL after it was recorded; the resumed run's facts are timed from the
+// resumed run, so the sweep that established them publishes them and the
+// next one does not ask again.
+func TestVerifyResumedRunPublishesWithSweepsOneTTLApart(t *testing.T) {
+	h := newVerifyHarness(t, detectedQwen3(), verifyFlags{verify: true, caps: true})
+	h.checker.sleepFn = func(ctx context.Context, d time.Duration) bool {
+		h.sleeps = append(h.sleeps, d)
+		h.clock = h.clock.Add(d)
+		return true
+	}
+	h.backend.setScript(func(r probeRequest) (int, string, bool) {
+		if r.has("chat_template_kwargs") {
+			return http.StatusTooManyRequests, `{"error":{"message":"rate limit exceeded"}}`, true
+		}
+		return 0, "", false
+	})
+	start := h.clock
+	llm := h.sweep(t)
+	require.Equal(t, []string{"health", "reasoning.disable"}, kinds(h.backend.recorded()))
+	require.Nil(t, llm.Api.Bindings[system.IntentReasoningDisable].Verified)
+
+	h.backend.setScript(func(probeRequest) (int, string, bool) { return 0, "", false })
+	h.clock = start.Add(time.Hour)
+	llm = h.sweep(t)
+	require.Equal(t, []string{"health", "reasoning.disable", "health", "reasoning.disable", "tools", "json_schema", "image"}, kinds(h.backend.recorded()))
+	require.True(t, *llm.Api.Bindings[system.IntentReasoningDisable].Verified, "published by the sweep that established it")
+	require.True(t, *llm.Api.Capabilities.Tools)
+	require.Equal(t, []string{"json_schema"}, llm.Api.Capabilities.Structured)
+
+	h.clock = start.Add(2 * time.Hour)
+	llm = h.sweep(t)
+	require.Len(t, h.backend.recorded(), 8, "within the TTL of the resumed run")
+	require.True(t, *llm.Api.Bindings[system.IntentReasoningDisable].Verified)
+	require.True(t, *llm.Api.Capabilities.Tools)
+}
+
+// A binding a stopped run saw rejected stays dropped when the run resumes:
+// the resumed run no longer sends it, so the rejection is carried over.
+func TestVerifyResumedRunKeepsRejection(t *testing.T) {
+	h := newVerifyHarness(t, detectedQwen3(), verifyFlags{verify: true})
+	h.backend.setScript(func(r probeRequest) (int, string, bool) {
+		switch {
+		case r.has("chat_template_kwargs"):
+			return http.StatusBadRequest, kwargRejectedBody, true
+		case r.has("tool_choice"):
+			return http.StatusTooManyRequests, `{"error":{"message":"rate limit exceeded"}}`, true
+		}
+		return 0, "", false
+	})
+	llm := h.sweep(t)
+	require.Equal(t, []string{"health", "reasoning.disable", "tools"}, kinds(h.backend.recorded()))
+	require.Nil(t, llm.Api.Bindings[system.IntentReasoningDisable])
+	require.Equal(t, "verify:rejected:chat_template_kwargs@1700000000", llm.Api.Evidence[system.EvidenceKeyBinding(system.IntentReasoningDisable)])
+
+	h.backend.setScript(func(r probeRequest) (int, string, bool) {
+		if r.has("chat_template_kwargs") {
+			return http.StatusBadRequest, kwargRejectedBody, true
+		}
+		return 0, "", false
+	})
+	h.clock = h.clock.Add(time.Minute)
+	llm = h.sweep(t)
+	require.Equal(t, []string{"health", "reasoning.disable", "tools", "health", "tools"}, kinds(h.backend.recorded()), "the rejected binding is not sent again")
+	require.Nil(t, llm.Api.Bindings[system.IntentReasoningDisable])
+	require.Equal(t, "verify:rejected:chat_template_kwargs@1700000000", llm.Api.Evidence[system.EvidenceKeyBinding(system.IntentReasoningDisable)])
+	require.True(t, *llm.Api.Capabilities.Tools)
+
+	h.clock = h.clock.Add(time.Minute)
+	llm = h.sweep(t)
+	require.Len(t, h.backend.recorded(), 6, "done")
+	require.Nil(t, llm.Api.Bindings[system.IntentReasoningDisable])
+}
+
+// After a spec change a stopped run publishes no verdict of the old
+// binding on the new one, whether the old spec's run completed or was
+// itself stopped; tool support, a backend fact, carries over.
+func TestVerifyStoppedRunAfterSpecChangeDropsOldVerdicts(t *testing.T) {
+	answer := func(marker string, status int) func(r probeRequest) (int, string, bool) {
+		return func(r probeRequest) (int, string, bool) {
+			if marker != "" && r.has(marker) {
+				return status, `{"error":{"message":"insufficient balance"}}`, true
+			}
+			return 0, "", false
+		}
+	}
+	for _, firstStopped := range []bool{false, true} {
+		name := "after a completed run"
+		if firstStopped {
+			name = "after a stopped run"
+		}
+		t.Run(name, func(t *testing.T) {
+			h := newVerifyHarness(t, detectedQwen3(), verifyFlags{verify: true})
+			if firstStopped {
+				h.backend.setScript(answer("tool_choice", http.StatusTooManyRequests))
+			}
+			llm := h.sweep(t)
+			require.Equal(t, []string{"health", "reasoning.disable", "tools"}, kinds(h.backend.recorded()))
+			require.True(t, *llm.Api.Bindings[system.IntentReasoningDisable].Verified)
+
+			det := h.deps.apiDetect.(*fakeDetector)
+			det.spec = detectedQwen3()
+			det.spec.Bindings[system.IntentReasoningDisable].Param = "chat_template_kwargs.thinking"
+			h.backend.setScript(answer("chat_template_kwargs", http.StatusPaymentRequired))
+			h.clock = h.clock.Add(time.Minute)
+			llm = h.sweep(t)
+			require.Equal(t, []string{"health", "reasoning.disable", "tools", "health", "reasoning.disable"}, kinds(h.backend.recorded()))
+			b := llm.Api.Bindings[system.IntentReasoningDisable]
+			require.Equal(t, "chat_template_kwargs.thinking", b.Param)
+			require.Nil(t, b.Verified, "the old binding's verdict says nothing about this one")
+			if firstStopped {
+				require.Nil(t, llm.Api.Capabilities)
+			} else {
+				require.True(t, *llm.Api.Capabilities.Tools)
+				require.Equal(t, "verify:tools@1700000000", llm.Api.Evidence["capabilities.tools"])
+			}
+
+			h.backend.setScript(answer("", 0))
+			h.clock = h.clock.Add(time.Minute)
+			llm = h.sweep(t)
+			want := []string{"health", "reasoning.disable", "tools", "health", "reasoning.disable", "health", "reasoning.disable"}
+			if firstStopped {
+				want = append(want, "tools")
+			}
+			require.Equal(t, want, kinds(h.backend.recorded()))
+			require.True(t, *llm.Api.Bindings[system.IntentReasoningDisable].Verified)
+			require.Equal(t, h.clock.Unix(), llm.Api.Bindings[system.IntentReasoningDisable].VerifiedAt)
+			require.True(t, *llm.Api.Capabilities.Tools)
+		})
+	}
+}
+
 func TestVerifyKeyIgnoresRuntimeVerdicts(t *testing.T) {
 	a := detectedQwen3()
 	b := detectedQwen3()

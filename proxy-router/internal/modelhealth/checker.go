@@ -188,12 +188,13 @@ type Deps struct {
 	ApiDetect ApiDetector
 	// ApiDetectTTL is MODEL_API_DETECT_TTL, the TTL the detector caches by;
 	// runtime evidence harvested from the health probe is re-merged for the
-	// same span after a probe stops producing it, and the verifier runs once
-	// per span. <= 0 means DefaultRuntimeTTL.
+	// same span after a probe stops producing it, and the verifier completes
+	// one run per span. <= 0 means DefaultRuntimeTTL.
 	ApiDetectTTL time.Duration
 	// VerifyBindings is MODEL_API_VERIFY_BINDINGS: after a healthy LLM
-	// probe, once per TTL, resend the probe with the reasoning.disable
-	// binding applied and with a dummy tool (design contract §5, verifier).
+	// probe, one completed run per TTL, resend the probe with the
+	// reasoning.disable binding applied and with a dummy tool (design
+	// contract §5, verifier).
 	VerifyBindings bool
 	// ProbeCapabilities is MODEL_API_PROBE_CAPABILITIES: the json_schema,
 	// image and vLLM render probes on the same schedule.
@@ -645,17 +646,21 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 }
 
 // verify runs the verifier and the capability probes (design contract §5)
-// for a model whose probe just passed, when the flags allow: once per TTL
-// per (model, spec), each request paced by probeDelay, and never against a
-// hosted vendor, a gateway, an upstream reached through one (Via) or a
-// backend detection could not name (a hosted vendor behind an unrecognised
-// host is the likely case) unless MODEL_API_PROBE_HOSTED; the unknown stack
-// is among the tools-probe targets of contract §5 b, so the switch reaches
-// it. The spec the probes are chosen from carries the runtime evidence
-// already established, so a binding an earlier sweep saw rejected is not
-// sent again; the once-per-TTL key hashes the detection result itself,
-// which is stable across sweeps. A run cut short by the context records
-// nothing, so the next sweep retries.
+// for a model whose probe just passed, when the flags allow: one completed
+// run per TTL per (model, spec), each request paced by probeDelay, and
+// never against a hosted vendor, a gateway, an upstream reached through one
+// (Via) or a backend detection could not name (a hosted vendor behind an
+// unrecognised host is the likely case) unless MODEL_API_PROBE_HOSTED; the
+// unknown stack is among the tools-probe targets of contract §5 b, so the
+// switch reaches it. The spec the probes are chosen from carries the
+// runtime evidence already established, so a binding an earlier sweep saw
+// rejected is not sent again; the once-per-TTL key hashes the detection
+// result itself, which is stable across sweeps. A run cut short by the
+// context records nothing, so the next sweep retries. A run that meets an
+// account or rate-limit answer (apiprobe Verdict.AccountLimited: 401, 402,
+// 403, 429) stops there, since the probes left would meet the same answer,
+// and records what it established without counting as done: the next sweep
+// resumes it once and asks the rest (runtimeStore.recordVerify).
 func (c *Checker) verify(ctx context.Context, modelID common.Hash, cfg config.ModelConfig, api *system.ModelApiSpec, adapter aiengine.AIEngineStream) {
 	if !c.deps.VerifyBindings && !c.deps.ProbeCapabilities {
 		return
@@ -681,6 +686,17 @@ func (c *Checker) verify(ctx context.Context, modelID common.Hash, cfg config.Mo
 		Now:    c.runtime.now,
 	}
 	var verdicts []apiprobe.Verdict
+	stopped := false
+	// However the probes end, the run is recorded unless the context cut it
+	// short; a stopped run is recorded as not done.
+	defer func() {
+		if ctx.Err() != nil {
+			return
+		}
+		var facts apispec.Runtime
+		apiprobe.Fold(&facts, verdicts...)
+		c.runtime.recordVerify(id, key, facts, !stopped)
+	}()
 	run := func(probe func(context.Context) apiprobe.Verdict) bool {
 		probeCtx, cancel := context.WithTimeout(ctx, c.timeout)
 		verdict := probe(probeCtx)
@@ -688,8 +704,13 @@ func (c *Checker) verify(ctx context.Context, modelID common.Hash, cfg config.Mo
 		if ctx.Err() != nil {
 			return false
 		}
-		verdicts = append(verdicts, verdict)
 		line := fmt.Sprintf("model %s: verify %s: %s (HTTP %d): %s", lib.Short(modelID), verdict.Probe, verdict.Outcome, verdict.Status, verdict.Reason)
+		if verdict.AccountLimited() {
+			stopped = true
+			c.log.Info(line + "; run stopped, the rest is asked next sweep")
+			return false
+		}
+		verdicts = append(verdicts, verdict)
 		switch verdict.Outcome {
 		case apiprobe.OutcomeRefuted, apiprobe.OutcomeRejected, apiprobe.OutcomeRefused:
 			c.log.Info(line)
@@ -703,10 +724,11 @@ func (c *Checker) verify(ctx context.Context, modelID common.Hash, cfg config.Mo
 	// reasoning.disable; once it answered (verified, refuted or rejected) the
 	// render check would only add a weaker verdict on the same intent, and a
 	// render that differs must not publish verified: true beside the
-	// always_on a refutation established.
-	disableDecided := false
+	// always_on a refutation established. A run resuming a stopped one
+	// that holds the completion's verdict sends neither again.
+	disableDecided := c.runtime.pendingDisableVerdict(id, key)
 	if c.deps.VerifyBindings {
-		if apiprobe.ReasoningDisableBinding(spec) != nil {
+		if apiprobe.ReasoningDisableBinding(spec) != nil && !disableDecided {
 			if !run(func(ctx context.Context) apiprobe.Verdict { return v.VerifyReasoningDisable(ctx, spec) }) {
 				return
 			}
@@ -738,10 +760,6 @@ func (c *Checker) verify(ctx context.Context, modelID common.Hash, cfg config.Mo
 			}
 		}
 	}
-
-	var facts apispec.Runtime
-	apiprobe.Fold(&facts, verdicts...)
-	c.runtime.recordVerify(id, key, facts)
 }
 
 // verifyKey names the spec a verifier run answered for: the stack, the

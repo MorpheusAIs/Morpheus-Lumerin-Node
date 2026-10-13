@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,8 @@ import (
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apispec"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 	"github.com/stretchr/testify/require"
 )
@@ -494,6 +497,80 @@ func TestVerifyNothingProvenPrintsNothingDetected(t *testing.T) {
 	require.Contains(t, stdout, "      - POST /v1/chat/completions -> HTTP 502\n")
 	require.Contains(t, stdout, "      - tools: unknown (HTTP 502): HTTP 502\n")
 	require.Contains(t, stdout, "    merge:\n      (nothing changed)\n")
+}
+
+// An account out of credit answers 402 to the first probe: the run stops
+// there, as the checker's does, and the report says how many were not sent.
+func TestVerifyStopsAtAccountLimit(t *testing.T) {
+	pinClock(t)
+	srv := fakeBackend(t, fakeOpts{bare: true, chatStatus: http.StatusPaymentRequired})
+	cfg := writeConfig(t, map[string]any{"modelId": "0x01", "modelName": "mystery-model", "apiType": "openai", "apiUrl": srv.URL + "/v1/chat/completions", "apiKey": testKey})
+
+	code, stdout, stderr := runCLI(t, "-config", cfg, "-verify", "-model", "mystery-model")
+	require.Equal(t, 0, code, stderr)
+	require.Contains(t, stdout, "    requests:\n      - POST /v1/chat/completions -> HTTP 402\n    verdicts:\n", "one request, no more")
+	require.Contains(t, stdout, "      - tools: unknown (HTTP 402): account or rate limit\n")
+	require.Contains(t, stdout, "      (2 more probes not sent: the backend answered with an account or rate-limit status)\n")
+
+	code, stdout, stderr = runCLI(t, "-config", cfg, "-verify", "-model", "mystery-model", "-json")
+	require.Equal(t, 0, code, stderr)
+	var reports []struct {
+		VerifyVerdicts []probeVerdict `json:"verifyVerdicts"`
+		VerifyNotSent  int            `json:"verifyNotSent"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(stdout), &reports))
+	require.Len(t, reports, 1)
+	require.Len(t, reports[0].VerifyVerdicts, 1)
+	require.Equal(t, 2, reports[0].VerifyNotSent)
+}
+
+// NotSent counts the probes an account answer left unsent, the vLLM render
+// check only when it would have run: while the completion left
+// reasoning.disable undecided.
+func TestVerifyNotSentCountsTheRenderCheck(t *testing.T) {
+	const okAnswer = `{"id":"1","object":"chat.completion","model":"qwen3-8b","choices":[{"index":0,"message":{"role":"assistant","content":"5"},"finish_reason":"stop"}]}`
+	for _, tc := range []struct {
+		name    string
+		disable int // the reasoning.disable completion's status; the tool probe answers 402
+		verdict string
+		notSent int
+	}{
+		{"the first probe answers 402", http.StatusPaymentRequired, "unknown", 4},
+		{"the completion decided the binding", http.StatusOK, "accepted", 2},
+		{"the completion left it undecided", http.StatusBadRequest, "unknown", 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var body map[string]any
+				require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+				w.Header().Set("Content-Type", "application/json")
+				switch {
+				case r.URL.Path != "/v1/chat/completions":
+					w.WriteHeader(http.StatusNotFound)
+				case body["chat_template_kwargs"] != nil && tc.disable != http.StatusOK:
+					w.WriteHeader(tc.disable)
+					_, _ = w.Write([]byte(`{"error":{"message":"no"}}`))
+				case body["tools"] != nil:
+					w.WriteHeader(http.StatusPaymentRequired)
+					_, _ = w.Write([]byte(`{"error":{"message":"insufficient balance"}}`))
+				default:
+					_, _ = w.Write([]byte(okAnswer))
+				}
+			}))
+			t.Cleanup(srv.Close)
+			cfg := config.ModelConfig{ModelName: "qwen3-8b", ApiType: "openai", ApiURL: srv.URL + "/v1/chat/completions", ApiKey: testKey}
+			api := &system.ModelApiSpec{Stack: "vllm", ModelFamily: "qwen3", Source: system.ApiSpecSourceDetected, Thinking: &system.ThinkingSpec{Mode: system.ThinkingModeControllable},
+				Bindings: map[string]*system.ParamBinding{
+					system.IntentReasoningDisable: {Kind: system.BindingKindTemplateKwarg, Param: "chat_template_kwargs.enable_thinking", ParamType: "boolean", Value: false},
+				}}
+			res, err := verify(context.Background(), cfg, api, 5*time.Second, lib.NewTestLogger())
+			require.NoError(t, err)
+			require.Equal(t, tc.notSent, res.NotSent)
+			require.Equal(t, tc.verdict, res.Verdicts[0].Outcome)
+			require.Equal(t, http.StatusPaymentRequired, res.Verdicts[len(res.Verdicts)-1].Status, "the run ends at the account answer")
+			require.Len(t, res.Requests, len(res.Verdicts))
+		})
+	}
 }
 
 func TestVerifyWarnsBeforeProbingHostedStack(t *testing.T) {

@@ -8,6 +8,7 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apiprobe"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apispec"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 )
 
 // DefaultRuntimeTTL mirrors the detector's cache TTL (apidetect cacheTTL):
@@ -56,6 +57,16 @@ type runtimeEntry struct {
 	verify     apispec.Runtime
 	verifiedAt time.Time
 	verifyKey  string
+	// verifyPending marks a run an account or rate-limit answer stopped:
+	// what it established is kept and the model stays due, so the next
+	// sweep resumes it once and asks the rest.
+	verifyPending bool
+	// verifyBindingAt is when the rejections and the reasoning seen with
+	// the disable applied were established: a resumed run carries them
+	// with that time, while verifiedAt moves to the resumed run. A resumed
+	// run that establishes some itself stamps the carried ones with its
+	// time too, since Runtime.At holds one.
+	verifyBindingAt time.Time
 }
 
 // runtimeStore keeps the runtime evidence per model id (design contract §5)
@@ -117,6 +128,8 @@ func (s *runtimeStore) harvest(modelID string, meta *aiengine.ResponseMeta) (rt 
 		entry.verify = apispec.Runtime{}
 		entry.verifiedAt = time.Time{}
 		entry.verifyKey = ""
+		entry.verifyPending = false
+		entry.verifyBindingAt = time.Time{}
 	}
 	// A recorded verifier run keeps the entry even when it established no
 	// fact: verifiedAt is the once-per-TTL gate (verifyDue), and dropping it
@@ -137,7 +150,7 @@ func (s *runtimeStore) harvest(modelID string, meta *aiengine.ResponseMeta) (rt 
 	case !rejectedAt.IsZero():
 		entry.rt.At = rejectedAt.Unix()
 	case len(entry.verify.RejectedParams) > 0 || entry.verify.ReasoningDisabledInRequest:
-		entry.rt.At = entry.verifiedAt.Unix()
+		entry.rt.At = entry.verifyBindingAt.Unix()
 	case !latest.IsZero():
 		entry.rt.At = latest.Unix()
 	default:
@@ -186,26 +199,33 @@ func containsParam(list []string, p string) bool {
 }
 
 // verifyDue reports whether the verifier should run for the model: never
-// yet, for another spec (key), or last more than the TTL ago.
+// yet, for another spec (key), to resume a stopped run, or last more than
+// the TTL ago.
 func (s *runtimeStore) verifyDue(modelID, key string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	entry := s.byModel[modelID]
-	if entry == nil || entry.verifyKey != key || entry.verifiedAt.IsZero() {
+	if entry == nil || entry.verifyKey != key || entry.verifiedAt.IsZero() || entry.verifyPending {
 		return true
 	}
 	return s.now().Sub(entry.verifiedAt) > s.ttl
 }
 
-// recordVerify stores one verifier run's facts for the model under key. A
-// run within the TTL happens only for a changed spec (key): the binding
+// recordVerify stores one verifier run's facts for the model under key;
+// done is false for a run an account or rate-limit answer stopped, which
+// leaves the model due. A run within the TTL happens only for a changed
+// spec (key) or to resume a stopped one. For a changed spec the binding
 // verdicts and rejections of the old spec go, since they describe bindings
 // that no longer exist, while the tool and capability facts describe the
 // backend and carry over unless the new run answered them itself (a
-// question the merged spec already answered is not asked again). A run with
-// no facts still counts as done, so a backend that answers nothing usable is
-// asked once per TTL, not once per sweep.
-func (s *runtimeStore) recordVerify(modelID, key string, facts apispec.Runtime) {
+// question the merged spec already answered is not asked again). A run
+// resuming a stopped one for the same spec also keeps the binding answers
+// it did not give itself, and counts as done whatever it meets: a stopped
+// run is resumed once, so a backend that keeps turning the caller away is
+// asked once per TTL, and carried facts are at most two TTLs old. A run
+// with no facts still counts as done, so a backend that answers nothing
+// usable is asked once per TTL, not once per sweep.
+func (s *runtimeStore) recordVerify(modelID, key string, facts apispec.Runtime, done bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	entry := s.byModel[modelID]
@@ -214,6 +234,14 @@ func (s *runtimeStore) recordVerify(modelID, key string, facts apispec.Runtime) 
 		s.byModel[modelID] = entry
 	}
 	prev := entry.verify
+	now := s.now()
+	resumed := entry.verifyPending && entry.verifyKey == key && !entry.verifiedAt.IsZero()
+	if !resumed || len(facts.RejectedParams) > 0 || facts.ReasoningDisabledInRequest {
+		entry.verifyBindingAt = now
+	}
+	if resumed {
+		keepBindingAnswers(&facts, &prev)
+	}
 	if facts.ToolsSupported == nil && prev.ToolsSupported != nil {
 		facts.ToolsSupported, facts.ToolsSource = prev.ToolsSupported, prev.ToolsSource
 	}
@@ -229,8 +257,57 @@ func (s *runtimeStore) recordVerify(modelID, key string, facts apispec.Runtime) 
 		}
 	}
 	entry.verify = facts
-	entry.verifiedAt = s.now()
+	entry.verifiedAt = now
 	entry.verifyKey = key
+	entry.verifyPending = !done && !resumed
+}
+
+// pendingDisableVerdict reports whether the stopped run a run for key would
+// resume already holds the completion's verdict on reasoning.disable. A
+// stopped run never holds a render verdict (the render check is the last
+// probe), so the resumed run neither resends the completion nor lets a
+// render override it.
+func (s *runtimeStore) pendingDisableVerdict(modelID, key string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entry := s.byModel[modelID]
+	if entry == nil || !entry.verifyPending || entry.verifyKey != key {
+		return false
+	}
+	_, ok := entry.verify.Verified[system.IntentReasoningDisable]
+	return ok
+}
+
+// keepBindingAnswers copies into facts what an earlier, stopped run for the
+// same spec established about the bindings and facts does not answer
+// itself: verdicts per intent, the reasoning seen with the disable applied
+// (it belongs to the reasoning.disable verdict) and the rejected
+// parameters, whose bindings the resumed run no longer sends. The maps and
+// slices of prev are never written.
+func keepBindingAnswers(facts, prev *apispec.Runtime) {
+	_, disableAnswered := facts.Verified[system.IntentReasoningDisable]
+	for intent, verdict := range prev.Verified {
+		if _, answered := facts.Verified[intent]; answered {
+			continue
+		}
+		if facts.Verified == nil {
+			facts.Verified = map[string]apispec.VerifiedBinding{}
+		}
+		facts.Verified[intent] = verdict
+	}
+	if !disableAnswered && prev.ReasoningSeen {
+		facts.ReasoningSeen = true
+		facts.ReasoningDisabledInRequest = facts.ReasoningDisabledInRequest || prev.ReasoningDisabledInRequest
+	}
+	if len(prev.RejectedParams) > 0 {
+		rejected := append([]string(nil), facts.RejectedParams...)
+		for _, p := range prev.RejectedParams {
+			if !containsParam(rejected, p) {
+				rejected = append(rejected, p)
+			}
+		}
+		facts.RejectedParams = rejected
+	}
 }
 
 // forget drops the entry for a model that is no longer reported.

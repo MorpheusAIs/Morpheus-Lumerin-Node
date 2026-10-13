@@ -170,12 +170,14 @@ type jsonReport struct {
 	Api       *system.ModelApiSpec `json:"api"`
 	Trace     []string             `json:"trace"`
 	// The -verify fields: Runtime is the folded evidence MergeRuntime read,
-	// VerifyTrace its trace, VerifyRequests every request the probes sent
-	// and VerifyVerdicts what each probe concluded.
+	// VerifyTrace its trace, VerifyRequests every request the probes sent,
+	// VerifyVerdicts what each probe concluded and VerifyNotSent how many
+	// probes an account or rate-limit answer left unsent.
 	Runtime        *apispec.Runtime `json:"runtime,omitempty"`
 	VerifyTrace    []string         `json:"verifyTrace,omitempty"`
 	VerifyRequests []probeRequest   `json:"verifyRequests,omitempty"`
 	VerifyVerdicts []probeVerdict   `json:"verifyVerdicts,omitempty"`
+	VerifyNotSent  int              `json:"verifyNotSent,omitempty"`
 }
 
 // probeRequest is one request a verify probe sent: the method and path
@@ -239,13 +241,15 @@ func (t *recordingTransport) sent() []probeRequest {
 	return append([]probeRequest(nil), t.requests...)
 }
 
-// verifyResult is what one -verify run produced for the model.
+// verifyResult is what one -verify run produced for the model. NotSent is
+// how many probes an account or rate-limit answer left unsent.
 type verifyResult struct {
 	Api      *system.ModelApiSpec
 	Runtime  apispec.Runtime
 	Trace    []string
 	Requests []probeRequest
 	Verdicts []probeVerdict
+	NotSent  int
 }
 
 // verify sends every probe the C2 verifier offers for this model through
@@ -256,7 +260,9 @@ type verifyResult struct {
 // the operator asked for the round trips, and a verdict on a known field
 // is the confirmation they came for. The render check runs only while the
 // completion probe left reasoning.disable undecided (the checker's rule: a
-// render verdict is weaker than the completion's on the same intent).
+// render verdict is weaker than the completion's on the same intent). Like
+// the checker it stops at an account or rate-limit answer, which the probes
+// left would meet too; NotSent counts them.
 func verify(ctx context.Context, cfg config.ModelConfig, api *system.ModelApiSpec, timeout time.Duration, log lib.ILogger) (verifyResult, error) {
 	rec := &recordingTransport{next: http.DefaultTransport}
 	// The adapter bounds each request by its context; the key-carrying
@@ -281,14 +287,21 @@ func verify(ctx context.Context, cfg config.ModelConfig, api *system.ModelApiSpe
 	}
 
 	var verdicts []apiprobe.Verdict
-	run := func(probe func(context.Context) apiprobe.Verdict) {
+	limited, notSent := false, 0
+	run := func(probe func(context.Context) apiprobe.Verdict) bool {
+		if limited {
+			notSent++
+			return false
+		}
 		probeCtx, cancel := context.WithTimeout(ctx, timeout)
-		verdicts = append(verdicts, probe(probeCtx))
+		verdict := probe(probeCtx)
 		cancel()
+		verdicts = append(verdicts, verdict)
+		limited = verdict.AccountLimited()
+		return true
 	}
 	disableDecided := false
-	if apiprobe.ReasoningDisableBinding(spec) != nil {
-		run(func(ctx context.Context) apiprobe.Verdict { return v.VerifyReasoningDisable(ctx, spec) })
+	if apiprobe.ReasoningDisableBinding(spec) != nil && run(func(ctx context.Context) apiprobe.Verdict { return v.VerifyReasoningDisable(ctx, spec) }) {
 		disableDecided = verdicts[len(verdicts)-1].Outcome != apiprobe.OutcomeUnknown
 	}
 	run(v.ProbeTools)
@@ -298,7 +311,7 @@ func verify(ctx context.Context, cfg config.ModelConfig, api *system.ModelApiSpe
 		run(func(ctx context.Context) apiprobe.Verdict { return v.RenderThinkingToggle(ctx, spec) })
 	}
 
-	out := verifyResult{Requests: rec.sent()}
+	out := verifyResult{Requests: rec.sent(), NotSent: notSent}
 	for _, verdict := range verdicts {
 		out.Verdicts = append(out.Verdicts, probeVerdict{
 			Probe: verdict.Probe, Outcome: verdict.Outcome.String(), Status: verdict.Status,
@@ -373,6 +386,13 @@ func formatVerify(res verifyResult) string {
 	}
 	for _, v := range res.Verdicts {
 		fmt.Fprintf(&b, "      - %s\n", v)
+	}
+	if res.NotSent > 0 {
+		noun := "probes"
+		if res.NotSent == 1 {
+			noun = "probe"
+		}
+		fmt.Fprintf(&b, "      (%d more %s not sent: the backend answered with an account or rate-limit status)\n", res.NotSent, noun)
 	}
 	b.WriteString("    merge:\n")
 	if len(res.Trace) == 0 {
@@ -490,6 +510,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 			report.VerifyTrace = res.Trace
 			report.VerifyRequests = res.Requests
 			report.VerifyVerdicts = res.Verdicts
+			report.VerifyNotSent = res.NotSent
 		}
 
 		if *asJSON {
