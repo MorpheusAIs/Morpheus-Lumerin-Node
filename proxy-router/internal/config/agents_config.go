@@ -61,15 +61,16 @@ func (e *AgentConfigLoader) Init() error {
 		filePath = e.configPath
 	}
 
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		if e.configContent != "" {
-			err = os.WriteFile(filePath, []byte(e.configContent), 0644)
-			if err != nil {
-				return fmt.Errorf("failed to write models config content to file: %s", err)
-			}
-		} else {
-			return fmt.Errorf("agents config file not found: %s", filePath)
+	if e.configContent != "" {
+		wrote, err := syncContentFile(filePath, e.configContent, 0644)
+		if err != nil {
+			return fmt.Errorf("failed to write agent config content to file: %s", err)
 		}
+		if wrote {
+			e.log.Infof("agents config written from AGENT_CONFIG_CONTENT: %s", filePath)
+		}
+	} else if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return fmt.Errorf("agents config file not found: %s", filePath)
 	}
 
 	agentsConfig, err := lib.ReadJSONFile(filePath)

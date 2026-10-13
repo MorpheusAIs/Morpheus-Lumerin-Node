@@ -3,7 +3,7 @@ title: "models-config.json"
 description: "How the proxy-router maps on-chain model IDs to backend HTTP endpoints: the apiType transport adapter, the optional apiStack backend preset (OpenAI, vLLM, SGLang, llama.cpp, Ollama, Venice, OpenRouter, LiteLLM, Anthropic) that declares the advertised API, and the Prodia / Hyperbolic image adapters; when apiStack is omitted the backend API is detected at runtime (service-endpoint probes, never inference requests, one hop through LiteLLM)."
 audience: ["provider-full", "provider-resale", "developer"]
 product: ["proxy-router"]
-last_verified: "2026-10-06"
+last_verified: "2026-10-13"
 source: "docs/models-config.json.md"
 ---
 
@@ -189,10 +189,10 @@ curl -s -X POST -u 'admin:yourpassword' http://localhost:8082/config/models/relo
 - **A file that fails to parse or validate returns `400` and leaves the running table untouched.** A half-edited file cannot empty a serving node. The error body names the problem: `{"error":"models config not reloaded, previous table still in force: …"}`.
 - `added` / `removed` list the model IDs that changed relative to the previous table, sorted. An unchanged file returns both empty.
 - `healthSweepQueued` is `true` when a [model health](/providers/full/model-health) sweep was queued so models with an active bid are probed now (same as `POST /healthcheck/models/refresh`). Models without a bid cost nothing until one is posted. A `tee`-tagged model added this way is attested during that sweep; with `MODEL_HEALTH_CHECK_DISABLED=true` it will not be attested until the next restart.
-- Applies to `MODELS_CONFIG_PATH` on disk. With `MODELS_CONFIG_CONTENT` the content was written to the path at first boot; edit the file at that path and reload, or change the env and restart.
+- Applies to the file at `MODELS_CONFIG_PATH`. A restart with a non-empty `MODELS_CONFIG_CONTENT` replaces that file first. With the variable empty, edit the file and reload.
 
 On older releases the endpoint returns `404` — restart the proxy-router instead. Removing a model that has open sessions makes those sessions fail at the receiver; drop the bid first and let sessions drain.
 
 ## Inline content (for TEE / Akash)
 
-For deployments where mounting a JSON file is impractical, set `MODELS_CONFIG_CONTENT` to a **single-line JSON string** with the exact same shape as above. The proxy-router reads it instead of `MODELS_CONFIG_PATH`. This is the standard approach in [TEE](/providers/full/secretvm-quickstart) and [Akash](/providers/full/proxy-router-akash) deployments.
+For deployments where mounting a JSON file is impractical, set `MODELS_CONFIG_CONTENT` to a **single-line JSON string** with the exact same shape as above. On every start, a non-empty value replaces the file at `MODELS_CONFIG_PATH`, then the process loads that file. An empty value leaves the stored file. This is the standard approach in [TEE](/providers/full/secretvm-quickstart) and [Akash](/providers/full/proxy-router-akash) deployments. A missing file and an empty value starts the process with an empty model registry.

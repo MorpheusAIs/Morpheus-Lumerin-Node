@@ -1,6 +1,8 @@
 package config
 
 import (
+	"fmt"
+
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/rating"
 )
@@ -33,17 +35,25 @@ func LoadRating(path string, content string, log lib.ILogger) (*rating.Rating, e
 		filePath = path
 	}
 
-	config, err := lib.ReadJSONFile(filePath)
-	if err != nil {
-		if content != "" {
-			log.Infof("rating config file not found, using RATING_CONFIG_CONTENT")
-			config = content
-		} else {
+	var config string
+	if content != "" {
+		wrote, err := syncContentFile(filePath, content, 0644)
+		if err != nil {
+			return nil, fmt.Errorf("failed to write rating config content to file: %s", err)
+		}
+		if wrote {
+			log.Infof("rating config written from RATING_CONFIG_CONTENT: %s", filePath)
+		}
+		config = content
+	} else {
+		loaded, err := lib.ReadJSONFile(filePath)
+		if err != nil {
 			log.Warnf("failed to load rating config file, using defaults")
 			config = RatingConfigDefault
+		} else {
+			log.Infof("rating config loaded from file: %s", filePath)
+			config = loaded
 		}
-	} else {
-		log.Infof("rating config loaded from file: %s", filePath)
 	}
 
 	return rating.NewRatingFromConfig([]byte(config), log)
