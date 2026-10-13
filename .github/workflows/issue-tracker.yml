@@ -8,7 +8,6 @@ permissions:
   contents: read
   issues: write
   pull-requests: write
-  projects: write
 
 jobs:
   pr-target:
@@ -46,6 +45,10 @@ jobs:
         env:
           PROJECT_NUMBER: ${{ vars.MORPHEUS_WORK_PROJECT }}
         with:
+          # The built-in token cannot edit org projects. MORPHEUS_WORK_TOKEN is a
+          # fine-grained token with Projects read and write; without it the
+          # project status step is skipped and comments and close still run.
+          github-token: ${{ secrets.MORPHEUS_WORK_TOKEN || github.token }}
           script: |
             const path = require('path')
             const { main } = require(path.join(process.env.GITHUB_WORKSPACE, '.github/scripts/issue-tracker.js'))
