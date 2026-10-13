@@ -92,6 +92,34 @@ func newLoaderFromContent(t *testing.T, content string) *ModelConfigLoader {
 	return NewModelConfigLoader(path, "", noopValidator{}, fakeChain{}, fakeConn{}, lib.NewTestLogger())
 }
 
+func TestInitContentOverwritesExistingFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "models-config.json")
+	old := `{"models":[{"modelId":"0x01","modelName":"old","apiType":"openai","apiUrl":"http://h/v1"}]}`
+	neu := `{"models":[{"modelId":"0x02","modelName":"new","apiType":"openai","apiUrl":"http://h/v1"}]}`
+	require.NoError(t, os.WriteFile(path, []byte(old), 0o644))
+	l := NewModelConfigLoader(path, neu, noopValidator{}, fakeChain{}, fakeConn{}, lib.NewTestLogger())
+	require.NoError(t, l.Init())
+	require.Equal(t, "new", l.ModelConfigFromID("0x02").ModelName)
+	require.Empty(t, l.ModelConfigFromID("0x01").ModelName)
+	got, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, neu, string(got))
+}
+
+func TestInitEmptyContentKeepsExistingFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "models-config.json")
+	old := `{"models":[{"modelId":"0x01","modelName":"old","apiType":"openai","apiUrl":"http://h/v1"}]}`
+	require.NoError(t, os.WriteFile(path, []byte(old), 0o644))
+	l := NewModelConfigLoader(path, "", noopValidator{}, fakeChain{}, fakeConn{}, lib.NewTestLogger())
+	require.NoError(t, l.Init())
+	require.Equal(t, "old", l.ModelConfigFromID("0x01").ModelName)
+	got, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, old, string(got))
+}
+
 func TestInitV2AcceptsApiStackAndLegacyApiTypes(t *testing.T) {
 	l := newLoaderFromContent(t, `{"models":[
 		{"modelId":"0x01","modelName":"qwen3-32b","apiType":"openai","apiStack":"vllm","apiUrl":"http://h/v1/chat/completions"},
