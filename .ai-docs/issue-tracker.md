@@ -40,7 +40,7 @@ gh issue create --repo MorpheusAIs/Morpheus-Lumerin-Node \
 
 The public project **Morpheus work** holds issues from this repo. Status for this repo:
 
-Triage → Needs info → Backlog → Ready → In progress → On dev → On test → Shipped
+Triage → Needs Info → Backlog → Ready → In Progress → On Dev → On Test → Shipped
 
 Shipped means the commit is on `main`. The workflow comments on the linked issue at each hop and closes it on `main`.
 
