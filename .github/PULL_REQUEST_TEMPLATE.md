@@ -1,7 +1,7 @@
 <!--
   Base branch: use `dev` (not `main`).
   Maintainers promote dev → test → main.
-  See CONTRIBUTING.md.
+  See CONTRIBUTING.md and .ai-docs/issue-tracker.md.
 -->
 
 ## Summary
@@ -10,10 +10,16 @@
 
 -
 
+## Linked issue
+
+Refs #
+
+- [ ] No tracked issue (chore, revert, or CI only). Reason:
+
 ## Base branch
 
 - [ ] This PR targets **`dev`** (required for feature/docs/fix PRs)
-- [ ] This is a **maintainer promote** into `test` or `main` (skip the line above)
+- [ ] This is a **maintainer promote** into `test` or `main` (title starts with `promote:`)
 
 ## Test plan
 
