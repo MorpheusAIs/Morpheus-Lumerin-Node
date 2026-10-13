@@ -133,15 +133,16 @@ func (e *ModelConfigLoader) load() (ModelConfigs, error) {
 		filePath = e.configPath
 	}
 
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		if e.configContent != "" {
-			err = os.WriteFile(filePath, []byte(e.configContent), 0644)
-			if err != nil {
-				return nil, fmt.Errorf("failed to write models config content to file: %s", err)
-			}
-		} else {
-			return nil, fmt.Errorf("models config file not found: %s", filePath)
+	if e.configContent != "" {
+		wrote, err := syncContentFile(filePath, e.configContent, 0644)
+		if err != nil {
+			return nil, fmt.Errorf("failed to write models config content to file: %s", err)
 		}
+		if wrote {
+			e.log.Infof("models config written from MODELS_CONFIG_CONTENT: %s", filePath)
+		}
+	} else if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("models config file not found: %s", filePath)
 	}
 
 	modelsConfig, err := lib.ReadJSONFile(filePath)

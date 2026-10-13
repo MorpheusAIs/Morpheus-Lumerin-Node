@@ -2,6 +2,7 @@ package system
 
 import (
 	"math/big"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -23,6 +24,41 @@ func newDelegationTestConfig(t *testing.T) *HTTPAuthConfig {
 	require.NoError(t, cfg.AddUser("ops", "ops-pw", []string{"send_mor"}))
 	require.NoError(t, cfg.AddUser("junior", "junior-pw", []string{"get_balance"}))
 	return cfg
+}
+
+func TestCookieContentReplacesAdminPassword(t *testing.T) {
+	dir := t.TempDir()
+	conf := filepath.Join(dir, "proxy.conf")
+	cookie := filepath.Join(dir, ".cookie")
+	cfg := NewAuthConfig(conf, cookie, "admin:first-pw", storages.NewAuthStorage(storages.NewTestStorage()))
+	require.NoError(t, cfg.ReadConfig())
+	require.NoError(t, cfg.EnsureConfigFilesExist())
+	require.True(t, cfg.ValidatePassword(AdminUsername, "first-pw"))
+
+	cfg2 := NewAuthConfig(conf, cookie, "admin:second-pw", storages.NewAuthStorage(storages.NewTestStorage()))
+	require.NoError(t, cfg2.ReadConfig())
+	require.NoError(t, cfg2.EnsureConfigFilesExist())
+	require.True(t, cfg2.ValidatePassword(AdminUsername, "second-pw"))
+	require.False(t, cfg2.ValidatePassword(AdminUsername, "first-pw"))
+}
+
+func TestCookieContentUnchangedDoesNotRewriteProxyConf(t *testing.T) {
+	dir := t.TempDir()
+	conf := filepath.Join(dir, "proxy.conf")
+	cookie := filepath.Join(dir, ".cookie")
+	cfg := NewAuthConfig(conf, cookie, "admin:same-pw", storages.NewAuthStorage(storages.NewTestStorage()))
+	require.NoError(t, cfg.ReadConfig())
+	require.NoError(t, cfg.EnsureConfigFilesExist())
+	before, err := os.ReadFile(conf)
+	require.NoError(t, err)
+
+	cfg2 := NewAuthConfig(conf, cookie, "admin:same-pw", storages.NewAuthStorage(storages.NewTestStorage()))
+	require.NoError(t, cfg2.ReadConfig())
+	require.NoError(t, cfg2.EnsureConfigFilesExist())
+	after, err := os.ReadFile(conf)
+	require.NoError(t, err)
+	require.Equal(t, string(before), string(after))
+	require.True(t, cfg2.ValidatePassword(AdminUsername, "same-pw"))
 }
 
 func TestValidateUserSpec(t *testing.T) {
