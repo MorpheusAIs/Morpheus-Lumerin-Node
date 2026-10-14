@@ -1,5 +1,6 @@
 name: Feature request
 description: A change or a design proposal for the node, the desktop app, the CLI, or the contracts
+type: Feature
 labels:
   - enhancement
   - needs-triage
