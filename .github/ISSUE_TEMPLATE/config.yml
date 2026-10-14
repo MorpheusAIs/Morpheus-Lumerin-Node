@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a question
+    url: https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/discussions
+    about: How-to and support questions go in Discussions
+  - name: Node docs
+    url: https://nodedocs.mor.org
+    about: Product and node documentation
+  - name: Hosted API
+    url: https://github.com/MorpheusAIs/Morpheus-Marketplace-API/issues/new/choose
+    about: Bugs and requests for api.mor.org belong on Morpheus-Marketplace-API

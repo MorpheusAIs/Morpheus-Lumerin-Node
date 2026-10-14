@@ -136,7 +136,7 @@ func TestVerifyTdxWorkload_AuthenticMatch(t *testing.T) {
 	quoteHex := readTestFixture(t, "tdx_cpu_docker_check_quote.txt")
 	composeYaml := readTestFixture(t, "tdx_cpu_docker_check_compose.yaml")
 
-	result := VerifyTdxWorkload(reg, quoteHex, composeYaml, nil)
+	result := VerifyTdxWorkload(reg, quoteHex, composeYaml, "", nil)
 	if result.Status != WorkloadAuthentic {
 		t.Fatalf("status = %s, want %s", result.Status, WorkloadAuthentic)
 	}
@@ -151,7 +151,7 @@ func TestVerifyTdxWorkload_HTMLWrappedCompose(t *testing.T) {
 	composeYaml := readTestFixture(t, "tdx_cpu_docker_check_compose.yaml")
 	wrapped := "<html><body><pre>" + html.EscapeString(composeYaml) + "</pre></body></html>"
 
-	result := VerifyTdxWorkload(reg, quoteHex, wrapped, nil)
+	result := VerifyTdxWorkload(reg, quoteHex, wrapped, "", nil)
 	if result.Status != WorkloadAuthentic {
 		t.Fatalf("status = %s, want %s", result.Status, WorkloadAuthentic)
 	}
@@ -185,7 +185,7 @@ func TestVerifyTdxWorkload_AuthenticMismatch(t *testing.T) {
 	quoteHex := readTestFixture(t, "tdx_cpu_docker_check_quote.txt")
 	composeYaml := readTestFixture(t, "tdx_cpu_docker_check_compose.yaml") + "\n# tampered"
 
-	result := VerifyTdxWorkload(reg, quoteHex, composeYaml, nil)
+	result := VerifyTdxWorkload(reg, quoteHex, composeYaml, "", nil)
 	if result.Status != WorkloadAuthenticMismatch {
 		t.Fatalf("status = %s, want %s", result.Status, WorkloadAuthenticMismatch)
 	}
@@ -203,7 +203,7 @@ func TestVerifyTdxWorkload_NotAuthentic(t *testing.T) {
 	raw[185] ^= 0xFF
 	corrupted := hex.EncodeToString(raw)
 
-	result := VerifyTdxWorkload(reg, corrupted, "anything", nil)
+	result := VerifyTdxWorkload(reg, corrupted, "anything", "", nil)
 	if result.Status != WorkloadNotAuthentic {
 		t.Fatalf("status = %s, want %s", result.Status, WorkloadNotAuthentic)
 	}
@@ -214,7 +214,7 @@ func TestVerifyWorkload_TdxQuote(t *testing.T) {
 	quoteHex := readTestFixture(t, "tdx_cpu_docker_check_quote.txt")
 	composeYaml := readTestFixture(t, "tdx_cpu_docker_check_compose.yaml")
 
-	result := VerifyWorkload(reg, nil, quoteHex, composeYaml, nil)
+	result := VerifyWorkload(reg, nil, quoteHex, composeYaml, "", nil)
 	if result.Status != WorkloadAuthentic {
 		t.Fatalf("status = %s, want %s", result.Status, WorkloadAuthentic)
 	}
@@ -225,7 +225,7 @@ func TestVerifyWorkload_TdxQuoteRegistryNil(t *testing.T) {
 	composeYaml := readTestFixture(t, "tdx_cpu_docker_check_compose.yaml")
 
 	// TDX quote but no artifact registry -> must fail closed.
-	result := VerifyWorkload(nil, nil, quoteHex, composeYaml, nil)
+	result := VerifyWorkload(nil, nil, quoteHex, composeYaml, "", nil)
 	if result.Status != ArtifactRegistryNotAvailable {
 		t.Fatalf("status = %s, want %s", result.Status, ArtifactRegistryNotAvailable)
 	}
@@ -237,7 +237,7 @@ func TestVerifyWorkload_TdxQuoteRegistryNotLoaded(t *testing.T) {
 
 	// Registry constructed but never fetched -> IsLoaded()==false -> fail closed.
 	unloaded := NewArtifactRegistry("", 0, &lib.LoggerMock{})
-	result := VerifyWorkload(unloaded, nil, quoteHex, composeYaml, nil)
+	result := VerifyWorkload(unloaded, nil, quoteHex, composeYaml, "", nil)
 	if result.Status != ArtifactRegistryNotAvailable {
 		t.Fatalf("status = %s, want %s", result.Status, ArtifactRegistryNotAvailable)
 	}
@@ -246,7 +246,7 @@ func TestVerifyWorkload_TdxQuoteRegistryNotLoaded(t *testing.T) {
 func TestVerifyWorkload_NonTdxQuoteNoSevRegistry(t *testing.T) {
 	reg := testRegistry(t)
 	// SEV quote with no SEV registry available must fail closed (registry unavailable).
-	result := VerifyWorkload(reg, nil, "SGVsbG8gV29ybGQ=", "anything", nil)
+	result := VerifyWorkload(reg, nil, "SGVsbG8gV29ybGQ=", "anything", "", nil)
 	if result.Status != ArtifactRegistryNotAvailable {
 		t.Fatalf("status = %s, want %s", result.Status, ArtifactRegistryNotAvailable)
 	}

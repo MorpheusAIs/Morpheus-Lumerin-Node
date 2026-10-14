@@ -1,0 +1,27 @@
+name: Docs
+description: A wrong or missing page on nodedocs
+type: Task
+labels:
+  - documentation
+  - needs-triage
+body:
+  - type: input
+    id: page
+    attributes:
+      label: Page
+      description: URL on nodedocs.mor.org, or the path under docs/
+      placeholder: https://nodedocs.mor.org/reference/api-overview
+    validations:
+      required: true
+  - type: textarea
+    id: wrong
+    attributes:
+      label: What is wrong or missing
+    validations:
+      required: true
+  - type: textarea
+    id: correction
+    attributes:
+      label: Suggested correction
+    validations:
+      required: false

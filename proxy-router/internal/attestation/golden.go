@@ -53,8 +53,20 @@ type TEEMeasurements struct {
 	AMDSEV   *SEVMeasurements `json:"amd_sev_snp,omitempty"`
 }
 
+// TDXMeasurements is the Intel TDX block of the signed attestation manifest.
+//
+// RTMR3 is the attest-tool (pre-dstack) replay: sha256(compose) then
+// rootfs_data. It is a single image-level value and matches SecretVM images
+// that report no dstack app-id. Images with a dstack KMS (portal v0.0.34+)
+// extend RTMR3 with a per-VM app-id as the first event, so no single value
+// can be published at build time; for those the verifier recomputes RTMR3
+// from ComposeSHA256 + RootfsSHA256 + the live VM's app-id (see
+// CalculateRTMR3FromHashes). Manifests that predate this carry only RTMR3.
 type TDXMeasurements struct {
 	RTMR3           string `json:"rtmr3"`
+	RTMR3Scheme     string `json:"rtmr3_scheme,omitempty"`
+	ComposeSHA256   string `json:"compose_sha256,omitempty"`
+	RootfsSHA256    string `json:"rootfs_sha256,omitempty"`
 	SecretVMRelease string `json:"secretvm_release,omitempty"`
 }
 
@@ -81,6 +93,12 @@ type GoldenValues struct {
 	RTMR1 string
 	RTMR2 string
 	RTMR3 string
+
+	// Intel TDX — inputs for the dstack RTMR3 replay. When both are set the
+	// verifier can reproduce a dstack-scheme VM's RTMR3 from its app-id;
+	// when empty only the legacy RTMR3 equality check is possible.
+	TDXComposeSHA256 string
+	TDXRootfsSHA256  string
 
 	// AMD SEV-SNP — single legacy value (kept for backwards compatibility)
 	Measurement string
@@ -348,9 +366,26 @@ func (g *GoldenSource) verifyBundleLayer(
 		return nil, fmt.Errorf("parse predicate: %w", err)
 	}
 
+	values := goldenFromPredicate(&predicate)
+
+	g.log.Infof("extracted golden values from verified attestation")
+	return values, nil
+}
+
+// goldenFromPredicate maps a parsed TEE predicate onto GoldenValues. The TDX
+// compose digest prefers the intel_tdx block and falls back to the manifest's
+// top-level compose_sha256 (which carries a "sha256:" prefix) so manifests
+// built before the dstack fields were added still support the dstack replay.
+func goldenFromPredicate(predicate *TEEPredicate) *GoldenValues {
 	values := &GoldenValues{}
 	if m := predicate.Measurements.IntelTDX; m != nil {
 		values.RTMR3 = m.RTMR3
+		values.TDXRootfsSHA256 = normalizeDigestHex(m.RootfsSHA256)
+		if m.ComposeSHA256 != "" {
+			values.TDXComposeSHA256 = normalizeDigestHex(m.ComposeSHA256)
+		} else if predicate.ComposeSHA256 != "" {
+			values.TDXComposeSHA256 = normalizeDigestHex(predicate.ComposeSHA256)
+		}
 	}
 	if m := predicate.Measurements.AMDSEV; m != nil {
 		values.Measurement = m.Measurement
@@ -361,9 +396,32 @@ func (g *GoldenSource) verifyBundleLayer(
 			}
 		}
 	}
+	return values
+}
 
-	g.log.Infof("extracted golden values from verified attestation")
-	return values, nil
+// SupportsDstackRTMR3 reports whether the golden manifest carries the inputs
+// needed to reproduce a dstack-scheme RTMR3 for a given VM app-id.
+func (g *GoldenValues) SupportsDstackRTMR3() bool {
+	return g != nil && g.TDXComposeSHA256 != "" && g.TDXRootfsSHA256 != ""
+}
+
+// ExpectedTDXRTMR3 returns the RTMR3 the golden manifest predicts for a VM
+// with the given dstack app-id, and the scheme used. An empty app-id yields
+// the published attest-tool RTMR3. A non-empty app-id yields the dstack replay
+// over the published compose and rootfs digests, or "" when the manifest does
+// not carry them.
+func (g *GoldenValues) ExpectedTDXRTMR3(dstackAppID string) (string, RTMR3Scheme) {
+	if g == nil {
+		return "", RTMR3SchemeAttestTool
+	}
+	appID := NormalizeDstackAppID(dstackAppID)
+	if appID == "" {
+		return g.RTMR3, RTMR3SchemeAttestTool
+	}
+	if !g.SupportsDstackRTMR3() {
+		return "", RTMR3SchemeDstack
+	}
+	return CalculateRTMR3FromHashes(g.TDXComposeSHA256, g.TDXRootfsSHA256, appID), RTMR3SchemeDstack
 }
 
 // parseAttestationPayload extracts GoldenValues from a cosign attestation payload.
@@ -395,19 +453,5 @@ func parseAttestationPayload(payload []byte) (*GoldenValues, error) {
 		return nil, fmt.Errorf("wrong predicate type: got %s, want %s", statement.PredicateType, teePredicateType)
 	}
 
-	values := &GoldenValues{}
-	if m := statement.Predicate.Measurements.IntelTDX; m != nil {
-		values.RTMR3 = m.RTMR3
-	}
-	if m := statement.Predicate.Measurements.AMDSEV; m != nil {
-		values.Measurement = m.Measurement
-		if len(m.PerTemplate) > 0 {
-			values.SEVPerTemplate = make(map[string]string, len(m.PerTemplate))
-			for k, v := range m.PerTemplate {
-				values.SEVPerTemplate[k] = v
-			}
-		}
-	}
-
-	return values, nil
+	return goldenFromPredicate(&statement.Predicate), nil
 }
