@@ -1,5 +1,6 @@
 name: Docs
 description: A wrong or missing page on nodedocs
+type: Task
 labels:
   - documentation
   - needs-triage

@@ -14,11 +14,11 @@ Use the issue forms:
 
 Questions go to Discussions. Blank issues are closed.
 
-A new issue is labeled `needs-triage`. During triage, set one area label and a priority on the **Morpheus work** project, then clear `needs-triage`.
+A new issue is labeled `needs-triage`. During triage, set one area label and the Priority field, set the status on the **Morpheus Work** project, then clear `needs-triage`.
 
 Area labels: `area: proxy-router`, `area: ui-desktop`, `area: cli`, `area: docs`, `area: contracts`, `area: agents`.
 
-Priority: `P0` now, `P1` next, `P2` backlog, `P3` someday.
+Priority is the GitHub field in the issue sidebar: **Urgent** now, **High** next, **Medium** backlog, **Low** someday. The issue form sets Type (Bug, Feature, Task). Effort is optional.
 
 ## Pull requests
 

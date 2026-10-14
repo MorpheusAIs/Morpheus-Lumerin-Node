@@ -1,5 +1,6 @@
 name: Bug report
 description: Something in the node, the desktop app, the CLI, or the docs behavior is broken
+type: Bug
 labels:
   - bug
   - needs-triage
