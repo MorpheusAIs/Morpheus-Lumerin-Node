@@ -64,10 +64,9 @@ func gatedStack(stack string) bool {
 
 // IsHostedOrGatewayStack reports a stack whose requests are billed by a
 // third party: a gateway (venice, openrouter, litellm, anthropic, openai) or
-// a hostname-recognised vendor. The inference-traffic probes of the health
-// checker skip these unless MODEL_API_PROBE_HOSTED allows them; the
-// detected-only engines (tgi, lmstudio, koboldcpp) are self-hosted and are
-// not gated here.
+// a hostname-recognised vendor. apidetect -verify warns before probing one;
+// the detected-only engines (tgi, lmstudio, koboldcpp) are self-hosted and
+// are not included.
 func IsHostedOrGatewayStack(stack string) bool {
 	return gatewayStacks[stack] || isHostedVendor(stack)
 }

@@ -538,7 +538,7 @@ const (
 	verifyDelay         = 250 * time.Millisecond
 )
 
-type verifyFlags struct{ verify, caps, hosted bool }
+type verifyFlags struct{ verify, caps bool }
 
 // verifyHarness is a checker with the probe flags set, a recording sleeper
 // in place of the timer and a controllable clock for the runtime store.
@@ -562,7 +562,7 @@ func newVerifyHarness(t *testing.T, spec *system.ModelApiSpec, flags verifyFlags
 	h.deps = runtimeDeps(h.backend, cfg, &fakeDetector{spec: spec})
 	h.checker = NewChecker(Deps{
 		Adapters: h.deps, Bids: h.deps, Models: h.deps, ModelConfigs: h.deps, ApiDetect: h.deps.apiDetect,
-		ApiDetectTTL: time.Hour, VerifyBindings: flags.verify, ProbeCapabilities: flags.caps, ProbeHosted: flags.hosted,
+		ApiDetectTTL: time.Hour, VerifyBindings: flags.verify, ProbeCapabilities: flags.caps,
 	}, time.Hour, time.Second, verifyDelay, 0, lib.NewTestLogger())
 	h.checker.runtime.now = func() time.Time { return h.clock }
 	h.checker.sleepFn = func(ctx context.Context, d time.Duration) bool {
@@ -902,40 +902,24 @@ func TestProbeCapabilities(t *testing.T) {
 	})
 }
 
-func TestVerifyHostedGuard(t *testing.T) {
+// Hosted vendors, gateways, an upstream reached through one and a backend
+// detection could not name are probed like a self-hosted engine: the
+// switches alone decide.
+func TestVerifyProbesHostedAndGatewayStacks(t *testing.T) {
 	hosted := func(stack, via string) *system.ModelApiSpec {
 		return &system.ModelApiSpec{Stack: stack, Via: via, Source: system.ApiSpecSourceDetected,
 			Bindings: map[string]*system.ParamBinding{system.IntentReasoningDisable: {Kind: system.BindingKindBodyParam, Param: "reasoning.enabled", ParamType: "boolean", Value: false}}}
 	}
-	gated := []*system.ModelApiSpec{hosted("openrouter", ""), hosted("venice", ""), hosted("litellm", ""), hosted("anthropic", ""), hosted("openai", ""), hosted("groq", ""), hosted("hf-router", ""), hosted("", ""), hosted("vllm", "litellm")}
-	for _, spec := range gated {
-		name := spec.Stack + "/" + spec.Via
-		t.Run(name+" is skipped", func(t *testing.T) {
-			h := newVerifyHarness(t, spec, verifyFlags{verify: true, caps: true})
-			h.sweep(t)
-			require.Equal(t, []string{"health"}, kinds(h.backend.recorded()))
-			require.Empty(t, h.sleeps)
-		})
-	}
-	for _, spec := range gated {
-		name := spec.Stack + "/" + spec.Via
-		t.Run(name+" is probed with the switch", func(t *testing.T) {
-			h := newVerifyHarness(t, spec, verifyFlags{verify: true, hosted: true})
+	for _, spec := range []*system.ModelApiSpec{hosted("openrouter", ""), hosted("venice", ""), hosted("litellm", ""), hosted("anthropic", ""), hosted("openai", ""), hosted("groq", ""), hosted("hf-router", ""), hosted("", ""), hosted("vllm", "litellm")} {
+		t.Run(spec.Stack+"/"+spec.Via, func(t *testing.T) {
+			h := newVerifyHarness(t, spec, verifyFlags{verify: true})
 			llm := h.sweep(t)
-			require.Equal(t, []string{"health", "reasoning.disable", "tools"}, kinds(h.backend.recorded()))
+			reqs := h.backend.recorded()
+			require.Equal(t, []string{"health", "reasoning.disable", "tools"}, kinds(reqs))
+			require.Equal(t, map[string]any{"enabled": false}, reqs[1].body["reasoning"], "the body_param binding lands at its dotted path")
 			require.True(t, *llm.Api.Bindings[system.IntentReasoningDisable].Verified)
 		})
 	}
-
-	t.Run("MODEL_API_PROBE_HOSTED lets a hosted vendor be probed", func(t *testing.T) {
-		h := newVerifyHarness(t, hosted("openrouter", ""), verifyFlags{verify: true, hosted: true})
-		llm := h.sweep(t)
-		reqs := h.backend.recorded()
-		require.Equal(t, []string{"health", "reasoning.disable", "tools"}, kinds(reqs))
-		require.Equal(t, map[string]any{"enabled": false}, reqs[1].body["reasoning"], "the body_param binding lands at its dotted path")
-		require.True(t, *llm.Api.Bindings[system.IntentReasoningDisable].Verified)
-	})
-
 }
 
 func TestVerifyOnlyAfterHealthyProbe(t *testing.T) {

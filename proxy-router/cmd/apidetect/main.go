@@ -256,7 +256,7 @@ type verifyResult struct {
 // the model's own adapter (the checker's path: aiengine.ApiAdapterFactory on
 // the config entry), folds the verdicts and merges them onto a clone of the
 // detected spec. Unlike the checker it does not consult the env flags, the
-// hosted gate, the once-per-TTL state or whether a field is already known:
+// once-per-TTL state or whether a field is already known:
 // the operator asked for the round trips, and a verdict on a known field
 // is the confirmation they came for. The render check runs only while the
 // completion probe left reasoning.disable undecided (the checker's rule: a
@@ -439,7 +439,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	only := fs.String("model", "", "only models whose name or ID contains this substring")
 	ignoreHost := fs.Bool("ignore-host", false, "skip hostname recognition; identify by endpoints and listing shape only")
 	twoHop := fs.Bool("two-hop", true, "follow a LiteLLM proxy to its upstream deployment (GET /model/info) for family/reasoning evidence; set =false to disable")
-	doVerify := fs.Bool("verify", false, "after detection send the binding verifier and capability probes (inference requests) to the one model -model selects, ignoring MODEL_API_VERIFY_BINDINGS / MODEL_API_PROBE_CAPABILITIES / MODEL_API_PROBE_HOSTED")
+	doVerify := fs.Bool("verify", false, "after detection send the binding verifier and capability probes (inference requests) to the one model -model selects, ignoring MODEL_API_VERIFY_BINDINGS / MODEL_API_PROBE_CAPABILITIES")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0

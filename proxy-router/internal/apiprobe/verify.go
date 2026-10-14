@@ -23,8 +23,7 @@ import (
 // response metadata. An account or rate-limit status (401, 402, 403, 429)
 // is unknown before the body is read: it judges the caller, not the
 // feature. Fold turns the verdicts into apispec.Runtime, which MergeRuntime
-// publishes; the caller owns pacing, the once-per-TTL state and the
-// hosted-vendor gate.
+// publishes; the caller owns pacing and the once-per-TTL state.
 
 // Probe names: the verify:<what>@<at> evidence sources (contract §1) except
 // ProbeReasoningDisable and ProbeRender, whose verdicts land on a binding

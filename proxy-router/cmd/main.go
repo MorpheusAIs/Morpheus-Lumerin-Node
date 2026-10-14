@@ -411,7 +411,6 @@ func start() error {
 			// cost tokens on the provider's backend.
 			VerifyBindings:    cfg.Proxy.ModelApiVerifyBindings,
 			ProbeCapabilities: cfg.Proxy.ModelApiProbeCapabilities,
-			ProbeHosted:       cfg.Proxy.ModelApiProbeHosted,
 		}, cfg.Proxy.ModelHealthCheckInterval, cfg.Proxy.ModelHealthCheckTimeout, cfg.Proxy.ModelHealthCheckProbeDelay, cfg.Proxy.ModelHealthMaxConsecErrors, appLog)
 		modelHealthReporter = modelHealthChecker
 	}

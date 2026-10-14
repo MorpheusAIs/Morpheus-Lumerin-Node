@@ -85,9 +85,8 @@ type Config struct {
 		ModelApiDetectTTL          time.Duration `env:"MODEL_API_DETECT_TTL" flag:"model-api-detect-ttl" validate:"omitempty,duration" desc:"how long a detected api block and a registry model listing are reused before the backend is probed again; default MODEL_HEALTH_CHECK_INTERVAL (one detection per sweep), minimum 1m"`
 		// Inference-traffic probes (design contract §5) send max_tokens: 1 chat
 		// requests to the backend and so cost tokens; each is opt-in.
-		ModelApiVerifyBindings    bool `env:"MODEL_API_VERIFY_BINDINGS" flag:"model-api-verify-bindings" desc:"after a healthy probe, one completed run per MODEL_API_DETECT_TTL (a run a 401/402/403/429 stops is resumed once, next sweep), resend the probe with the reasoning.disable binding applied and with a dummy tool to verify the advertised binding and tool support; max_tokens 1 inference requests; self-hosted stacks only unless MODEL_API_PROBE_HOSTED; default false"`
-		ModelApiProbeCapabilities bool `env:"MODEL_API_PROBE_CAPABILITIES" flag:"model-api-probe-capabilities" desc:"after a healthy probe, one completed run per MODEL_API_DETECT_TTL (a run a 401/402/403/429 stops is resumed once, next sweep), send max_tokens 1 requests with response_format json_schema and a 1x1 image, and on vLLM render the chat template with and without the reasoning kwarg, to establish structured, image input and template bindings; self-hosted stacks only unless MODEL_API_PROBE_HOSTED; default false"`
-		ModelApiProbeHosted       bool `env:"MODEL_API_PROBE_HOSTED" flag:"model-api-probe-hosted" desc:"let MODEL_API_VERIFY_BINDINGS and MODEL_API_PROBE_CAPABILITIES also send their requests to hosted vendors and gateways (openai, anthropic, openrouter, venice, litellm, ...), which bill per request; default false"`
+		ModelApiVerifyBindings    bool `env:"MODEL_API_VERIFY_BINDINGS" flag:"model-api-verify-bindings" desc:"after a healthy probe, one completed run per MODEL_API_DETECT_TTL (a run a 401/402/403/429 stops is resumed once, next sweep), resend the probe with the reasoning.disable binding applied and with a dummy tool to verify the advertised binding and tool support; max_tokens 1 inference requests to every backend, hosted vendors and gateways included (billed per request); default false"`
+		ModelApiProbeCapabilities bool `env:"MODEL_API_PROBE_CAPABILITIES" flag:"model-api-probe-capabilities" desc:"after a healthy probe, one completed run per MODEL_API_DETECT_TTL (a run a 401/402/403/429 stops is resumed once, next sweep), send max_tokens 1 requests with response_format json_schema and a 1x1 image, and on vLLM render the chat template with and without the reasoning kwarg, to establish structured, image input and template bindings; every backend, hosted vendors and gateways included (billed per request); default false"`
 		// SessionHealthPolicy is the consumer-side strictness towards provider
 		// model health self-reports when opening a session by model ID.
 		// Single-bid opens always force permissive (healthPolicySingleBid is
@@ -350,7 +349,6 @@ func (cfg *Config) GetSanitized() interface{} {
 	publicCfg.Proxy.ModelApiDetectTTL = cfg.Proxy.ModelApiDetectTTL
 	publicCfg.Proxy.ModelApiVerifyBindings = cfg.Proxy.ModelApiVerifyBindings
 	publicCfg.Proxy.ModelApiProbeCapabilities = cfg.Proxy.ModelApiProbeCapabilities
-	publicCfg.Proxy.ModelApiProbeHosted = cfg.Proxy.ModelApiProbeHosted
 	publicCfg.Proxy.SessionHealthPolicy = cfg.Proxy.SessionHealthPolicy
 
 	publicCfg.System.Enable = cfg.System.Enable

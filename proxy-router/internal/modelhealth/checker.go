@@ -197,11 +197,10 @@ type Deps struct {
 	// contract §5, verifier).
 	VerifyBindings bool
 	// ProbeCapabilities is MODEL_API_PROBE_CAPABILITIES: the json_schema,
-	// image and vLLM render probes on the same schedule.
+	// image and vLLM render probes on the same schedule. Both switches reach
+	// every backend, hosted vendors and gateways included, which bill per
+	// request.
 	ProbeCapabilities bool
-	// ProbeHosted is MODEL_API_PROBE_HOSTED: let those requests reach hosted
-	// vendors and gateways, which bill per request.
-	ProbeHosted bool
 }
 
 func NewChecker(deps Deps, interval, timeout, probeDelay time.Duration, maxConsecutiveErrors int, log lib.ILogger) *Checker {
@@ -647,12 +646,10 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 
 // verify runs the verifier and the capability probes (design contract §5)
 // for a model whose probe just passed, when the flags allow: one completed
-// run per TTL per (model, spec), each request paced by probeDelay, and
-// never against a hosted vendor, a gateway, an upstream reached through one
-// (Via) or a backend detection could not name (a hosted vendor behind an
-// unrecognised host is the likely case) unless MODEL_API_PROBE_HOSTED; the
-// unknown stack is among the tools-probe targets of contract §5 b, so the
-// switch reaches it. The spec the probes are chosen from carries the
+// run per TTL per (model, spec), each request paced by probeDelay, against
+// every backend the probe reached — a hosted vendor, a gateway, an upstream
+// reached through one (Via) and a backend detection could not name
+// included. The spec the probes are chosen from carries the
 // runtime evidence already established, so a binding an earlier sweep saw
 // rejected is not sent again; the once-per-TTL key hashes the detection
 // result itself, which is stable across sweeps. A run cut short by the
@@ -663,9 +660,6 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 // resumes it once and asks the rest (runtimeStore.recordVerify).
 func (c *Checker) verify(ctx context.Context, modelID common.Hash, cfg config.ModelConfig, api *system.ModelApiSpec, adapter aiengine.AIEngineStream) {
 	if !c.deps.VerifyBindings && !c.deps.ProbeCapabilities {
-		return
-	}
-	if (api.Stack == "" || api.Via != "" || apispec.IsHostedOrGatewayStack(api.Stack)) && !c.deps.ProbeHosted {
 		return
 	}
 	id := modelID.Hex()
