@@ -78,7 +78,7 @@ func bearerHeader(apiKey string) map[string]string {
 
 // vendorGet fetches a JSON document with exactly the given headers: vendor
 // auth schemes (x-api-key, x-goog-api-key) and top-level arrays (Together)
-// are outside requestJSONStatus. A non-2xx status, an oversized body and a
+// are outside requestJSON. A non-2xx status, an oversized body and a
 // non-JSON body are each one trace line and a nil document.
 func (d *Detector) vendorGet(ctx context.Context, urlStr string, headers map[string]string, limit int64) any {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlStr, nil)

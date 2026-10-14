@@ -10,11 +10,12 @@ import (
 // LM Studio serves two listings. /api/v1/models (0.4.0+) carries the served
 // context of each loaded instance and the trained capabilities; /api/v0/models
 // is the legacy listing kept as the identification fallback. Authentication
-// is off by default, so both are requested key-free first (§0).
+// is off by default; the key still goes with both, as with the rest of
+// detection, so an auth proxy in front of LM Studio lets the probe in.
 // https://lmstudio.ai/docs/developer/rest/list
 // https://lmstudio.ai/docs/developer/rest/endpoints
 func (d *Detector) probeLMStudio(ctx context.Context, base, modelName, apiKey string, ev *apispec.Evidence) bool {
-	if list := d.getJSONKeyFree(ctx, base+"/api/v1/models", apiKey); list != nil {
+	if list := d.getJSON(ctx, base+"/api/v1/models", apiKey); list != nil {
 		if models, ok := list["models"].([]any); ok {
 			ev.Stack = "lmstudio"
 			tracef(ctx, "identified lmstudio by /api/v1/models")
@@ -31,7 +32,7 @@ func (d *Detector) probeLMStudio(ctx context.Context, base, modelName, apiKey st
 		}
 	}
 
-	list := d.getJSONKeyFree(ctx, base+"/api/v0/models", apiKey)
+	list := d.getJSON(ctx, base+"/api/v0/models", apiKey)
 	if list == nil {
 		return false
 	}

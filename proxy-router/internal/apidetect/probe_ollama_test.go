@@ -135,7 +135,7 @@ func TestProbeOllamaShowDocsSample(t *testing.T) {
 	require.Contains(t, trace, "ollama /api/ps does not list the configured model as loaded; context stays as configured")
 
 	for _, path := range []string{"/api/tags", "/api/show", "/api/ps"} {
-		require.Equal(t, []string{""}, f.authSeen(path), "%s is a local API: no key unless it asks", path)
+		require.Equal(t, []string{"Bearer secret"}, f.authSeen(path), "%s carries the configured key", path)
 	}
 }
 
@@ -472,9 +472,9 @@ func TestProbeOllamaRejectsOddArchitectureKey(t *testing.T) {
 	}
 }
 
-// A proxy in front of Ollama that guards every path: each request is
-// repeated with the key exactly once.
-func TestProbeOllamaRetriesWithKeyOnUnauthorized(t *testing.T) {
+// A proxy in front of Ollama that guards every path: each request carries
+// the key, so each is answered the first time.
+func TestProbeOllamaSendsTheKeyToAGuardedProxy(t *testing.T) {
 	calls := map[string][]string{}
 	var mu sync.Mutex
 	guarded := func(status int, body any) http.HandlerFunc {
@@ -504,13 +504,13 @@ func TestProbeOllamaRetriesWithKeyOnUnauthorized(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	for _, path := range []string{"/api/tags", "/api/show", "/api/ps"} {
-		require.Equal(t, []string{"", "Bearer secret"}, calls[path], path)
+		require.Equal(t, []string{"Bearer secret"}, calls[path], path)
 	}
 	require.Equal(t, true, *api.Capabilities.Tools)
 	require.Equal(t, int64(32768), *api.Capabilities.Context)
 }
 
-// Without a configured key a 401 is final: nothing to retry with.
+// Without a configured key no request carries one, and a 401 is final.
 func TestProbeOllamaNoKeyNoRetry(t *testing.T) {
 	var calls []string
 	var mu sync.Mutex

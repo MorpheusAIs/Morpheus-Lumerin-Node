@@ -15,12 +15,15 @@ import (
 // https://docs.vllm.ai/en/stable/features/structured_outputs.html
 var vllmStructuredKinds = []string{"json_object", "json_schema", "grammar", "regex", "choice"}
 
-// /version and /tokenize stay open when the server runs with --api-key; /v1/*
-// is guarded: https://docs.vllm.ai/en/stable/serving/openai_compatible_server.html
+// /version and /tokenize stay open when the server runs with --api-key and
+// /v1/* is guarded (https://docs.vllm.ai/en/stable/serving/openai_compatible_server.html),
+// but every request carries the model's key, like the rest of detection: an
+// auth proxy in front of the server may answer a keyless request with a 404,
+// a redirect to a login page or an HTML page, which would hide the engine.
 // Tool calling is not discoverable outside VLLM_SERVER_DEV_MODE, so no tools
 // fact is set here.
 func (d *Detector) probeVLLM(ctx context.Context, base, modelName, apiKey string, ev *apispec.Evidence) bool {
-	ver := d.getJSONKeyFree(ctx, base+"/version", apiKey)
+	ver := d.getJSON(ctx, base+"/version", apiKey)
 	if ver == nil {
 		return false
 	}
@@ -102,12 +105,7 @@ func (d *Detector) probeVLLMTokenize(ctx context.Context, base, modelName, serve
 	if err != nil {
 		return
 	}
-	urlStr := base + "/tokenize"
-	out, status := d.requestJSONStatus(ctx, http.MethodPost, urlStr, "", body, maxProbeBody)
-	if out == nil && apiKey != "" && (status == http.StatusUnauthorized || status == http.StatusForbidden) {
-		tracef(ctx, "POST %s -> HTTP %d without a key; retrying with the configured key", urlStr, status)
-		out, _ = d.requestJSONStatus(ctx, http.MethodPost, urlStr, apiKey, body, maxProbeBody)
-	}
+	out := d.requestJSON(ctx, http.MethodPost, base+"/tokenize", apiKey, body, maxProbeBody)
 	if out == nil {
 		return
 	}

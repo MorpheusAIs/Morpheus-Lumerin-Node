@@ -449,8 +449,8 @@ func TestProbeLMStudioFallsBackToV0(t *testing.T) {
 	require.Nil(t, ev.Caps.Tools)
 }
 
-func TestProbeLMStudioKeyFreeFirst(t *testing.T) {
-	t.Run("no key sent when auth is off", func(t *testing.T) {
+func TestProbeLMStudioSendsTheKey(t *testing.T) {
+	t.Run("an open server still gets the key", func(t *testing.T) {
 		var auth []string
 		mux := http.NewServeMux()
 		mux.HandleFunc("/api/v1/models", func(w http.ResponseWriter, r *http.Request) {
@@ -461,9 +461,9 @@ func TestProbeLMStudioKeyFreeFirst(t *testing.T) {
 		defer srv.Close()
 
 		probeLMStudioAt(t, srv.URL, "google/gemma-4-26b-a4b", "secret")
-		require.Equal(t, []string{""}, auth)
+		require.Equal(t, []string{"Bearer secret"}, auth)
 	})
-	t.Run("key sent only after 401", func(t *testing.T) {
+	t.Run("a guarded server answers the first request", func(t *testing.T) {
 		var auth []string
 		guarded := func(body any) http.HandlerFunc {
 			return func(w http.ResponseWriter, r *http.Request) {
@@ -481,7 +481,7 @@ func TestProbeLMStudioKeyFreeFirst(t *testing.T) {
 		defer srv.Close()
 
 		ev, _ := probeLMStudioAt(t, srv.URL, "google/gemma-4-26b-a4b", "secret")
-		require.Equal(t, []string{"", "Bearer secret"}, auth)
+		require.Equal(t, []string{"Bearer secret"}, auth)
 		require.Equal(t, int64(4096), *ev.Caps.Context)
 	})
 }

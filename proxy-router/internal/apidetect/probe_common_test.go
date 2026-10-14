@@ -2,56 +2,86 @@ package apidetect
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apispec"
 	"github.com/stretchr/testify/require"
 )
 
-func TestGetJSONKeyFree(t *testing.T) {
-	cases := []struct {
-		name        string
-		firstStatus int // answer to a request without Authorization
-		apiKey      string
-		wantAuth    []string // Authorization header of each request, in order
-		wantObject  bool
-		wantRetry   bool
+// An auth proxy in front of an engine may answer a keyless request with a
+// 404, a redirect to a login page on another host or an HTML page. Every
+// fingerprint request carries the model's key, so the proxy lets the first
+// one in and the engine is identified.
+func TestFingerprintThroughAnAuthProxy(t *testing.T) {
+	type probeFunc func(d *Detector, ctx context.Context, base string, ev *apispec.Evidence) bool
+	engines := []struct {
+		stack string
+		path  string
+		body  any
+		probe probeFunc
 	}{
-		{"open endpoint answers without a key", http.StatusOK, "k", []string{""}, true, false},
-		{"401 is retried with the key", http.StatusUnauthorized, "k", []string{"", "Bearer k"}, true, true},
-		{"403 is retried with the key", http.StatusForbidden, "k", []string{"", "Bearer k"}, true, true},
-		{"404 is final", http.StatusNotFound, "k", []string{""}, false, false},
-		{"500 is final", http.StatusInternalServerError, "k", []string{""}, false, false},
-		{"401 without a configured key is final", http.StatusUnauthorized, "", []string{""}, false, false},
+		{"vllm", "/version", map[string]any{"version": "0.30.0"}, func(d *Detector, ctx context.Context, base string, ev *apispec.Evidence) bool {
+			return d.probeVLLM(ctx, base, "m", "secret", ev)
+		}},
+		{"ollama", "/api/tags", map[string]any{"models": []any{}}, func(d *Detector, ctx context.Context, base string, ev *apispec.Evidence) bool {
+			return d.probeOllama(ctx, base, "m", "secret", ev)
+		}},
+		{"tgi", "/info", map[string]any{"model_id": "m"}, func(d *Detector, ctx context.Context, base string, ev *apispec.Evidence) bool {
+			return d.probeTGI(ctx, base, "secret", ev)
+		}},
+		{"koboldcpp", "/api/extra/version", map[string]any{"result": "KoboldCpp"}, func(d *Detector, ctx context.Context, base string, ev *apispec.Evidence) bool {
+			return d.probeKoboldCpp(ctx, base, "secret", ev)
+		}},
+		{"lmstudio", "/api/v1/models", map[string]any{"models": []any{}}, func(d *Detector, ctx context.Context, base string, ev *apispec.Evidence) bool {
+			return d.probeLMStudio(ctx, base, "m", "secret", ev)
+		}},
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			var seen []string
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				auth := r.Header.Get("Authorization")
-				seen = append(seen, auth)
-				if auth == "" && c.firstStatus != http.StatusOK {
-					w.WriteHeader(c.firstStatus)
-					return
+	walls := []struct {
+		name   string
+		refuse http.HandlerFunc
+	}{
+		{"404", http.NotFound},
+		{"a redirect to a login page", func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "https://login.example.invalid/", http.StatusFound)
+		}},
+		{"an HTML page", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte("<html>sign in</html>"))
+		}},
+	}
+	for _, e := range engines {
+		for _, wall := range walls {
+			t.Run(e.stack+" behind "+wall.name, func(t *testing.T) {
+				var mu sync.Mutex
+				var auth []string
+				srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					mu.Lock()
+					auth = append(auth, r.Header.Get("Authorization"))
+					mu.Unlock()
+					switch {
+					case r.Header.Get("Authorization") != "Bearer secret":
+						wall.refuse(w, r)
+					case r.URL.Path == e.path:
+						jsonHandler(e.body)(w, r)
+					default:
+						http.NotFound(w, r)
+					}
+				}))
+				defer srv.Close()
+
+				var ev apispec.Evidence
+				require.True(t, e.probe(newTestDetector(), context.Background(), srv.URL, &ev))
+				require.Equal(t, e.stack, ev.Stack)
+				mu.Lock()
+				defer mu.Unlock()
+				for i, a := range auth {
+					require.Equal(t, "Bearer secret", a, "request %d", i)
 				}
-				jsonHandler(map[string]any{"version": "1"})(w, r)
-			}))
-			defer srv.Close()
-
-			ctx, trace := withTrace(context.Background())
-			out := newTestDetector().getJSONKeyFree(ctx, srv.URL+"/version", c.apiKey)
-			require.Equal(t, c.wantAuth, seen)
-			require.Equal(t, c.wantObject, out != nil)
-
-			retryLine := fmt.Sprintf("GET %s/version -> HTTP %d without a key; retrying with the configured key", srv.URL, c.firstStatus)
-			if c.wantRetry {
-				require.Contains(t, trace.lines, retryLine)
-			} else {
-				require.NotContains(t, trace.lines, retryLine)
-			}
-		})
+			})
+		}
 	}
 }
 

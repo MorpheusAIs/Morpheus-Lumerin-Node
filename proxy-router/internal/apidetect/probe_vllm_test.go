@@ -114,12 +114,7 @@ func TestProbeVLLMGuardedModelsListFallsBackToTokenize(t *testing.T) {
 		log.mu.Lock()
 		defer log.mu.Unlock()
 		for i, p := range log.paths {
-			switch p {
-			case "/version", "/tokenize":
-				require.Equal(t, "", log.auth[i], "%s is documented open: requested without a key", p)
-			case "/v1/models":
-				require.Equal(t, "Bearer not-the-operator-key", log.auth[i], "/v1/models keeps the key")
-			}
+			require.Equal(t, "Bearer not-the-operator-key", log.auth[i], "%s carries the configured key", p)
 		}
 	})
 
@@ -155,7 +150,7 @@ func TestProbeVLLMLegacyListingWithoutMaxModelLen(t *testing.T) {
 	log.requireAnonymous(t)
 }
 
-func TestProbeVLLMTokenizeGuardedRetriesWithKey(t *testing.T) {
+func TestProbeVLLMTokenizeGuardedGetsTheKey(t *testing.T) {
 	var tokenized []string
 	mux := http.NewServeMux()
 	mux.HandleFunc("/version", jsonHandler(map[string]any{"version": "0.30.0"}))
@@ -169,7 +164,7 @@ func TestProbeVLLMTokenizeGuardedRetriesWithKey(t *testing.T) {
 
 	require.EqualValues(t, 4096, *api.Capabilities.Context)
 	require.Equal(t, "vllm:/tokenize.max_model_len", api.Evidence[system.EvidenceKeyCapability("context")])
-	require.Contains(t, trace, "POST "+srv.URL+"/tokenize -> HTTP 401 without a key; retrying with the configured key")
+	require.NotContains(t, trace, "HTTP 401")
 
 	var tokenizeAuth []string
 	log.mu.Lock()
@@ -179,7 +174,7 @@ func TestProbeVLLMTokenizeGuardedRetriesWithKey(t *testing.T) {
 		}
 	}
 	log.mu.Unlock()
-	require.Equal(t, []string{"", "Bearer " + vllmTestKey}, tokenizeAuth, "key-free first, the key only after a 401")
+	require.Equal(t, []string{"Bearer " + vllmTestKey}, tokenizeAuth, "one request, with the key")
 }
 
 func TestProbeVLLMNothingKnownLeavesContextUnset(t *testing.T) {

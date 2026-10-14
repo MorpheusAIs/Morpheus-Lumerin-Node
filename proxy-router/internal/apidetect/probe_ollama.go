@@ -29,10 +29,11 @@ const (
 // is not echoed into a source string.
 var ollamaArchRe = regexp.MustCompile(`^[a-z0-9_-]{1,32}$`)
 
-// The local API has no auth (plan §6.A), so every request goes out without
-// the key and repeats with it only after a 401/403 from a fronting proxy.
+// The local API has no auth of its own; every request still carries the
+// model's key, as with the rest of detection, for an auth proxy in front of
+// Ollama.
 func (d *Detector) probeOllama(ctx context.Context, base, modelName, apiKey string, ev *apispec.Evidence) bool {
-	tags := d.getJSONKeyFree(ctx, base+"/api/tags", apiKey)
+	tags := d.getJSON(ctx, base+"/api/tags", apiKey)
 	if tags == nil {
 		return false
 	}
@@ -49,10 +50,10 @@ func (d *Detector) probeOllama(ctx context.Context, base, modelName, apiKey stri
 	return true
 }
 
-// Key-free first like the GETs: the local API has no auth (plan §6.A).
+// /api/show is a POST; it carries the key like the GETs.
 func (d *Detector) ollamaShow(ctx context.Context, base, modelName, apiKey string) map[string]any {
 	body, _ := json.Marshal(map[string]string{"model": modelName, "name": modelName})
-	return d.requestJSONKeyFree(ctx, http.MethodPost, base+"/api/show", apiKey, body)
+	return d.requestJSON(ctx, http.MethodPost, base+"/api/show", apiKey, body, maxProbeBody)
 }
 
 func ollamaShowFacts(ctx context.Context, show map[string]any, ev *apispec.Evidence) {
@@ -191,9 +192,8 @@ func ollamaThinkingFacts(ctx context.Context, thinking map[string]any, ev *apisp
 // The loaded window beats whatever the Modelfile configured: Ollama sizes
 // num_ctx at load time from OLLAMA_CONTEXT_LENGTH and free VRAM,
 // https://github.com/ollama/ollama/blob/v0.34.4/docs/context-length.mdx.
-// The local API has no auth, so the key follows only a 401/403.
 func (d *Detector) probeOllamaLoaded(ctx context.Context, base, modelName, apiKey string, ev *apispec.Evidence) {
-	ps := d.getJSONKeyFree(ctx, base+"/api/ps", apiKey)
+	ps := d.getJSON(ctx, base+"/api/ps", apiKey)
 	if ps == nil {
 		return
 	}

@@ -7,12 +7,13 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apispec"
 )
 
-// KoboldCpp guards no GET, so every request here goes key-free first (§0).
+// KoboldCpp guards no GET; the key still goes with every request, as with
+// the rest of detection, so an auth proxy in front of it lets the probe in.
 // The vision / audio flags are documented as "not always correct" upstream;
 // they are still the backend's own report and are published as such.
 // https://github.com/LostRuins/koboldcpp/blob/v1.121/koboldcpp.py
 func (d *Detector) probeKoboldCpp(ctx context.Context, base, apiKey string, ev *apispec.Evidence) bool {
-	ver := d.getJSONKeyFree(ctx, base+"/api/extra/version", apiKey)
+	ver := d.getJSON(ctx, base+"/api/extra/version", apiKey)
 	if ver == nil {
 		return false
 	}
@@ -38,7 +39,7 @@ func (d *Detector) probeKoboldCpp(ctx context.Context, base, apiKey string, ev *
 		tracef(ctx, "koboldcpp /api/extra/version embeddings %v -> embeddings", v)
 	}
 
-	if maxCtx := d.getJSONKeyFree(ctx, base+"/api/extra/true_max_context_length", apiKey); maxCtx != nil {
+	if maxCtx := d.getJSON(ctx, base+"/api/extra/true_max_context_length", apiKey); maxCtx != nil {
 		if v, ok := jsonPositiveInt(maxCtx["value"]); ok && ev.Caps.SetContext(v, "koboldcpp:/api/extra/true_max_context_length.value") {
 			tracef(ctx, "koboldcpp /api/extra/true_max_context_length value %d -> context", v)
 		}

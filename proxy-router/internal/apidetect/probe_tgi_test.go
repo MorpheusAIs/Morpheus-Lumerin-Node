@@ -110,8 +110,8 @@ func TestProbeTGIWithoutTotalSetsNothing(t *testing.T) {
 	}
 }
 
-func TestProbeTGIKeyFreeFirst(t *testing.T) {
-	t.Run("no key sent to the open /info", func(t *testing.T) {
+func TestProbeTGISendsTheKey(t *testing.T) {
+	t.Run("the open /info still gets the key", func(t *testing.T) {
 		var auth []string
 		mux := http.NewServeMux()
 		mux.HandleFunc("/info", func(w http.ResponseWriter, r *http.Request) {
@@ -122,9 +122,9 @@ func TestProbeTGIKeyFreeFirst(t *testing.T) {
 		defer srv.Close()
 
 		probeTGIAt(t, srv.URL, "secret")
-		require.Equal(t, []string{""}, auth)
+		require.Equal(t, []string{"Bearer secret"}, auth)
 	})
-	t.Run("key sent only after 403", func(t *testing.T) {
+	t.Run("a guarded /info answers the first request", func(t *testing.T) {
 		var auth []string
 		mux := http.NewServeMux()
 		mux.HandleFunc("/info", func(w http.ResponseWriter, r *http.Request) {
@@ -139,7 +139,7 @@ func TestProbeTGIKeyFreeFirst(t *testing.T) {
 		defer srv.Close()
 
 		ev, _ := probeTGIAt(t, srv.URL, "secret")
-		require.Equal(t, []string{"", "Bearer secret"}, auth)
+		require.Equal(t, []string{"Bearer secret"}, auth)
 		require.Equal(t, int64(4096), *ev.Caps.Context)
 	})
 }

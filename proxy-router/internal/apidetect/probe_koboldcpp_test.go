@@ -121,7 +121,7 @@ func TestProbeKoboldCppIgnoresWrongTypedFlags(t *testing.T) {
 	require.Equal(t, map[string]string{apispec.CapFieldContext: "koboldcpp:/api/extra/true_max_context_length.value"}, ev.Caps.Sources)
 }
 
-func TestProbeKoboldCppSendsNoKeyToOpenGETs(t *testing.T) {
+func TestProbeKoboldCppSendsTheKey(t *testing.T) {
 	var auth []string
 	record := func(body any) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
@@ -136,7 +136,7 @@ func TestProbeKoboldCppSendsNoKeyToOpenGETs(t *testing.T) {
 	defer srv.Close()
 
 	ev, _ := probeKoboldAt(t, srv.URL, "secret")
-	require.Equal(t, []string{"", ""}, auth)
+	require.Equal(t, []string{"Bearer secret", "Bearer secret"}, auth)
 	require.Equal(t, int64(4096), *ev.Caps.Context)
 }
 

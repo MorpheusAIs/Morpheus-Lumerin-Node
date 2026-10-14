@@ -45,39 +45,14 @@ func (d *Detector) getJSON(ctx context.Context, urlStr, apiKey string) map[strin
 	return d.requestJSON(ctx, http.MethodGet, urlStr, apiKey, nil, maxProbeBody)
 }
 
-// For endpoints the engine documents as open: the key is sent only after the
-// backend demanded one (401/403), so a bearer never reaches a path that did
-// not ask for it. Any other failure is final.
-func (d *Detector) getJSONKeyFree(ctx context.Context, urlStr, apiKey string) map[string]any {
-	return d.requestJSONKeyFree(ctx, http.MethodGet, urlStr, apiKey, nil)
-}
-
-// requestJSONKeyFree is getJSONKeyFree for any method and body (Ollama's
-// /api/show is a POST on an API that has no auth of its own).
-func (d *Detector) requestJSONKeyFree(ctx context.Context, method, urlStr, apiKey string, body []byte) map[string]any {
-	out, status := d.requestJSONStatus(ctx, method, urlStr, "", body, maxProbeBody)
-	if out != nil || apiKey == "" || (status != http.StatusUnauthorized && status != http.StatusForbidden) {
-		return out
-	}
-	tracef(ctx, "%s %s -> HTTP %d without a key; retrying with the configured key", method, urlStr, status)
-	out, _ = d.requestJSONStatus(ctx, method, urlStr, apiKey, body, maxProbeBody)
-	return out
-}
-
 func (d *Detector) requestJSON(ctx context.Context, method, urlStr, apiKey string, body []byte, limit int64) map[string]any {
-	out, _ := d.requestJSONStatus(ctx, method, urlStr, apiKey, body, limit)
-	return out
-}
-
-// The status is 0 when no response arrived.
-func (d *Detector) requestJSONStatus(ctx context.Context, method, urlStr, apiKey string, body []byte, limit int64) (map[string]any, int) {
 	var reader io.Reader
 	if body != nil {
 		reader = bytes.NewReader(body)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, urlStr, reader)
 	if err != nil {
-		return nil, 0
+		return nil
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -89,12 +64,12 @@ func (d *Detector) requestJSONStatus(ctx context.Context, method, urlStr, apiKey
 	resp, err := d.clientFor(ctx).Do(req)
 	if err != nil {
 		tracef(ctx, "%s %s -> %v", method, urlStr, err)
-		return nil, 0
+		return nil
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		tracef(ctx, "%s %s -> HTTP %d", method, urlStr, resp.StatusCode)
-		return nil, resp.StatusCode
+		return nil
 	}
 
 	limited := &countingReader{r: io.LimitReader(resp.Body, limit)}
@@ -105,10 +80,10 @@ func (d *Detector) requestJSONStatus(ctx context.Context, method, urlStr, apiKey
 		} else {
 			tracef(ctx, "%s %s -> HTTP %d, but not a JSON object: %v", method, urlStr, resp.StatusCode, err)
 		}
-		return nil, resp.StatusCode
+		return nil
 	}
 	tracef(ctx, "%s %s -> HTTP %d, JSON object with keys %s", method, urlStr, resp.StatusCode, tracedKeys(mapKeys(out)))
-	return out, resp.StatusCode
+	return out
 }
 
 type countingReader struct {

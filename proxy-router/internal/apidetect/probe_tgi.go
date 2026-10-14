@@ -7,7 +7,8 @@ import (
 )
 
 // TGI leaves /info open even with an API key (the key covers generate / chat
-// only), so it is requested key-free first (§0). max_total_tokens is the
+// only); the key still goes with it, as with the rest of detection, so an
+// auth proxy in front of TGI lets the probe in. max_total_tokens is the
 // served window (prompt + completion). max_input_tokens is not published as
 // anything: max_total_tokens - max_input_tokens is the completion budget left
 // at the longest prompt (router/src/validation.rs caps max_new_tokens at
@@ -16,7 +17,7 @@ import (
 // max_input_tokens = max_total_tokens - 1 it is 1 (contract amendment a).
 // https://github.com/huggingface/text-generation-inference/blob/v3.3.7/router/src/lib.rs
 func (d *Detector) probeTGI(ctx context.Context, base, apiKey string, ev *apispec.Evidence) bool {
-	info := d.getJSONKeyFree(ctx, base+"/info", apiKey)
+	info := d.getJSON(ctx, base+"/info", apiKey)
 	if info == nil {
 		return false
 	}
