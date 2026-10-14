@@ -4,7 +4,7 @@ module.exports.main = async function main({ github, context, core }) {
   const pr = context.payload.pull_request
   const base = pr.base.ref
   const body = pr.body || ''
-  const promote = /^promote:/i.test(pr.title || '') && (base === 'test' || base === 'main')
+  const promote = /^(promote:|release\b)/i.test(pr.title || '') && (base === 'test' || base === 'main')
 
   if (context.payload.action !== 'closed') {
     await syncNeedsIssueLabel({ github, context, core, owner, repo, pr, base, body, promote })

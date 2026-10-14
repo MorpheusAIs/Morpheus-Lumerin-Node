@@ -27,12 +27,13 @@ jobs:
           case "$BASE" in
             test|main)
               case "$title_lc" in
-                promote:*) exit 0 ;;
+                promote:*|release*) exit 0 ;;
               esac
               ;;
           esac
           echo "Feature and fix pull requests target dev."
           echo "A promote pull request targets test or main and its title starts with 'promote:'."
+          echo "A release pull request targets main and its title starts with 'Release'."
           exit 1
 
   track:

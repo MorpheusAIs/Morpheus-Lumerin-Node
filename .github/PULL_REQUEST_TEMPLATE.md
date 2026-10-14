@@ -19,7 +19,7 @@ Refs #
 ## Base branch
 
 - [ ] This PR targets **`dev`** (required for feature/docs/fix PRs)
-- [ ] This is a **maintainer promote** into `test` or `main` (title starts with `promote:`)
+- [ ] This is a **maintainer promote** into `test` or `main` (title starts with `promote:`), or a **release** into `main` (title starts with `Release`)
 
 ## Test plan
 
