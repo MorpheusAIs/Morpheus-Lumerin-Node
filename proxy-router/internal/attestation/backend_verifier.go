@@ -198,10 +198,17 @@ func (bv *BackendVerifier) AttestBackend(ctx context.Context, modelID string, at
 		return fmt.Errorf("workload verification failed for model %s: could not fetch docker-compose: %w", modelID, composeErr)
 	}
 
-	workloadResult := VerifyWorkload(bv.artifactRegistry, bv.sevRegistry, cpuQuote, dockerCompose, bv.log)
+	// Newer SecretVM images (dstack KMS) fold a per-VM app-id into RTMR3; it
+	// is read from /info and only matters for TDX. "" keeps the legacy replay.
+	if cpuResult.Type == TEETypeTDX {
+		cpuResult.DstackAppID = FetchDstackAppID(ctx, bv.attestationClient, attestationURL)
+		bv.log.Infof("backend attestation: TDX RTMR3 scheme for model %s: %s (app_id=%q)", modelID, RTMR3SchemeFor(cpuResult.DstackAppID), cpuResult.DstackAppID)
+	}
+
+	workloadResult := VerifyWorkload(bv.artifactRegistry, bv.sevRegistry, cpuQuote, dockerCompose, cpuResult.DstackAppID, bv.log)
 	switch workloadResult.Status {
 	case WorkloadAuthentic:
-		bv.log.Infof("backend attestation: workload verified for model %s (template=%s, version=%s, env=%s)", modelID, workloadResult.TemplateName, workloadResult.ArtifactsVer, workloadResult.Env)
+		bv.log.Infof("backend attestation: workload verified for model %s (template=%s, version=%s, env=%s, rtmr3_scheme=%s)", modelID, workloadResult.TemplateName, workloadResult.ArtifactsVer, workloadResult.Env, workloadResult.RTMR3Scheme)
 	case WorkloadAuthenticMismatch:
 		bv.storeFailure(modelID, attestationURL, "docker-compose does not match attestation (authentic VM but wrong workload)")
 		return fmt.Errorf("workload verification failed for model %s: docker-compose does not match attestation", modelID)
@@ -268,6 +275,9 @@ func (bv *BackendVerifier) AttestBackend(ctx context.Context, modelID string, at
 		return fmt.Errorf("failed to fetch golden values for model %s: %w", modelID, err)
 	}
 	if golden != nil {
+		if cpuResult.Type == TEETypeSEV && cpuResult.SEVTemplate == "" {
+			cpuResult.SEVTemplate = workloadResult.TemplateName
+		}
 		if err := CompareRegisters(cpuResult, golden, bv.log); err != nil {
 			bv.storeFailure(modelID, attestationURL, fmt.Sprintf("register mismatch: %s", err))
 			return err

@@ -23,7 +23,7 @@ const docTemplate = `{
                         "BasicAuth": []
                     }
                 ],
-                "description": "Permission: agent_requests",
+                "description": "Permission: agent_requests, and the caller must have full access (\"*\"): allowances are spending caps, so only the operator approves them. Other callers return 403.",
                 "produces": [
                     "application/json"
                 ],
@@ -47,6 +47,12 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/authapi.AuthRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/authapi.ErrorRes"
                         }
                     }
                 }
@@ -82,7 +88,7 @@ const docTemplate = `{
                         "BasicAuth": []
                     }
                 ],
-                "description": "Permission: request_allowance",
+                "description": "Permission: request_allowance. A caller without full access (\"*\") may only request an allowance for its own username; other usernames return 403.",
                 "produces": [
                     "application/json"
                 ],
@@ -107,6 +113,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/authapi.AuthRes"
                         }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/authapi.ErrorRes"
+                        }
                     }
                 }
             }
@@ -118,7 +130,7 @@ const docTemplate = `{
                         "BasicAuth": []
                     }
                 ],
-                "description": "Permission: agent_requests",
+                "description": "Permission: agent_requests, and the caller must have full access (\"*\"): allowances are spending caps, so only the operator changes them. Other callers return 403.",
                 "produces": [
                     "application/json"
                 ],
@@ -142,6 +154,12 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/authapi.AuthRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/authapi.ErrorRes"
                         }
                     }
                 }
@@ -190,7 +208,7 @@ const docTemplate = `{
                         "BasicAuth": []
                     }
                 ],
-                "description": "Permission: add_user",
+                "description": "Permission: add_user. A caller without full access (\"*\") may only create or update users whose permissions are a subset of its own, may not grant \"*\", and may not touch admin; such requests return 403.",
                 "produces": [
                     "application/json"
                 ],
@@ -215,6 +233,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/authapi.AuthRes"
                         }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/authapi.ErrorRes"
+                        }
                     }
                 }
             },
@@ -224,7 +248,7 @@ const docTemplate = `{
                         "BasicAuth": []
                     }
                 ],
-                "description": "Permission: remove_user",
+                "description": "Permission: remove_user. admin can never be removed. A caller without full access (\"*\") may only remove users whose permissions are a subset of its own; such requests return 403.",
                 "produces": [
                     "application/json"
                 ],
@@ -249,6 +273,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/authapi.AuthRes"
                         }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/authapi.ErrorRes"
+                        }
                     }
                 }
             }
@@ -260,7 +290,7 @@ const docTemplate = `{
                         "BasicAuth": []
                     }
                 ],
-                "description": "Permission: agent_requests",
+                "description": "Permission: agent_requests. Confirming grants the perms the agent asked for, so a caller without full access (\"*\") may only confirm requests whose perms are a subset of its own; such requests return 403.",
                 "produces": [
                     "application/json"
                 ],
@@ -284,6 +314,12 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/authapi.AuthRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/authapi.ErrorRes"
                         }
                     }
                 }
@@ -3538,6 +3574,9 @@ const docTemplate = `{
         "aiengine.LocalModel": {
             "type": "object",
             "properties": {
+                "apiStack": {
+                    "type": "string"
+                },
                 "apiType": {
                     "type": "string"
                 },
@@ -3788,6 +3827,14 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "authapi.ErrorRes": {
+            "type": "object",
+            "properties": {
+                "error": {
                     "type": "string"
                 }
             }
@@ -5376,9 +5423,63 @@ const docTemplate = `{
                 }
             }
         },
+        "system.ModelApiSpec": {
+            "type": "object",
+            "properties": {
+                "bindings": {
+                    "description": "Bindings maps canonical request intents to how this backend expresses\nthem; an absent intent cannot be expressed.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/system.ParamBinding"
+                    }
+                },
+                "declaredAt": {
+                    "type": "integer"
+                },
+                "modelFamily": {
+                    "description": "ModelFamily is the canonical model family (qwen3, deepseek-r1, claude, ...).",
+                    "type": "string"
+                },
+                "parameters": {
+                    "description": "Parameters lists the request parameters the stack documents as accepted,\nin its own vocabulary: OpenAI chat-completions names, or Anthropic\nMessages names for anthropic. Behind LiteLLM, narrowed to what LiteLLM\nsupports for the model.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "source": {
+                    "description": "Source is declared (models-config apiStack preset) or detected (runtime\nprobing of the backend's service endpoints).",
+                    "type": "string"
+                },
+                "stack": {
+                    "description": "Stack is the serving stack or vendor: vllm | sglang | llamacpp | ollama |\nvenice | openrouter | litellm | anthropic | openai, or a detected engine or\nhosted vendor without a bindings table (tgi, lmstudio, koboldcpp, groq,\ntogether, ...). With Via set, Stack is the upstream behind the gateway and\nBindings use that upstream's vocabulary.",
+                    "type": "string"
+                },
+                "thinking": {
+                    "description": "Thinking summarizes reasoning controllability; the knobs are in Bindings.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/system.ThinkingSpec"
+                        }
+                    ]
+                },
+                "via": {
+                    "description": "Via is the gateway in front of Stack when detection identified the\nupstream behind it; today only \"litellm\". Absent when the backend is\nreached directly or the upstream is unknown (then Stack is the gateway).",
+                    "type": "string"
+                }
+            }
+        },
         "system.ModelHealthReport": {
             "type": "object",
             "properties": {
+                "api": {
+                    "description": "Api describes the API serving this model: stack, model family, thinking\ncontrol and request-param bindings. Never carries the backend URL, key or\nhostname. Absent when nothing is known.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/system.ModelApiSpec"
+                        }
+                    ]
+                },
                 "bidId": {
                     "type": "string"
                 },
@@ -5438,6 +5539,34 @@ const docTemplate = `{
                 }
             }
         },
+        "system.ParamBinding": {
+            "type": "object",
+            "properties": {
+                "enumValues": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "hint": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "param": {
+                    "description": "dotted path within the mechanism",
+                    "type": "string"
+                },
+                "paramType": {
+                    "description": "boolean | number | enum | string | object | array",
+                    "type": "string"
+                },
+                "value": {
+                    "description": "Value is the fixed value realizing the intent; nil when the caller\nsupplies it."
+                }
+            }
+        },
         "system.SetEthNodeURLReq": {
             "type": "object",
             "required": [
@@ -5456,6 +5585,15 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "system.ThinkingSpec": {
+            "type": "object",
+            "properties": {
+                "mode": {
+                    "description": "always_on (cannot be disabled) | controllable (reasoning.disable/enable bindings) | tunable (effort/budget bindings only)",
                     "type": "string"
                 }
             }

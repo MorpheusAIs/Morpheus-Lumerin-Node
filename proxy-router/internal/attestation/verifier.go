@@ -182,9 +182,18 @@ type AttestationResult struct {
 	RTMR1 string
 	RTMR2 string
 	RTMR3 string
+	// DstackAppID is the VM's self-reported dstack app-id (GET /info),
+	// normalized hex, or "" for pre-dstack images. On TDX it selects the
+	// RTMR3 replay scheme used by CompareRegisters; it is not itself attested
+	// until a replay that includes it reproduces the quote's RTMR3.
+	DstackAppID string
 
 	// SEV-SNP registers
 	Measurement string
+	// SEVTemplate is the SecretVM size ("small", "medium", ...) named by the
+	// quote's family_id, when present. It selects the per-template golden
+	// launch digest; empty means "match any published template".
+	SEVTemplate string
 
 	ReportData string
 }
@@ -295,6 +304,17 @@ func (v *Verifier) VerifyProvider(ctx context.Context, providerEndpoint string, 
 	}
 
 	v.log.Infof("TLS certificate matches reportdata via %s digest (anti-spoofing check passed)", bindingKind)
+
+	if result.Type == TEETypeSEV {
+		result.SEVTemplate = SevTemplateFromQuote(cpuQuote)
+	}
+	if result.Type == TEETypeTDX {
+		// Newer SecretVM images measure a per-VM dstack app-id as RTMR3's
+		// first event. Fetch it from /info so the golden comparison can
+		// replay the right scheme; "" on older images keeps the legacy path.
+		result.DstackAppID = FetchDstackAppID(ctx, v.attestationClient, attestationURL)
+		v.log.Infof("TDX RTMR3 scheme for %s: %s (app_id=%q)", providerEndpoint, RTMR3SchemeFor(result.DstackAppID), result.DstackAppID)
+	}
 
 	golden, err := v.goldenSrc.FetchGoldenValues(ctx, version)
 	if err != nil {
@@ -450,59 +470,148 @@ func (v *Verifier) fullVerifyWithPing(ctx context.Context, providerEndpoint stri
 	return v.VerifyProvider(ctx, providerEndpoint, version)
 }
 
-// CompareRegisters checks every register present in the golden values against
-// the values extracted from the attestation quote.
-func CompareRegisters(result *AttestationResult, golden *GoldenValues, log lib.ILogger) error {
-	type regPair struct {
-		name   string
-		golden string
-		actual string
+// compareTDXRTMR3 binds a TDX quote to the released image.
+//
+// Two SecretVM RTMR3 schemes are in the field (see rtmr.go). The published
+// golden RTMR3 is the attest-tool value and matches pre-dstack VMs directly.
+// A dstack VM (app-id reported on /info) folds its own app-id into RTMR3, so
+// the expected value is recomputed here from the manifest's compose and
+// rootfs digests plus the live app-id. Either path fails closed: a dstack VM
+// against a manifest without those digests is a mismatch, not a skip, and a
+// VM that reports no app-id is held to the exact published value.
+func compareTDXRTMR3(result *AttestationResult, golden *GoldenValues, log lib.ILogger) error {
+	if result.RTMR3 == "" {
+		return fmt.Errorf("register mismatch: RTMR3 not present in quote")
+	}
+	if golden.RTMR3 == "" && !golden.SupportsDstackRTMR3() {
+		return fmt.Errorf("register mismatch: golden values publish no RTMR3 for TDX")
 	}
 
-	var pairs []regPair
+	appID := NormalizeDstackAppID(result.DstackAppID)
+
+	// A dstack VM's RTMR3 cannot equal the attest-tool golden, and vice versa,
+	// but accept the legacy equality first so a manifest that only carries
+	// RTMR3 keeps working for the pre-dstack fleet regardless of /info.
+	if golden.RTMR3 != "" && strings.EqualFold(golden.RTMR3, result.RTMR3) {
+		if log != nil {
+			log.Infof("register RTMR3: matches golden value (scheme=%s)", RTMR3SchemeAttestTool)
+		}
+		return nil
+	}
+
+	if appID == "" {
+		if golden.SupportsDstackRTMR3() {
+			return fmt.Errorf("register mismatch: RTMR3: expected %s (scheme=%s), got %s; VM reported no dstack_app_id on /info",
+				golden.RTMR3, RTMR3SchemeAttestTool, result.RTMR3)
+		}
+		return fmt.Errorf("register mismatch: RTMR3: expected %s, got %s", golden.RTMR3, result.RTMR3)
+	}
+
+	expected, scheme := golden.ExpectedTDXRTMR3(appID)
+	if expected == "" {
+		return fmt.Errorf("register mismatch: VM reports dstack_app_id %s but golden manifest publishes no compose/rootfs digests for the %s RTMR3 replay (rebuild the TEE image with a current pipeline)", appID, scheme)
+	}
+	if !strings.EqualFold(expected, result.RTMR3) {
+		return fmt.Errorf("register mismatch: RTMR3: expected %s (scheme=%s, app_id=%s), got %s", expected, scheme, appID, result.RTMR3)
+	}
+	if log != nil {
+		log.Infof("register RTMR3: matches golden value (scheme=%s, app_id=%s)", scheme, appID)
+	}
+	return nil
+}
+
+// CompareRegisters checks the software-identity register of the quote's TEE
+// type against the golden values: RTMR3 for TDX, the launch measurement for
+// SEV-SNP. It fails closed. A golden manifest that carries no value for the
+// quote's TEE type is a mismatch, not a skip, because this comparison is the
+// only step that binds the attested VM to the released image; everything
+// before it only proves "some genuine TEE with some software".
+//
+// SEV-SNP goldens come in two shapes. Legacy manifests publish one
+// Measurement. Current manifests publish SEVPerTemplate, one launch digest per
+// SecretVM size, because the digest folds in one VMSA page per vCPU. The quote
+// must equal the entry for its template (family_id) when it names one,
+// otherwise any published entry; a legacy Measurement is accepted alongside.
+// Before this the SEV branch read only the legacy field, so a
+// per-template-only manifest made the check pass for any measurement.
+func CompareRegisters(result *AttestationResult, golden *GoldenValues, log lib.ILogger) error {
+	if result == nil || golden == nil {
+		return fmt.Errorf("register mismatch: missing quote result or golden values")
+	}
 
 	switch result.Type {
 	case TEETypeTDX:
-		pairs = []regPair{
-			// {"MRTD", golden.MRTD, result.MRTD},
-			// {"RTMR0", golden.RTMR0, result.RTMR0},
-			// {"RTMR1", golden.RTMR1, result.RTMR1},
-			// {"RTMR2", golden.RTMR2, result.RTMR2},
-			{"RTMR3", golden.RTMR3, result.RTMR3},
-		}
+		return compareTDXRTMR3(result, golden, log)
+
 	case TEETypeSEV:
-		pairs = []regPair{
-			{"measurement", golden.Measurement, result.Measurement},
+		if result.Measurement == "" {
+			return fmt.Errorf("register mismatch: measurement not present in quote")
 		}
-	}
-
-	var mismatches []string
-	for _, p := range pairs {
-		if p.golden == "" {
-			if log != nil {
-				log.Debugf("register %s: golden value empty, skipping", p.name)
+		candidates, err := sevGoldenCandidates(golden, result.SEVTemplate)
+		if err != nil {
+			return err
+		}
+		if len(candidates) == 0 {
+			return fmt.Errorf("register mismatch: golden values publish no measurement for SEV")
+		}
+		for _, c := range candidates {
+			if strings.EqualFold(c.value, result.Measurement) {
+				if log != nil {
+					log.Infof("register measurement: matches golden value (%s)", c.name)
+				}
+				return nil
 			}
-			continue
 		}
-		if p.actual == "" {
-			mismatches = append(mismatches, fmt.Sprintf("%s: expected %s but not present in quote", p.name, p.golden))
-			continue
-		}
-		if !strings.EqualFold(p.golden, p.actual) {
-			mismatches = append(mismatches, fmt.Sprintf("%s: expected %s, got %s", p.name, p.golden, p.actual))
-		} else if log != nil {
-			log.Infof("register %s: matches golden value", p.name)
-		}
-	}
+		return fmt.Errorf("register mismatch: measurement: %s matches none of the published golden values (%s)",
+			result.Measurement, describeSEVCandidates(candidates))
 
-	if len(mismatches) > 0 {
-		return fmt.Errorf("register mismatch: %s", strings.Join(mismatches, "; "))
+	default:
+		return fmt.Errorf("register mismatch: unsupported TEE type %q", result.Type)
 	}
+}
 
-	if log != nil {
-		log.Infof("all checked registers match golden values")
+type sevGoldenCandidate struct {
+	name  string // template name, or "legacy" for the single Measurement
+	value string
+}
+
+// sevGoldenCandidates lists the golden SEV launch digests a quote may match:
+// the per-template entry for its template when it names one (an error when
+// that template is not published and there is no legacy value to fall back
+// on), otherwise every per-template entry, plus the legacy single Measurement
+// when present.
+func sevGoldenCandidates(golden *GoldenValues, template string) ([]sevGoldenCandidate, error) {
+	var out []sevGoldenCandidate
+	if len(golden.SEVPerTemplate) > 0 {
+		if template != "" {
+			v := golden.SEVPerTemplate[template]
+			if v == "" && golden.Measurement == "" {
+				return nil, fmt.Errorf("register mismatch: measurement: no golden value for VM template %q (published: %s)",
+					template, strings.Join(sevTemplateNames(golden.SEVPerTemplate), ","))
+			}
+			if v != "" {
+				out = append(out, sevGoldenCandidate{name: template, value: v})
+			}
+		} else {
+			for _, name := range sevTemplateNames(golden.SEVPerTemplate) {
+				if v := golden.SEVPerTemplate[name]; v != "" {
+					out = append(out, sevGoldenCandidate{name: name, value: v})
+				}
+			}
+		}
 	}
-	return nil
+	if golden.Measurement != "" {
+		out = append(out, sevGoldenCandidate{name: "legacy", value: golden.Measurement})
+	}
+	return out, nil
+}
+
+func describeSEVCandidates(cs []sevGoldenCandidate) string {
+	parts := make([]string, 0, len(cs))
+	for _, c := range cs {
+		parts = append(parts, c.name+"="+c.value)
+	}
+	return strings.Join(parts, " ")
 }
 
 // LoadAttestationQuote fetches a raw attestation quote (hex for TDX, base64 for SEV)

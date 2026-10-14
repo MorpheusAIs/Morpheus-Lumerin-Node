@@ -14,10 +14,11 @@ import (
 )
 
 const (
-	// Bundled in the published secretvm-verify npm/PyPI packages after the
-	// scrtlabs/secretvm-verify GitHub repo was removed. Pin the npm version so
-	// registry contents stay reproducible; bump with SecretVM release pins.
-	DefaultRegistryURL             = "https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/tdx.csv"
+	// secretvm-verify registries. npm 0.13.0 (2026-07-21) stops at TDX v0.0.34 /
+	// SEV v0.0.33. v0.0.35 is pinned to GitHub commit a5d0d7c2 (not republished
+	// to npm). Bump this commit with the SecretVM release pin in
+	// .github/tee/secretvm.env.
+	DefaultRegistryURL             = "https://cdn.jsdelivr.net/gh/scrtlabs/secretvm-verify@a5d0d7c21cceef8305dbbb0589cf10dabe7a2047/node/data/tdx.csv"
 	DefaultRegistryRefreshInterval = 1 * time.Hour
 )
 

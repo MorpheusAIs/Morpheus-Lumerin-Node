@@ -3,7 +3,7 @@ title: "Env: proxy-router"
 description: "Every environment variable consumed by the proxy-router, with mainnet/testnet defaults and explicit precedence rules where two variables overlap."
 audience: ["provider-full", "provider-resale", "prosumer", "developer"]
 product: ["proxy-router"]
-last_verified: "2026-09-25"
+last_verified: "2026-10-13"
 source: "docs/proxy-router.all.env"
 ---
 
@@ -18,42 +18,49 @@ Defaults below are from the source of truth (`proxy-router/internal/config/confi
 Several pairs of variables look like they do "the same thing." They don't. The proxy-router resolves each pair with a specific precedence rule, and getting it wrong is a common cause of "I changed the env but nothing happened."
 
 <Warning>
-For every `*_CONTENT` ↔ `*_PATH` pair below, the **`*_CONTENT`** variable is a **one-shot file seeder**, not a runtime override. It only takes effect when the corresponding file **does not exist**. After the first successful start the file exists, and changing the `*_CONTENT` env on subsequent runs has **no effect** until you delete the file at `*_PATH`.
+A non-empty `*_CONTENT` value is written over the file at every process start, in a SecretVM image and in a normal container. An empty value leaves an existing file alone. The same binary serves both deployments; there is no TEE-only path.
 </Warning>
+
+`WALLET_PRIVATE_KEY`, `ETH_NODE_ADDRESS`, and `WEB_PUBLIC_URL` are read from the environment on every start and are not stored as these files.
 
 ### `COOKIE_FILE_PATH` ↔ `COOKIE_CONTENT`
 
 | Situation | What the proxy-router does |
 |-----------|---------------------------|
-| File at `COOKIE_FILE_PATH` already exists | Reads the file. **`COOKIE_CONTENT` is silently ignored.** |
-| File does not exist + `COOKIE_CONTENT` is set | Writes `COOKIE_CONTENT` to the file (`username:password\n`), then reads it. |
-| File does not exist + `COOKIE_CONTENT` is unset | Generates a random 32-char password for `admin`, writes it to the file. |
+| `COOKIE_CONTENT` is non-empty | Writes it to the cookie file when the admin password differs, and updates the admin hash in `proxy.conf`. Login checks that hash. |
+| `COOKIE_CONTENT` is empty and the cookie file exists | Reads the file. |
+| `COOKIE_CONTENT` is empty and the cookie file does not exist | Generates a random 32-char password for `admin`, writes it to the file, and starts. |
 
 Source: [`proxy-router/internal/system/auth.go`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/internal/system/auth.go) (`EnsureConfigFilesExist`).
 
 **Practical implications**
 
-- For TEE / Akash / ephemeral container deployments, set `COOKIE_CONTENT` once on first start; the file gets seeded inside the volume and persists.
-- To rotate credentials on a self-hosted node, use the **`POST /auth/users` endpoint** (or edit the cookie file in place) — changing `COOKIE_CONTENT` after first start does nothing.
+- Paste a new `COOKIE_CONTENT` into SecretVM secrets (or a container env) and restart. The new admin password replaces the stored one.
+- A password changed only through `POST /auth/users` is replaced on the next start while `COOKIE_CONTENT` is set.
+- With `COOKIE_CONTENT` unset, edit the cookie file or use `POST /auth/users`. That change survives a restart.
 
 ### `MODELS_CONFIG_PATH` ↔ `MODELS_CONFIG_CONTENT`
 
 | Situation | What the proxy-router does |
 |-----------|---------------------------|
-| File at `MODELS_CONFIG_PATH` already exists | Reads the file. **`MODELS_CONFIG_CONTENT` is silently ignored.** |
-| File does not exist + `MODELS_CONFIG_CONTENT` is set | Writes `MODELS_CONFIG_CONTENT` to the file, then reads it. |
-| File does not exist + `MODELS_CONFIG_CONTENT` is unset | Logs a warning and runs with an empty model registry. |
+| `MODELS_CONFIG_CONTENT` is non-empty | Writes it over the models file when the bytes differ, then loads that file. |
+| `MODELS_CONFIG_CONTENT` is empty and the file exists | Loads the file. |
+| `MODELS_CONFIG_CONTENT` is empty and the file does not exist | Logs a warning and starts with an empty model registry. |
 
-Source: [`proxy-router/internal/config/models_config.go`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/internal/config/models_config.go) (`ModelConfigLoader.Init`).
+Source: [`proxy-router/internal/config/models_config.go`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/internal/config/models_config.go) (`ModelConfigLoader.load`).
 
 **Practical implications**
 
-- Use `MODELS_CONFIG_CONTENT` (single-line JSON) in TEE/Akash deployments where you can't mount a volume.
-- To update models on a self-hosted node, edit the JSON file directly and restart — don't bump `MODELS_CONFIG_CONTENT`. See [models-config.json](/reference/models-config).
+- Paste updated `MODELS_CONFIG_CONTENT` and restart. The new JSON replaces `models-config.json`.
+- With the variable empty, edit the file and restart, or call `POST /config/models/reload`. See [models-config.json](/reference/models-config).
 
 ### `AGENT_CONFIG_PATH` ↔ `AGENT_CONFIG_CONTENT`
 
-Same `*_CONTENT`-only-seeds-the-file rule as the two above. Source: [`proxy-router/internal/config/agents_config.go`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/internal/config/agents_config.go).
+Same rule as models. A non-empty `AGENT_CONFIG_CONTENT` overwrites the agent file. An empty value loads the existing file. A missing file and an empty value logs a warning and starts with no agents. Source: [`proxy-router/internal/config/agents_config.go`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/internal/config/agents_config.go).
+
+### `RATING_CONFIG_PATH` ↔ `RATING_CONFIG_CONTENT`
+
+Same rule. A non-empty `RATING_CONFIG_CONTENT` overwrites the rating file. An empty value loads the existing file. A missing file and an empty value uses the built-in defaults. Source: [`proxy-router/internal/config/rating_config.go`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/internal/config/rating_config.go).
 
 ### `AUTH_CONFIG_FILE_PATH` (no inline twin)
 
@@ -97,7 +104,7 @@ Storage and forwarding are independent. `PROXY_STORE_CHAT_CONTEXT` persists chat
 | `APP_RESET_KEYCHAIN` | `false` | Set `true` to reset the macOS keychain entry on start |
 | `AUTH_CONFIG_FILE_PATH` | `./proxy.conf` | Path to the auth config file (no inline twin) |
 | `COOKIE_FILE_PATH` | `./.cookie` | Path to admin cookie file |
-| `COOKIE_CONTENT` | (unset) | **Seeds the cookie file on first start only.** See precedence above. |
+| `COOKIE_CONTENT` | (unset) | When set, overwrites the cookie file and the admin hash on start. When empty, an existing cookie file is kept. See precedence above. |
 
 ## Blockchain
 
@@ -161,10 +168,11 @@ For TEE images logging is **frozen** to production / JSON / minimal at build tim
 | `PROXY_STORE_CHAT_CONTEXT` | `true` | Persist chat context as one JSON file per chat under `<PROXY_STORAGE_PATH>/chats/`. The directory is kept at mode `0700` and files at `0600` (enforced on every read and write); writes are atomic (temp file + rename), so a crash mid-write cannot truncate a chat. Multimodal turns keep their `multi_content` parts (image / document attachments) in the stored history. **Frozen `false` in `-tee` images.** |
 | `PROXY_FORWARD_CHAT_CONTEXT` | `false` | Prepend stored history to prompts. Opt-in for clients that send only the latest turn (the bundled Desktop UI sets it to `true`); leave off for OpenAI-compatible clients that already send the full transcript. |
 | `MODELS_CONFIG_PATH` | `./models-config.json` | See [models-config](/reference/models-config). See precedence above. |
-| `MODELS_CONFIG_CONTENT` | (unset) | **Seeds the models config file on first start only.** See precedence above. |
+| `MODELS_CONFIG_CONTENT` | (unset) | When set, overwrites the models file on start. When empty, an existing file is kept. See precedence above. |
 | `AGENT_CONFIG_PATH` | (built-in default) | Local agent registry path |
-| `AGENT_CONFIG_CONTENT` | (unset) | **Seeds the agent config file on first start only.** Same rules as the models pair. |
+| `AGENT_CONFIG_CONTENT` | (unset) | When set, overwrites the agent file on start. When empty, an existing file is kept. |
 | `RATING_CONFIG_PATH` | `./rating-config.json` | See [rating-config](/reference/rating-config) |
+| `RATING_CONFIG_CONTENT` | (unset) | When set, overwrites the rating file on start. When empty, an existing file is kept. |
 
 ## Timeouts & retries
 
@@ -189,6 +197,7 @@ On provider nodes the proxy-router periodically probes every model from `models-
 | `MODEL_HEALTH_CHECK_TIMEOUT` | `60s` | Per-model probe timeout |
 | `MODEL_HEALTH_CHECK_PROBE_DELAY` | `2s` | Pause between per-model probes so many-model providers don't burst their upstream into a rate limit |
 | `MODEL_HEALTH_MAX_CONSECUTIVE_ERRORS` | `3` | Consecutive real-session prompt failures after which the model is reported `unhealthy` (`errorKind: session_errors`) immediately, without waiting for the next scheduled probe |
+| `MODEL_API_DETECT_ENABLED` | `true` | Auto-detect the backend API of models without `apiStack` (service-endpoint probes, never inference requests, one hop through LiteLLM); `false` disables all probing and such models report no `api` block. Per-model budget: 10 s, capped by `MODEL_HEALTH_CHECK_TIMEOUT` |
 
 ## Session health policy (consumer)
 
@@ -223,8 +232,8 @@ These are only consulted when at least one model in the marketplace is `tee`-tag
 |----------|---------|-------|
 | `TEE_PORTAL_URL` | `https://secretai.scrtlabs.com/api/quote-parse` | SecretAI Portal used to verify raw TDX CPU quotes |
 | `TEE_IMAGE_REPO` | `ghcr.io/morpheusais/morpheus-lumerin-node-tee` | GHCR repo where the consumer-side P-Node attestation fetches the signed golden manifest via cosign |
-| `ARTIFACT_REGISTRY_URL` | `https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/tdx.csv` | SecretVM TDX artifact registry CSV (MRTD + RTMR0-2 lookup). Served from the published [secretvm-verify](https://www.npmjs.com/package/secretvm-verify) package after the GitHub repo was removed. |
-| `SEV_ARTIFACT_REGISTRY_URL` | `https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/sev.json` | SecretVM SEV-SNP artifact registry JSON |
+| `ARTIFACT_REGISTRY_URL` | `https://cdn.jsdelivr.net/gh/scrtlabs/secretvm-verify@a5d0d7c21cceef8305dbbb0589cf10dabe7a2047/node/data/tdx.csv` | SecretVM TDX artifact registry CSV (MRTD + RTMR0-2 lookup). Pinned to a [secretvm-verify](https://github.com/scrtlabs/secretvm-verify) commit via jsDelivr because the npm package lags GitHub (0.13.0 lacks v0.0.35). |
+| `SEV_ARTIFACT_REGISTRY_URL` | `https://cdn.jsdelivr.net/gh/scrtlabs/secretvm-verify@a5d0d7c21cceef8305dbbb0589cf10dabe7a2047/node/data/sev.json` | SecretVM SEV-SNP artifact registry JSON |
 | `ARTIFACT_REGISTRY_REFRESH_INTERVAL` | `1h` | How often the proxy-router re-downloads the artifact registry |
 
 See [TEE overview](/concepts/tee-overview) and [TEE reference](/providers/full/tee-reference).
@@ -237,6 +246,7 @@ The proxy-router talks to a local Kubo API only when you set a real **multiaddr*
 |----------|---------|-------|
 | `IPFS_MULTADDR` | *(empty — disabled)* | Kubo API multiaddr, e.g. `/ip4/127.0.0.1/tcp/5001`. Invalid values log a warning and disable IPFS. |
 | `IPFS_DISABLED` | `false` | Set `true` to force-disable even when `IPFS_MULTADDR` is set. |
+| `IPFS_ALLOWED_DIRS` | *(empty)* | OS path list (`:` on Unix, `;` on Windows) of directories that API users **without** the `*` permission may download into via `ipfs_get` and add files from via `ipfs_add`. Unset means those users cannot download or add at all. Users with `*` are never restricted. Downloads never overwrite an existing file. |
 
 ## System tuning (optional sysctl tweaks)
 

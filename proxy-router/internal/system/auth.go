@@ -70,6 +70,15 @@ func (cfg *HTTPAuthConfig) ReadCookieFile() (string, string, error) {
 	return parts[0], parts[1], nil
 }
 
+func splitCookieLine(line string) (string, string, error) {
+	line = strings.TrimSpace(line)
+	parts := strings.SplitN(line, ":", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", fmt.Errorf("invalid cookie content")
+	}
+	return parts[0], parts[1], nil
+}
+
 // ReadConfig reads and parses the config file from disk.
 func (cfg *HTTPAuthConfig) ReadConfig() error {
 	file, err := os.Open(cfg.FilePath)
@@ -210,40 +219,43 @@ func (cfg *HTTPAuthConfig) CheckFilePermissions() error {
 // Cookie File Management
 // ----------------------------------------------------------------------------
 
-// EnsureConfigFilesExist checks if cookie file exists; if not, creates it with admin credentials.
+// EnsureConfigFilesExist applies COOKIE_CONTENT when it is set, and otherwise
+// creates a cookie file on first boot. A non-empty COOKIE_CONTENT replaces
+// .cookie and the admin hash in proxy.conf. An empty value leaves an existing
+// cookie file alone. A missing file with an empty value gets a random password.
 func (cfg *HTTPAuthConfig) EnsureConfigFilesExist() error {
-	if _, err := os.Stat(cfg.CookieFilePath); os.IsNotExist(err) {
-		// Cookie file: "admin:<password>"
-		var cookieLine string
-		var pass string
-		if cfg.CookieContent != "" {
-			cookieLine = cfg.CookieContent
-			parts := strings.SplitN(cfg.CookieContent, ":", 2)
-			if len(parts) != 2 {
-				return fmt.Errorf("invalid cookie content: %s", cfg.CookieContent)
+	if cfg.CookieContent != "" {
+		_, pass, err := splitCookieLine(cfg.CookieContent)
+		if err != nil {
+			return err
+		}
+		matches := false
+		if user, existing, readErr := cfg.ReadCookieFile(); readErr == nil && user == AdminUsername && existing == pass {
+			matches = true
+		}
+		if !matches {
+			cookieLine := AdminUsername + ":" + pass
+			if err := os.WriteFile(cfg.CookieFilePath, []byte(cookieLine), 0600); err != nil {
+				return fmt.Errorf("failed writing cookie file: %v", err)
 			}
-			pass = parts[1]
-		} else {
-			// Generate a random password
-			pass, err = generateRandomString(32)
-			if err != nil {
-				return fmt.Errorf("failed generating cookie password: %v", err)
+			perms := cfg.Whitelists[AdminUsername]
+			if len(perms) == 0 {
+				perms = []string{"*"}
 			}
-			cookieLine = fmt.Sprintf("admin:%s\n", pass)
+			if err := cfg.AddUser(AdminUsername, pass, perms); err != nil {
+				return fmt.Errorf("failed to add admin rpcauth: %v", err)
+			}
 		}
-
-		// Write cookie file with perms 0600
-		f, errCreate := os.OpenFile(cfg.CookieFilePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
-		if errCreate != nil {
-			return fmt.Errorf("could not create cookie file: %v", errCreate)
+	} else if _, err := os.Stat(cfg.CookieFilePath); os.IsNotExist(err) {
+		pass, err := generateRandomString(32)
+		if err != nil {
+			return fmt.Errorf("failed generating cookie password: %v", err)
 		}
-		if _, errWrite := f.WriteString(cookieLine); errWrite != nil {
-			_ = f.Close()
-			return fmt.Errorf("failed writing cookie file: %v", errWrite)
+		cookieLine := fmt.Sprintf("%s:%s\n", AdminUsername, pass)
+		if err := os.WriteFile(cfg.CookieFilePath, []byte(cookieLine), 0600); err != nil {
+			return fmt.Errorf("failed writing cookie file: %v", err)
 		}
-		f.Close()
-
-		if err := cfg.AddUser("admin", pass, []string{"*"}); err != nil {
+		if err := cfg.AddUser(AdminUsername, pass, []string{"*"}); err != nil {
 			return fmt.Errorf("failed to add admin rpcauth: %v", err)
 		}
 	}
@@ -274,6 +286,9 @@ func (cfg *HTTPAuthConfig) EnsureConfigFilesExist() error {
 // successful-login path — a standalone change, not a drive-by one. Deliberately
 // left as-is here rather than silently locking existing users out.
 func (cfg *HTTPAuthConfig) AddUser(username string, plaintextPassword string, perms []string) error {
+	if err := ValidateUserSpec(username, perms); err != nil {
+		return err
+	}
 	saltBytes := make([]byte, 16)
 	if _, err := io.ReadFull(rand.Reader, saltBytes); err != nil {
 		return err
@@ -441,6 +456,12 @@ func (cfg *HTTPAuthConfig) IsAllowanceEnough(username string, token string, amou
 	if agentUser == nil {
 		return false, fmt.Errorf("user not found")
 	}
+	if !agentUser.IsConfirmed {
+		// A pending request's allowance was chosen by whoever filed the
+		// unauthenticated request; it is spendable only once a full-access
+		// user has confirmed it.
+		return false, fmt.Errorf("agent user %s is not confirmed", username)
+	}
 
 	token = strings.ToLower(token)
 	allowance := agentUser.Allowances[token]
@@ -451,8 +472,11 @@ func (cfg *HTTPAuthConfig) IsAllowanceEnough(username string, token string, amou
 }
 
 func (cfg *HTTPAuthConfig) RequestAgentUser(username, password string, perms []string, allowances map[string]string) error {
-	if username == "admin" {
-		return fmt.Errorf("admin is a reserved username")
+	if username == AdminUsername {
+		return fmt.Errorf("%w: admin is a reserved username", ErrInvalidUserSpec)
+	}
+	if err := ValidateUserSpec(username, perms); err != nil {
+		return err
 	}
 
 	existingUser, err := cfg.AuthStorage.GetAgentUser(username)
@@ -485,27 +509,14 @@ func (cfg *HTTPAuthConfig) RequestAgentUser(username, password string, perms []s
 	return nil
 }
 
-func (cfg *HTTPAuthConfig) ConfirmAgentUser(username string) error {
-	request, err := cfg.AuthStorage.GetAgentUser(username)
-	if err != nil {
-		return fmt.Errorf("error reading agent user: %w", err)
-	}
-	if request == nil {
-		return fmt.Errorf("auth request not found")
-	}
-
-	err = cfg.AddUser(request.Username, request.Password, request.Perms)
-	if err != nil {
+// confirmAgentRequest turns a loaded agent request into a login and marks it
+// confirmed. Authorization happens in ConfirmAgentUserAs.
+func (cfg *HTTPAuthConfig) confirmAgentRequest(request *storages.AgentUser) error {
+	if err := cfg.AddUser(request.Username, request.Password, request.Perms); err != nil {
 		return err
 	}
-
 	request.IsConfirmed = true
-	err = cfg.AuthStorage.AddAuthRequest(request)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return cfg.AuthStorage.AddAuthRequest(request)
 }
 
 func (cfg *HTTPAuthConfig) DeclineAgentUser(username string) error {

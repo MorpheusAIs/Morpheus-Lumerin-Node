@@ -113,7 +113,8 @@ sequenceDiagram
    - Fetch `docker-compose.yaml` from the backend. Old attest-rest serves it wrapped in an HTML `<pre>` block, newer attest-rest serves the raw bytes; both the raw response and the HTML-extracted content are tried against the measurement.
    - Parse the TDX quote to extract measurement registers (MRTD, RTMR0-3).
    - Look up MRTD + RTMR0-2 in the artifact registry to confirm this is a recognized SecretVM build.
-   - Recalculate the expected RTMR3 from `SHA-256(docker-compose.yaml)` combined with `rootfs_data` using a SHA-384 extend chain.
+   - Read the backend's `dstack_app_id` from `/info` (best effort; absent on older images). Its presence selects the RTMR3 replay scheme — see [RTMR3 schemes](#rtmr3-schemes-attest-tool-vs-dstack).
+   - Recalculate the expected RTMR3 from `SHA-256(docker-compose.yaml)`, `rootfs_data`, and (dstack images only) the app-id, using a SHA-384 extend chain.
    - Compare the calculated RTMR3 against the quote's RTMR3 to prove workload integrity.
 5. **Fetch GPU attestation** — Retrieve GPU attestation data (JSON containing nonce, architecture, and evidence list) from `:21434/gpu`.
 6. **CPU-GPU binding** — Verify that the second 32 bytes of the CPU `reportData` match the GPU nonce, proving both attestations originate from the same machine and session.
@@ -208,6 +209,24 @@ RTMR3 is computed as a SHA-384 extend chain covering the root filesystem data an
 
 This provides a cryptographic guarantee that the backend is running exactly the declared set of models, with no substitutions or additions.
 
+### RTMR3 schemes: attest-tool vs dstack
+
+SecretVM extends RTMR3 with one of two schemes, decided by the image's init. The proxy-router supports both and picks between them by whether the VM reports a `dstack_app_id` on `GET /info` (mirrors `secretvm-verify` 0.13.0):
+
+| | attest-tool (original images) | dstack-util (dstack/gramine KMS, portal artifacts v0.0.34+) |
+|---|---|---|
+| Detection | `/info` absent or `dstack_app_id` empty | `/info` returns a non-empty `dstack_app_id` |
+| Event 1 | `SHA-256(docker-compose)` | `digest("app-id", app_id_bytes)` |
+| Event 2 | `rootfs_data` | `digest("compose-hash", SHA-256(docker-compose))` |
+| Event 3 | — | `digest("os-image-hash", rootfs_data)` |
+| Per-VM? | No — one value per image + rootfs | **Yes** — the app-id is assigned per VM |
+
+where `digest(name, payload) = SHA-384(LE32(0x08000001) ‖ ":" ‖ name ‖ ":" ‖ payload)` and both schemes then fold each event with `mr = SHA-384(mr ‖ pad48(event))` from 48 zero bytes.
+
+Because a dstack VM's RTMR3 includes its own app-id, no single RTMR3 can be published at build time for it. The signed TEE manifest therefore carries the attest-tool `rtmr3` (for the pre-dstack fleet) **and** the `compose_sha256` + `rootfs_sha256` inputs; for a dstack VM the verifier replays those with the live app-id. The app-id is self-reported by the VM and is only trusted once that replay reproduces the hardware-signed RTMR3 — a wrong id simply fails. AMD SEV-SNP is unaffected: the launch digest has no app-id event.
+
+The same two-scheme logic applies to Phase 1 (consumer verifying the P-Node): `CompareRegisters` accepts the published `rtmr3` for VMs with no app-id, and the recomputed dstack value for VMs that report one. Mixed fleets (e.g. v0.0.31 and v0.0.35 SecretVMs) stay verifiable side by side.
+
 ## Configuration reference
 
 ### Model tagging (on-chain)
@@ -248,8 +267,8 @@ Example: a model registered on-chain with the `tee` tag and `apiUrl` set to `htt
 |----------|----------|---------|-------------|
 | `TEE_PORTAL_URL` | Yes (for `tee`-tagged models) | — | SecretAI Portal API URL for CPU quote verification |
 | `TEE_IMAGE_REPO` | No | — | GHCR image repo for cosign attestation manifest verification (e.g. `ghcr.io/morpheusais/morpheus-lumerin-node-tee`). Used by consumer-side P-Node attestation to fetch the signed golden RTMR3 values for the provider image |
-| `ARTIFACT_REGISTRY_URL` | No | [tdx.csv via npm](https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/tdx.csv) | URL to the TDX artifact registry CSV ([secretvm-verify on npm](https://www.npmjs.com/package/secretvm-verify) / [PyPI](https://pypi.org/project/secretvm-verify/)) |
-| `SEV_ARTIFACT_REGISTRY_URL` | No | [sev.json via npm](https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/sev.json) | URL to the AMD SEV-SNP artifact registry JSON |
+| `ARTIFACT_REGISTRY_URL` | No | [tdx.csv via jsDelivr (pinned commit)](https://cdn.jsdelivr.net/gh/scrtlabs/secretvm-verify@a5d0d7c21cceef8305dbbb0589cf10dabe7a2047/node/data/tdx.csv) | URL to the TDX artifact registry CSV ([secretvm-verify on npm](https://www.npmjs.com/package/secretvm-verify) / [PyPI](https://pypi.org/project/secretvm-verify/)) |
+| `SEV_ARTIFACT_REGISTRY_URL` | No | [sev.json via jsDelivr (pinned commit)](https://cdn.jsdelivr.net/gh/scrtlabs/secretvm-verify@a5d0d7c21cceef8305dbbb0589cf10dabe7a2047/node/data/sev.json) | URL to the AMD SEV-SNP artifact registry JSON |
 | `ARTIFACT_REGISTRY_REFRESH_INTERVAL` | No | `1h` | How often to re-download the artifact registries (shared by TDX and SEV) |
 
 ## Health endpoint

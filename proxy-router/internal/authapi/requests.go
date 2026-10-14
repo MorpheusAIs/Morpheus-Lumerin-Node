@@ -18,6 +18,11 @@ type AuthRes struct {
 	Result bool `json:"result"`
 }
 
+// ErrorRes is the `{"error": "..."}` body returned on 4xx/5xx.
+type ErrorRes struct {
+	Error string `json:"error"`
+}
+
 type RequestAgentUserReq struct {
 	Username   string            `json:"username" validate:"required"`
 	Password   string            `json:"password" validate:"required"`

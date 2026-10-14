@@ -3,7 +3,7 @@ title: "API authentication"
 description: "How the proxy-router authenticates HTTP API callers: the .cookie file, proxy.conf, rpcauth/rpcwhitelist, and the /auth/users endpoints."
 audience: ["consumer", "prosumer", "provider-full", "provider-resale", "developer"]
 product: ["proxy-router"]
-last_verified: "2026-09-25"
+last_verified: "2026-10-06"
 source: "docs/02.5-api-auth.md"
 ---
 
@@ -174,6 +174,9 @@ Notes on a few of these:
 - `get_bids` also gates `GET /blockchain/models/prices` and `GET /blockchain/models/:id/session/estimate`; `get_sessions` gates `GET /blockchain/sessions/duration`.
 - `set_wallet` covers `POST /wallet/privateKey`, `POST /wallet/mnemonic`, and `POST /wallet/derivationPath` (HD account switching). `get_wallet` is `GET /wallet`; `remove_wallet` is `DELETE /wallet`.
 - `system_config` covers `GET /config`, `POST /config/ethNode`, and `POST /config/models/reload`.
+- `add_user`, `remove_user`, and `agent_requests` are **delegable without becoming admin**. A caller whose whitelist is not `*` may only create, update, confirm, decline, or remove users whose permissions are a subset of its own. It can never grant `*`, never touch `admin`, never touch a user that carries a spending allowance, never approve an agent request that asks for one, and never re-confirm an already confirmed agent. Such requests return `403`. `admin` cannot be removed through the API by anyone (that would lock the node until `proxy.conf` is edited by hand).
+- Usernames may not contain whitespace, `:` or `$`, and permission names may not contain whitespace, `,` or `:`, because `proxy.conf` is line-oriented. Such requests return `400`.
+- `ipfs_get` writes the downloaded file to the caller-supplied `dest`, and `ipfs_add` reads the caller-supplied `filePath`. A caller with `*` may use any absolute path (that is how the desktop app's "pick a folder" flow works). Any other caller is confined to the directories in `IPFS_ALLOWED_DIRS` and refused with `403` when that variable is unset. Downloads never overwrite an existing file.
 
 ## Agent spending allowances
 
@@ -182,11 +185,13 @@ Beyond method whitelists, an **agent user** can carry per-token spending allowan
 | Endpoint | Permission | Purpose |
 |----------|------------|---------|
 | `POST /auth/users/request` | *(none — the agent calls it)* | Agent asks for a user with `perms` and `allowances` (`{"<token>": "<wei>"}`, token is `eth` or the MOR contract address) |
-| `GET /auth/users` · `POST /auth/users/confirm` | `agent_requests` | Admin lists and approves / declines pending agent users |
-| `POST /auth/allowance/requests` · `GET /auth/allowance/requests` · `POST /auth/allowance/confirm` · `POST /auth/allowance/revoke` | `request_allowance` (agent) / `agent_requests` (admin) | Top-ups and revocation |
+| `GET /auth/users` · `POST /auth/users/confirm` | `agent_requests` | Admin lists and approves / declines pending agent users. A caller without `*` may only approve requests whose perms it holds itself and that carry no allowance |
+| `POST /auth/allowance/requests` | `request_allowance` | Agent asks for a top-up for its own username (another username needs `*`) |
+| `GET /auth/allowance/requests` | `agent_requests` | List pending top-ups |
+| `POST /auth/allowance/confirm` · `POST /auth/allowance/revoke` | `agent_requests` **and** `*` | Approve, decline, or revoke a cap. Allowances are money, so only a full-access user changes them |
 | `GET /auth/users/:username/txs` | `agent_requests` | Transactions the node sent for that agent |
 
-The allowance is consumed by `POST /blockchain/send/eth`, `POST /blockchain/send/mor`, and session opens (the stake). The `admin` user is never subject to allowances.
+The allowance is consumed by `POST /blockchain/send/eth`, `POST /blockchain/send/mor`, and session opens (the stake). It is spendable only once the agent is **confirmed**; the amount in a pending request has no effect. The `admin` user is never subject to allowances.
 
 **When the cap is debited.** The amount is held from the allowance **before** the transaction is broadcast and released only if the transaction was provably never sent (a pre-broadcast build or signing failure, or a session open whose attempts all failed without a pending transaction). A transaction that was broadcast but **timed out** waiting to be mined **keeps the debit**, because it may still mine. Earlier releases debited only after a successful mine, which let a retry after a timeout spend past the cap; that is closed. `send/eth` and `send/mor` that revert after broadcast also keep the debit — the cap is conservative by design; an admin re-grants via `POST /auth/allowance/confirm` if that leaves an agent short. Concurrent debits against one agent are serialised inside a single store transaction, so two simultaneous opens cannot both pass a cap that only covers one.
 

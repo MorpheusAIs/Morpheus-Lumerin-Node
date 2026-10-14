@@ -13,6 +13,7 @@ import (
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apibus"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apidetect"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/attestation"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/authapi"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi"
@@ -380,18 +381,29 @@ func start() error {
 	}
 	proxyController := proxyapi.NewProxyController(proxyRouterApi, aiEngine, chatStorage, *cfg.Proxy.StoreChatContext.Bool, *cfg.Proxy.ForwardChatContext.Bool, *authCfg, ipfsManager, log)
 	proxyController.SetBackendAttestationStatus(backendVerifier)
+	proxyController.SetIPFSAllowedDirs(cfg.IPFS.AllowedDirs)
 	walletController := walletapi.NewWalletController(wallet, *authCfg)
 	var modelHealthChecker *modelhealth.Checker
 	// keep the interface nil when the checker is disabled to avoid a typed-nil
 	// passing the nil check in the healthcheck handler
 	var modelHealthReporter system.ModelHealthReporter
 	if !cfg.Proxy.ModelHealthCheckDisabled {
+		// interface, not *apidetect.Detector: a typed nil would pass the checker's
+		// nil check
+		var apiDetect modelhealth.ApiDetector
+		if cfg.Proxy.ModelApiDetectEnabled.Bool != nil && *cfg.Proxy.ModelApiDetectEnabled.Bool {
+			apiDetect = apidetect.NewDetector(appLog, apidetect.DefaultOptions())
+		} else {
+			appLog.Info("model API auto-detection disabled (MODEL_API_DETECT_ENABLED=false); models without apiStack advertise no api block")
+		}
+
 		modelHealthChecker = modelhealth.NewChecker(modelhealth.Deps{
 			Adapters:     aiEngine,
 			Bids:         blockchainApi,
 			Models:       blockchainApi,
 			ModelConfigs: modelConfigLoader,
 			TeeStatus:    backendVerifier,
+			ApiDetect:    apiDetect,
 		}, cfg.Proxy.ModelHealthCheckInterval, cfg.Proxy.ModelHealthCheckTimeout, cfg.Proxy.ModelHealthCheckProbeDelay, cfg.Proxy.ModelHealthMaxConsecErrors, appLog)
 		modelHealthReporter = modelHealthChecker
 	}

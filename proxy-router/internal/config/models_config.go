@@ -45,6 +45,8 @@ type ModelConfigLoader struct {
 type ModelConfig struct {
 	ModelName       string            `json:"modelName" validate:"required"`
 	ApiType         string            `json:"apiType" validate:"required"`
+	ApiStack        string            `json:"apiStack"`
+	ModelFamily     string            `json:"modelFamily"`
 	ApiURL          string            `json:"apiUrl" validate:"required,url"`
 	ApiKey          string            `json:"apiKey"`
 	ConcurrentSlots int               `json:"concurrentSlots" validate:"number"`
@@ -131,15 +133,16 @@ func (e *ModelConfigLoader) load() (ModelConfigs, error) {
 		filePath = e.configPath
 	}
 
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		if e.configContent != "" {
-			err = os.WriteFile(filePath, []byte(e.configContent), 0644)
-			if err != nil {
-				return nil, fmt.Errorf("failed to write models config content to file: %s", err)
-			}
-		} else {
-			return nil, fmt.Errorf("models config file not found: %s", filePath)
+	if e.configContent != "" {
+		wrote, err := syncContentFile(filePath, e.configContent, 0644)
+		if err != nil {
+			return nil, fmt.Errorf("failed to write models config content to file: %s", err)
 		}
+		if wrote {
+			e.log.Infof("models config written from MODELS_CONFIG_CONTENT: %s", filePath)
+		}
+	} else if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("models config file not found: %s", filePath)
 	}
 
 	modelsConfig, err := lib.ReadJSONFile(filePath)
@@ -167,6 +170,7 @@ func (e *ModelConfigLoader) load() (ModelConfigs, error) {
 		}
 		cfgs := make(ModelConfigs, len(modelConfigsV2.Models))
 		for _, v := range modelConfigsV2.Models {
+			v.ApiStack = e.loadApiStack(v.ID, v.ModelConfig)
 			cfgs[v.ID] = v.ModelConfig
 			_ = e.Validate(context.Background(), common.HexToHash(v.ID), v.ModelConfig)
 		}
@@ -186,8 +190,22 @@ func (e *ModelConfigLoader) load() (ModelConfigs, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid models config: %w", err)
 	}
+	for id, cfg := range modelConfigs {
+		cfg.ApiStack = e.loadApiStack(id, cfg)
+		modelConfigs[id] = cfg
+	}
 
 	return modelConfigs, nil
+}
+
+// An invalid apiStack degrades only that model: main.go merely warns on an
+// Init error and would otherwise run with zero models.
+func (e *ModelConfigLoader) loadApiStack(modelID string, cfg ModelConfig) string {
+	if err := ValidateApiStack(modelID, cfg); err != nil {
+		e.log.Errorf("%s — apiStack ignored for this model; its backend API will be detected at runtime", err)
+		return ""
+	}
+	return NormalizeApiStack(cfg.ApiStack)
 }
 
 func (e *ModelConfigLoader) ModelConfigFromID(ID string) *ModelConfig {
