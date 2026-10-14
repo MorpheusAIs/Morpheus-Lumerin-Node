@@ -163,4 +163,29 @@ interface ISessionRouter is ISessionStorage {
      * @param timestamp_ The timestamp when the TX executed.
      */
     function startOfTheDay(uint128 timestamp_) external pure returns (uint128);
+
+    /**
+     * @notice Returns session duration, stipend and pricing quote for given inputs.
+     * @param bidId_ The active bid ID.
+     * @param amount_ The stake or payment amount.
+     * @param isDirectPaymentFromUser_ Whether this is direct payment or stake pool session.
+     * @return stipend Calculated MOR stipend.
+     * @return durationSeconds Calculated duration of session in seconds.
+     * @return endsAt Timestamp when session would expire.
+     * @return pricePerSecond The bid's price per second.
+     * @return modelId The model ID associated with the bid.
+     * @return provider The provider address for the bid.
+     */
+    function quoteSession(
+        bytes32 bidId_,
+        uint256 amount_,
+        bool isDirectPaymentFromUser_
+    ) external view returns (
+        uint256 stipend,
+        uint128 durationSeconds,
+        uint128 endsAt,
+        uint256 pricePerSecond,
+        bytes32 modelId,
+        address provider
+    );
 }
