@@ -69,7 +69,7 @@ This page covers a **non-TEE provider** running on your own infrastructure. For 
     - `WALLET_PRIVATE_KEY=` — provider's private key.
     - `ETH_NODE_ADDRESS=` — **required for any real deployment.** The minimal example file does not set this; without it the node falls back to a built-in public RPC round-robin that is rate-limited and unreliable. Use your own Alchemy / Infura HTTPS or WSS URL. Match `ETH_NODE_USE_SUBSCRIPTIONS` accordingly (`true` for WSS, `false` for HTTPS — recommended HTTPS + `false`).
     - Choose **mainnet** (default) or testnet — uncomment the testnet block, comment mainnet, save.
-    - `COOKIE_CONTENT=` and `MODELS_CONFIG_CONTENT=` — the example values are a demo (`admin:admin` and placeholder models). A non-empty value overwrites `.cookie` and `models-config.json` on every start. Set your own admin password, and clear `MODELS_CONFIG_CONTENT` if you will edit `models-config.json` in the next step.
+    - `COOKIE_CONTENT=` and `MODELS_CONFIG_CONTENT=` — in `.env.example` these ship demo values (`admin:admin` and placeholder models); `.env.example.win` leaves them unset. A non-empty value overwrites `.cookie` and `models-config.json` on every start. Set your own admin password (or leave `COOKIE_CONTENT` empty to get a random one in `.cookie` on first start), and clear `MODELS_CONFIG_CONTENT` if you will edit `models-config.json` in the next step.
 
     Full reference: [Env: proxy-router](/reference/env-proxy-router) (see "Conflicting / overlapping variables" up top).
   </Step>
@@ -84,7 +84,7 @@ This page covers a **non-TEE provider** running on your own infrastructure. For 
       "apiKey": "..."
     }
     ```
-    Full schema: [models-config.json](/reference/models-config). Restart after edits.
+    Full schema: [models-config.json](/reference/models-config). After edits, restart or call `POST /config/models/reload`.
   </Step>
   <Step title="(Optional) provider weights & allowlist">
     Create `rating-config.json` in the working directory (and set `RATING_CONFIG_PATH=./rating-config.json` in `.env`) to bias selection or restrict to specific providers:
