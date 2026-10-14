@@ -22,7 +22,7 @@ Priority is the GitHub field in the issue sidebar: **Urgent** now, **High** next
 
 ## Pull requests
 
-Feature, docs, and fix pull requests target `dev`. A promote pull request targets `test` or `main` and its title starts with `promote:`.
+Feature, docs, and fix pull requests target `dev`. A promote pull request targets `test` or `main` and its title starts with `promote:`. A release pull request targets `main` and its title starts with `Release`.
 
 The body contains a line `Refs #123`, or the checked no-issue line for a chore, revert, or CI-only change.
 
