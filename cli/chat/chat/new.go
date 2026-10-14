@@ -27,7 +27,7 @@ type model struct {
 	client   *client.ApiGatewayClient
 
 	messages           []string
-	completionChunkSub chan string // receive chat stream chunks
+	completionChunkSub chan streamEvent // receive chat stream updates
 	messagesContext    []openai.ChatCompletionMessage
 }
 
@@ -91,7 +91,7 @@ func New(opt *common.Options) model {
 		viewport:           vp,
 		err:                nil,
 		messages:           []string{},
-		completionChunkSub: make(chan string),
+		completionChunkSub: make(chan streamEvent),
 		client:             opt.Client,
 		isLocalChat:        opt.UseLocalModel,
 		messagesContext:    []openai.ChatCompletionMessage{},
