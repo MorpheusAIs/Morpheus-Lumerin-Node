@@ -179,11 +179,11 @@ describe('ModelRegistry', () => {
       await modelRegistry.connect(SECOND).modelRegister(SECOND, baseModelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
       await modelRegistry
         .connect(SECOND)
-        .modelRegister(SECOND, baseModelId, ipfsCID2, 1, wei(300), 'name2', ['tag_1', 'tag_2']);
+        .modelRegister(SECOND, baseModelId, ipfsCID2, 0, wei(300), 'name2', ['tag_1', 'tag_2']);
 
       const data = await modelRegistry.getModel(modelId);
       expect(data.ipfsCID).to.eq(ipfsCID2);
-      expect(data.fee).to.eq(1);
+      expect(data.fee).to.eq(0);
       expect(data.stake).to.eq(wei(400));
       expect(data.owner).to.eq(SECOND);
       expect(data.name).to.eq('name2');
@@ -204,15 +204,21 @@ describe('ModelRegistry', () => {
       expect(data.isDeleted).to.eq(true);
       expect(await modelRegistry.getIsModelActive(modelId)).to.eq(false);
 
-      await modelRegistry.connect(SECOND).modelRegister(SECOND, baseModelId, ipfsCID, 4, wei(200), 'name3', ['tag_3']);
+      await modelRegistry.connect(SECOND).modelRegister(SECOND, baseModelId, ipfsCID, 0, wei(200), 'name3', ['tag_3']);
 
       data = await modelRegistry.getModel(modelId);
       expect(data.ipfsCID).to.eq(ipfsCID);
-      expect(data.fee).to.eq(4);
+      expect(data.fee).to.eq(0);
       expect(data.stake).to.eq(wei(200));
       expect(data.owner).to.eq(SECOND);
       expect(data.name).to.eq('name3');
       expect(data.tags).deep.eq(['tag_3']);
+    });
+    it('should revert when fee is non-zero (RFP M5)', async () => {
+      await expect(
+        modelRegistry.connect(SECOND).modelRegister(SECOND, baseModelId, ipfsCID, 1, wei(100), 'name', ['tag_1']),
+      ).to.be.revertedWithCustomError(diamond, 'ModelFeeNotSupportedYet');
+    });
       expect(data.createdAt).to.eq(300);
       expect(data.isDeleted).to.eq(false);
       expect(await modelRegistry.getIsModelActive(modelId)).to.eq(true);
