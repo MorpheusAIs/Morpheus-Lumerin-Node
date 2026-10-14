@@ -8,6 +8,7 @@ interface IProviderRegistry is IProviderStorage {
     event ProviderDeregistered(address indexed provider);
     event ProviderMinimumStakeUpdated(uint256 providerMinimumStake);
     event ProviderWithdrawn(address indexed provider, uint256 amount);
+    event ProviderEndpointUpdated(address indexed provider, string endpoint);
     error ProviderStakeTooLow(uint256 amount, uint256 minAmount);
     error ProviderNotDeregistered();
     error ProviderNoStake();
@@ -15,6 +16,8 @@ interface IProviderRegistry is IProviderStorage {
     error ProviderHasActiveBids();
     error ProviderNotFound();
     error ProviderHasAlreadyDeregistered();
+    error ProviderEndpointEmpty();
+    error ProviderEndpointTooLong();
 
     /**
      * The function to initialize the facet.
@@ -34,6 +37,19 @@ interface IProviderRegistry is IProviderStorage {
      * @param endpoint_ The provider endpoint (host.com:1234).
      */
     function providerRegister(address provider_, uint256 amount_, string calldata endpoint_) external;
+
+    /**
+     * @notice The function to explicitly update the provider endpoint.
+     * @param provider_ The provider address.
+     * @param endpoint_ The new provider endpoint.
+     */
+    function providerUpdateEndpoint(address provider_, string calldata endpoint_) external;
+
+    /**
+     * @notice Convenience overload to update caller's endpoint.
+     * @param endpoint_ The new provider endpoint.
+     */
+    function providerUpdateEndpoint(string calldata endpoint_) external;
 
     /**
      * @notice The function to deregister the provider.
