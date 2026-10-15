@@ -1,0 +1,81 @@
+# Sealed inference engine — XcodeGen spec. Identity (team, bundle id) comes from
+# Config/Local.xcconfig, which is git-ignored; copy Config/Local.xcconfig.example.
+# Package versions are pinned exactly here and, for every transitive package, by
+# Package.resolved; scripts/build-reproducible.sh builds only from those pins.
+# SEALED_EXTRA_LDFLAGS is empty for a normal build; the verifier's rebuild sets it
+# to -Wl,-no_adhoc_codesign (a command-line OTHER_LDFLAGS would drop -sectcreate).
+# -objc_stubs_small: with the default fast stubs the parallel linker emits two
+# GOT entries for objc_msgSend and picks one per host (measured on two different chips), so
+# executables differed across machines; small stubs leave a single entry.
+name: SealedEngine
+options:
+  deploymentTarget:
+    macOS: "27.0"
+packages:
+  MLXSwiftLM:
+    url: https://github.com/ml-explore/mlx-swift-lm
+    exactVersion: 3.31.4
+  SwiftTransformers:
+    url: https://github.com/huggingface/swift-transformers
+    exactVersion: 1.3.4
+configFiles:
+  Debug: Config/Local.xcconfig
+  Release: Config/Local.xcconfig
+targets:
+  SealedEngine:
+    type: application
+    platform: macOS
+    sources: [Sources/SealedEngine]
+    dependencies:
+      - package: MLXSwiftLM
+        product: MLXLLM
+      - package: MLXSwiftLM
+        product: MLXLMCommon
+      - package: SwiftTransformers
+        product: Tokenizers
+      - package: SwiftTransformers
+        product: Hub
+    info:
+      path: Sources/SealedEngine/Info.plist
+      properties:
+        CFBundleIdentifier: $(PRODUCT_BUNDLE_IDENTIFIER)
+        LSUIElement: true
+    entitlements:
+      path: Sources/SealedEngine/SealedEngine.entitlements
+      properties:
+        com.apple.developer.devicecheck.app-attest-opt-in: [CDhash]
+    settings:
+      base:
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO   # never get-task-allow, even in Debug
+        SWIFT_VERSION: "5.0"
+        DEAD_CODE_STRIPPING: YES
+        OTHER_LDFLAGS: ["$(inherited)", "-Wl,-sectcreate,__TEXT,__mlxlib,$(BUILT_PRODUCTS_DIR)/mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib", "-Wl,-objc_stubs_small", "$(SEALED_EXTRA_LDFLAGS)"]
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+    postBuildScripts:
+      # Runs before code signing, which is always the last step.
+      # 1. No Resources folder: Metal searches it for headers when compiling
+      #    runtime-generated kernels, and the engine reads nothing from it (its
+      #    GPU kernels are linked into the executable). The engine refuses to
+      #    start if one exists. The deletion refuses unless both variables are
+      #    set and the path is exactly this app's Resources folder.
+      # 2. Xcode writes the build host's macOS build into every Info.plist.
+      #    Remove it so builds on different macOS versions are identical.
+      - name: Remove Resources and BuildMachineOSBuild
+        basedOnDependencyAnalysis: false
+        shell: /bin/bash
+        script: |
+          set -euo pipefail
+          : "${TARGET_BUILD_DIR:?}" "${CONTENTS_FOLDER_PATH:?}"
+          R="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Resources"
+          case "$R" in
+            */SealedEngine.app/Contents/Resources) rm -rf -- "$R" ;;
+            *) echo "refusing to delete $R" >&2; exit 1 ;;
+          esac
+          find "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH" -name Info.plist -type f -print0 |
+            while IFS= read -r -d '' f; do
+              if /usr/libexec/PlistBuddy -c 'Print :BuildMachineOSBuild' "$f" >/dev/null 2>&1; then
+                /usr/libexec/PlistBuddy -c 'Delete :BuildMachineOSBuild' "$f"
+              fi
+            done

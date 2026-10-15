@@ -1,0 +1,285 @@
+diff -ruN a/Source/Cmlx/include/mlx/c/metal.h b/Source/Cmlx/include/mlx/c/metal.h
+--- a/Source/Cmlx/include/mlx/c/metal.h
++++ b/Source/Cmlx/include/mlx/c/metal.h
+@@ -7,6 +7,7 @@
+ #define MLX_METAL_H
+ 
+ #include <stdbool.h>
++#include <stddef.h>
+ #include <stdint.h>
+ #include <stdio.h>
+ 
+@@ -29,6 +30,9 @@
+ /**@{*/
+ 
+ int mlx_metal_is_available(bool* res);
++int mlx_metal_set_default_library_data(const void* data, size_t size);
++int mlx_metal_set_source_compile_guard(int (*guard)(void));
++int mlx_metal_set_source_compile_arguments(const char* args);
+ int mlx_metal_start_capture(const char* path);
+ int mlx_metal_stop_capture(void);
+ 
+diff -ruN a/Source/Cmlx/mlx/mlx/backend/metal/device.cpp b/Source/Cmlx/mlx/mlx/backend/metal/device.cpp
+--- a/Source/Cmlx/mlx/mlx/backend/metal/device.cpp
++++ b/Source/Cmlx/mlx/mlx/backend/metal/device.cpp
+@@ -1,7 +1,12 @@
+ // Copyright © 2023-2024 Apple Inc.
+ 
+ #include <cstdlib>
++#include <dispatch/dispatch.h>
++#include <mutex>
++#include <objc/message.h>
++#include <objc/runtime.h>
+ #include <sstream>
++#include <vector>
+ 
+ #define NS_PRIVATE_IMPLEMENTATION
+ #define CA_PRIVATE_IMPLEMENTATION
+@@ -19,6 +24,34 @@
+ 
+ constexpr const char* default_mtllib_path = METAL_PATH;
+ 
++std::mutex default_library_data_mtx;
++std::vector<uint8_t> default_library_data;
++bool default_library_data_supplied = false;
++bool metal_device_created = false;
++int (*source_compile_guard)(void) = nullptr;
++std::string source_compile_arguments;
++
++MTL::Library* load_library_from_supplied_data(MTL::Device* device) {
++  // caller must hold default_library_data_mtx
++  auto dispatch_data = dispatch_data_create(
++      default_library_data.data(),
++      default_library_data.size(),
++      nullptr,
++      DISPATCH_DATA_DESTRUCTOR_DEFAULT);
++  NS::Error* error = nullptr;
++  auto lib = device->newLibrary(dispatch_data, &error);
++  dispatch_release(dispatch_data);
++  if (!lib) {
++    std::ostringstream msg;
++    msg << "Failed to load the default metallib from supplied data.";
++    if (error != nullptr) {
++      msg << " " << error->localizedDescription()->utf8String();
++    }
++    throw std::runtime_error(msg.str());
++  }
++  return lib;
++}
++
+ auto get_metal_version() {
+   auto get_metal_version_ = []() {
+     if (__builtin_available(macOS 26, iOS 26, tvOS 26, visionOS 26, *)) {
+@@ -134,6 +167,13 @@
+ }
+ 
+ MTL::Library* load_default_library(MTL::Device* device) {
++  {
++    std::lock_guard<std::mutex> lock(default_library_data_mtx);
++    if (default_library_data_supplied) {
++      return load_library_from_supplied_data(device);
++    }
++  }
++
+   NS::Error* error[5];
+   MTL::Library* lib;
+   // First try the colocated mlx.metallib
+@@ -233,6 +273,38 @@
+ 
+ } // namespace
+ 
++void set_default_library_data(const void* data, size_t size) {
++  std::lock_guard<std::mutex> lock(default_library_data_mtx);
++  if (metal_device_created) {
++    throw std::runtime_error(
++        "[metal::Device] set_default_library_data must be called before "
++        "the first Metal device is created.");
++  }
++  const auto* bytes = static_cast<const uint8_t*>(data);
++  default_library_data.assign(bytes, bytes + size);
++  default_library_data_supplied = true;
++}
++
++void set_source_compile_arguments(const char* args) {
++  std::lock_guard<std::mutex> lock(default_library_data_mtx);
++  if (metal_device_created) {
++    throw std::runtime_error(
++        "[metal::Device] set_source_compile_arguments must be called before "
++        "the first Metal device is created.");
++  }
++  source_compile_arguments = args;
++}
++
++void set_source_compile_guard(int (*guard)(void)) {
++  std::lock_guard<std::mutex> lock(default_library_data_mtx);
++  if (metal_device_created) {
++    throw std::runtime_error(
++        "[metal::Device] set_source_compile_guard must be called before "
++        "the first Metal device is created.");
++  }
++  source_compile_guard = guard;
++}
++
+ CommandEncoder::CommandEncoder(DeviceStream& stream) : stream_(stream) {
+   enc_ = stream_.buffer->computeCommandEncoder(MTL::DispatchTypeConcurrent);
+   enc_->retain();
+@@ -320,6 +392,10 @@
+ }
+ 
+ Device::Device() {
++  {
++    std::lock_guard<std::mutex> lock(default_library_data_mtx);
++    metal_device_created = true;
++  }
+   auto pool = new_scoped_memory_pool();
+   device_ = load_device();
+   default_library_ = load_default_library(device_);
+@@ -542,11 +618,38 @@
+   auto options = MTL::CompileOptions::alloc()->init();
+   options->setFastMathEnabled(false);
+   options->setLanguageVersion(get_metal_version());
+-#ifndef NDEBUG
+-  if (options->languageVersion() >= MTL::LanguageVersion3_2) {
+-    options->setEnableLogging(true);
++  // Shader logging stays off: it was enabled whenever NDEBUG is undefined,
++  // which includes this Release build, and it changes the compiler
++  // configuration so that no prebuilt standard-library module matches.
++  {
++    std::lock_guard<std::mutex> lock(default_library_data_mtx);
++    if (source_compile_guard != nullptr && source_compile_guard() != 0) {
++      options->release();
++      throw std::runtime_error(
++          "[metal::Device] Metal source compilation refused by the guard.");
++    }
+   }
+-#endif
++  {
++    std::lock_guard<std::mutex> lock(default_library_data_mtx);
++    // Fail closed: in this build every source compilation must carry the
++    // arguments set by the host (the pinned standard-library module).
++    if (source_compile_arguments.empty()) {
++      options->release();
++      throw std::runtime_error(
++          "[metal::Device] Metal source compilation refused: no compile arguments set.");
++    }
++    SEL setter = sel_registerName("setAdditionalCompilerArguments:");
++    SEL responds = sel_registerName("respondsToSelector:");
++    if (!((bool (*)(void*, SEL, SEL))objc_msgSend)(options, responds, setter)) {
++      options->release();
++      throw std::runtime_error(
++          "[metal::Device] Metal does not accept additional compiler arguments.");
++    }
++    auto ns_args = NS::String::alloc()->init(
++        source_compile_arguments.c_str(), NS::UTF8StringEncoding);
++    ((void (*)(void*, SEL, void*))objc_msgSend)(options, setter, ns_args);
++    ns_args->release();
++  }
+   auto mtl_lib = device_->newLibrary(ns_code, options, &error);
+   options->release();
+ 
+diff -ruN a/Source/Cmlx/mlx/mlx/backend/metal/device.h b/Source/Cmlx/mlx/mlx/backend/metal/device.h
+--- a/Source/Cmlx/mlx/mlx/backend/metal/device.h
++++ b/Source/Cmlx/mlx/mlx/backend/metal/device.h
+@@ -18,6 +18,21 @@
+ using MTLFCList =
+     std::vector<std::tuple<const void*, MTL::DataType, NS::UInteger>>;
+ 
++// Supply the default Metal library as bytes. Must be called before the
++// first Metal device is created. The bytes are copied. Once set, the
++// default library is built only from these bytes; disk is never searched.
++void set_default_library_data(const void* data, size_t size);
++
++// Install a check that runs before every compilation of Metal source text.
++// A non-zero result makes the compilation throw instead. Must be called
++// before the first Metal device is created.
++void set_source_compile_guard(int (*guard)(void));
++
++// Extra compiler arguments for every compilation of Metal source text (set
++// through MTLCompileOptions' additionalCompilerArguments). Must be called
++// before the first Metal device is created.
++void set_source_compile_arguments(const char* args);
++
+ struct DeviceStream;
+ 
+ struct MLX_API CommandEncoder {
+diff -ruN a/Source/Cmlx/mlx-c/mlx/c/metal.cpp b/Source/Cmlx/mlx-c/mlx/c/metal.cpp
+--- a/Source/Cmlx/mlx-c/mlx/c/metal.cpp
++++ b/Source/Cmlx/mlx-c/mlx/c/metal.cpp
+@@ -4,6 +4,7 @@
+ /*                                                    */
+ 
+ #include "mlx/c/metal.h"
++#include "mlx/backend/metal/device.h"
+ #include "mlx/backend/metal/metal.h"
+ #include "mlx/c/error.h"
+ #include "mlx/c/private/mlx.h"
+@@ -11,6 +12,48 @@
+ extern "C" int mlx_metal_is_available(bool* res) {
+   try {
+     *res = mlx::core::metal::is_available();
++  } catch (std::exception& e) {
++    mlx_error(e.what());
++    return 1;
++  }
++  return 0;
++}
++extern "C" int mlx_metal_set_source_compile_arguments(const char* args) {
++  if (args == NULL || args[0] == 0) {
++    mlx_error("[metal::Device] set_source_compile_arguments requires arguments.");
++    return 1;
++  }
++  try {
++    mlx::core::metal::set_source_compile_arguments(args);
++  } catch (std::exception& e) {
++    mlx_error(e.what());
++    return 1;
++  }
++  return 0;
++}
++extern "C" int mlx_metal_set_source_compile_guard(int (*guard)(void)) {
++  if (guard == NULL) {
++    mlx_error("[metal::Device] set_source_compile_guard requires a guard.");
++    return 1;
++  }
++  try {
++    mlx::core::metal::set_source_compile_guard(guard);
++  } catch (std::exception& e) {
++    mlx_error(e.what());
++    return 1;
++  }
++  return 0;
++}
++extern "C" int mlx_metal_set_default_library_data(
++    const void* data,
++    size_t size) {
++  if (data == NULL || size == 0) {
++    mlx_error(
++        "[metal::Device] set_default_library_data requires non-empty data.");
++    return 1;
++  }
++  try {
++    mlx::core::metal::set_default_library_data(data, size);
+   } catch (std::exception& e) {
+     mlx_error(e.what());
+     return 1;
+diff -ruN a/Source/Cmlx/mlx-c/mlx/c/metal.h b/Source/Cmlx/mlx-c/mlx/c/metal.h
+--- a/Source/Cmlx/mlx-c/mlx/c/metal.h
++++ b/Source/Cmlx/mlx-c/mlx/c/metal.h
+@@ -7,6 +7,7 @@
+ #define MLX_METAL_H
+ 
+ #include <stdbool.h>
++#include <stddef.h>
+ #include <stdint.h>
+ #include <stdio.h>
+ 
+@@ -29,6 +30,9 @@
+ /**@{*/
+ 
+ int mlx_metal_is_available(bool* res);
++int mlx_metal_set_default_library_data(const void* data, size_t size);
++int mlx_metal_set_source_compile_guard(int (*guard)(void));
++int mlx_metal_set_source_compile_arguments(const char* args);
+ int mlx_metal_start_capture(const char* path);
+ int mlx_metal_stop_capture(void);
+ 
