@@ -14,3 +14,8 @@ const (
 	ChatWelcomeMessage = `Welcome to the Lumerin-Morpheus CLI! 🤖
 Type a message and press Enter to send.`
 )
+
+const (
+	DefaultSessionDurationMinutes = 10
+	MinSessionDurationMinutes     = 5
+)
