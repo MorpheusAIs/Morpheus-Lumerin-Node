@@ -8,6 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// What the venice probe records for reasoningEffortOptions.
+const veniceEffortsSource = "venice:/models.model_spec.capabilities.reasoningEffortOptions"
+
 func TestFamilyFromNameIgnoresSeparatorSpelling(t *testing.T) {
 	cases := map[string]string{
 		"kimi-k2-7-code":            "kimi",
@@ -18,7 +21,7 @@ func TestFamilyFromNameIgnoresSeparatorSpelling(t *testing.T) {
 		"deepseek-chat-v3.1":        "deepseek-v3.1",
 		"deepseek_r1_distill":       "deepseek-r1",
 		"EXAONE_4.0_32B":            "exaone",
-		"Phi_4_reasoning":           "phi",
+		"Phi_4_reasoning":           "phi-4-reasoning",
 		"seed_oss_36b":              "seed-oss",
 		"gpt_oss_120b":              "gpt-oss",
 	}
@@ -60,7 +63,7 @@ func TestThinkingNamed(t *testing.T) {
 }
 
 func TestComposeVeniceListingNoneLiftsFamilyAlwaysOn(t *testing.T) {
-	api, lines := ComposeWithTrace(Evidence{Stack: "venice", ModelName: "minimax-m27", GatewayReasoning: true, RegistryEfforts: []string{"none", "low", "medium", "high"}})
+	api, lines := ComposeWithTrace(Evidence{Stack: "venice", ModelName: "minimax-m27", GatewayReasoning: true, ReasoningEfforts: []string{"none", "low", "medium", "high"}, EffortsSource: veniceEffortsSource})
 	require.Equal(t, "minimax", api.ModelFamily)
 	require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
 	require.Equal(t, "venice_parameters.disable_thinking", api.Bindings[system.IntentReasoningDisable].Param)
@@ -72,7 +75,7 @@ func TestComposeVeniceListingNoneLiftsFamilyAlwaysOn(t *testing.T) {
 
 func TestComposeVeniceListingWithoutNoneKeepsAlwaysOn(t *testing.T) {
 	for _, name := range []string{"kimi-k2-7-code", "minimax-m25"} {
-		api := Compose(Evidence{Stack: "venice", ModelName: name, GatewayReasoning: true, RegistryEfforts: []string{"low", "medium", "high"}})
+		api := Compose(Evidence{Stack: "venice", ModelName: name, GatewayReasoning: true, ReasoningEfforts: []string{"low", "medium", "high"}, EffortsSource: veniceEffortsSource})
 		require.Equal(t, system.ThinkingModeAlwaysOn, api.Thinking.Mode, name)
 		require.Nil(t, api.Bindings[system.IntentReasoningDisable], name)
 		effort := api.Bindings[system.IntentReasoningEffort]
@@ -88,7 +91,7 @@ func TestComposeVeniceListingWithoutNoneKeepsAlwaysOn(t *testing.T) {
 }
 
 func TestComposeVeniceThinkingCheckpointIsControllable(t *testing.T) {
-	api := Compose(Evidence{Stack: "venice", ModelName: "qwen3-235b-a22b-thinking-2507", GatewayReasoning: true, RegistryEfforts: []string{"low", "medium", "high"}})
+	api := Compose(Evidence{Stack: "venice", ModelName: "qwen3-235b-a22b-thinking-2507", GatewayReasoning: true, ReasoningEfforts: []string{"low", "medium", "high"}, EffortsSource: veniceEffortsSource})
 	require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode, "the name no longer forces always_on; venice's own switch applies")
 	require.Equal(t, "venice_parameters.disable_thinking", api.Bindings[system.IntentReasoningDisable].Param)
 	require.Equal(t, []string{"low", "medium", "high"}, api.Bindings[system.IntentReasoningEffort].EnumValues)
@@ -107,7 +110,7 @@ func TestComposeThinkingNameIsReasoningEvidenceOnGateways(t *testing.T) {
 func TestComposeVeniceEffortSurvivesLiteLLMFilter(t *testing.T) {
 	api := Compose(Evidence{
 		Stack: "venice", Via: "litellm", ModelName: "my-chat", ServedModelID: "minimax-m27", GatewayReasoning: true,
-		RegistryEfforts: []string{"none", "low", "medium", "high"}, LiteLLMSeen: true, LiteLLMSupportedParams: []string{"temperature", "tools"},
+		ReasoningEfforts: []string{"none", "low", "medium", "high"}, EffortsSource: veniceEffortsSource, LiteLLMSeen: true, LiteLLMSupportedParams: []string{"temperature", "tools"},
 	})
 	require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
 	effort := api.Bindings[system.IntentReasoningEffort]
@@ -181,7 +184,7 @@ func TestComposeThinkingCheckpointKeepsFamilyBudget(t *testing.T) {
 }
 
 func TestComposeListedEffortLevelsAreReasoningEvidence(t *testing.T) {
-	api := Compose(Evidence{Stack: "venice", ModelName: "some-new-model", RegistryEfforts: []string{"low", "high"}})
+	api := Compose(Evidence{Stack: "venice", ModelName: "some-new-model", ReasoningEfforts: []string{"low", "high"}, EffortsSource: veniceEffortsSource})
 	require.NotNil(t, api.Thinking, "a listing that names effort levels says the model reasons")
 	require.Equal(t, []string{"low", "high"}, api.Bindings[system.IntentReasoningEffort].EnumValues)
 }
@@ -215,4 +218,22 @@ func TestComposeNoEffortDropsTheEffortKnob(t *testing.T) {
 	require.Equal(t, "venice_parameters.disable_thinking", api.Bindings[system.IntentReasoningDisable].Param)
 	require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
 	require.Contains(t, strings.Join(lines, "\n"), "takes no effort level")
+}
+
+func TestComposeOllamaListedNoneLiftsFamilyAlwaysOn(t *testing.T) {
+	api := Compose(Evidence{Stack: "ollama", ModelName: "qwq:32b", OllamaThinking: true, ReasoningEfforts: []string{"none", "low", "high"}, EffortsSource: "ollama:/api/show.thinking.values"})
+	require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode, "ollama accepts think=false for this model")
+	require.Equal(t, "reasoning_effort", api.Bindings[system.IntentReasoningDisable].Param)
+	require.Equal(t, "none", api.Bindings[system.IntentReasoningDisable].Value)
+
+	always := Compose(Evidence{Stack: "ollama", ModelName: "qwq:32b", OllamaThinking: true, ReasoningEfforts: []string{"low", "high"}, EffortsSource: "ollama:/api/show.thinking.values"})
+	require.Equal(t, system.ThinkingModeAlwaysOn, always.Thinking.Mode, "without none the family rule stands")
+}
+
+func TestComposeMandatoryReasoningWithholdsListedNone(t *testing.T) {
+	api := Compose(Evidence{Stack: "openrouter", ModelName: "vendor/thinker", GatewayReasoning: true, MandatoryReasoning: true,
+		ReasoningEfforts: []string{"none", "low", "high"}, EffortsSource: "openrouter:/models.reasoning.supported_efforts"})
+	require.Equal(t, system.ThinkingModeAlwaysOn, api.Thinking.Mode)
+	require.Nil(t, api.Bindings[system.IntentReasoningDisable])
+	require.Equal(t, []string{"low", "high"}, api.Bindings[system.IntentReasoningEffort].EnumValues, "a mandatory-reasoning model rejects none")
 }

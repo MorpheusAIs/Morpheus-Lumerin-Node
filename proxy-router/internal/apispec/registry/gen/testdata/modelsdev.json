@@ -1,0 +1,89 @@
+{
+  "openai": {
+    "id": "openai",
+    "models": {
+      "gpt-4o": {
+        "id": "gpt-4o",
+        "attachment": true,
+        "reasoning": false,
+        "tool_call": true,
+        "structured_output": true,
+        "modalities": {"input": ["text", "image", "pdf"], "output": ["text"]},
+        "limit": {"context": 128000, "output": 16384}
+      }
+    }
+  },
+  "azure": {
+    "id": "azure",
+    "models": {
+      "gpt-4o": {
+        "id": "gpt-4o",
+        "attachment": false,
+        "reasoning": false,
+        "tool_call": true,
+        "structured_output": false,
+        "modalities": {"input": ["text", "image"], "output": ["text"]},
+        "limit": {"context": 100000, "output": 4096}
+      }
+    }
+  },
+  "openrouter": {
+    "id": "openrouter",
+    "models": {
+      "openai/gpt-4o": {
+        "id": "openai/gpt-4o",
+        "attachment": true,
+        "reasoning": false,
+        "tool_call": true,
+        "structured_output": true,
+        "modalities": {"input": ["text", "image", "pdf"], "output": ["text"]},
+        "limit": {"context": 64000, "output": 8000}
+      },
+      "meta-llama/Llama-3-70b": {
+        "id": "meta-llama/Llama-3-70b",
+        "attachment": false,
+        "reasoning": false,
+        "tool_call": true,
+        "modalities": {"input": ["text"], "output": ["text"]},
+        "limit": {"context": 8192}
+      },
+      "google/gemma-3-27b-it": {
+        "id": "google/gemma-3-27b-it",
+        "attachment": false,
+        "reasoning": false,
+        "tool_call": false,
+        "modalities": {"input": ["text", "image"], "output": ["text"]},
+        "limit": {"context": 131072, "output": 8192}
+      }
+    }
+  },
+  "nano-gpt": {
+    "id": "nano-gpt",
+    "models": {
+      "Holo3:thinking": {
+        "id": "Holo3:thinking",
+        "attachment": false,
+        "reasoning": true,
+        "tool_call": false,
+        "modalities": {"input": ["text"], "output": ["text", "video"]},
+        "limit": {"context": 32768.0, "output": 0}
+      },
+      "bar:temp=0.5:free": {
+        "id": "bar:temp=0.5:free",
+        "attachment": false,
+        "reasoning": false,
+        "tool_call": false,
+        "modalities": {"input": ["text"], "output": ["text"]},
+        "limit": {"context": 4294967296, "output": 1.5}
+      },
+      "broken-row": {
+        "id": "broken-row",
+        "limit": {"context": "lots"}
+      }
+    }
+  },
+  "broken-provider": {
+    "id": "broken-provider",
+    "models": "not an object"
+  }
+}

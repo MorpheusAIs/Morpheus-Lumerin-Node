@@ -9,6 +9,8 @@ package modelhealth
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,6 +26,7 @@ import (
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apiprobe"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apispec"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/attestation"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi"
@@ -73,6 +76,14 @@ type TeeStatusProvider interface {
 
 type ApiDetector interface {
 	Detect(ctx context.Context, cfg config.ModelConfig) *system.ModelApiSpec
+}
+
+// ProbeAwareDetector is the optional side of an ApiDetector that can say
+// beforehand whether Detect will reach the backend (a cache miss) rather
+// than answer from its cache; the sweep paces those calls by probeDelay.
+// A detector without it is paced on every call.
+type ProbeAwareDetector interface {
+	WouldProbe(cfg config.ModelConfig) bool
 }
 
 // DefaultMaxConsecutiveErrors is the number of consecutive real-session
@@ -144,6 +155,13 @@ type Checker struct {
 	// failures tracks the consecutive real-session prompt failure streak per
 	// model, including whether the whole streak was upstream rate limiting.
 	failures map[string]failureStreak
+	// runtime holds the evidence the health probe's own response established
+	// per model (design contract §5, harvest) and what the verifier
+	// established; merged onto the detection result after every probe.
+	runtime *runtimeStore
+	// sleepFn paces backend requests; nil means a timer. Tests observe the
+	// pacing through it.
+	sleepFn func(ctx context.Context, d time.Duration) bool
 
 	// triggerCh carries manual re-check requests into the Run loop; buffered
 	// at 1 so triggers queue at most one extra sweep and can never overlap.
@@ -168,6 +186,21 @@ type Deps struct {
 	// attestation does not pass are reported as tee_unverified.
 	TeeStatus TeeStatusProvider
 	ApiDetect ApiDetector
+	// ApiDetectTTL is MODEL_API_DETECT_TTL, the TTL the detector caches by;
+	// runtime evidence harvested from the health probe is re-merged for the
+	// same span after a probe stops producing it, and the verifier completes
+	// one run per span. <= 0 means DefaultRuntimeTTL.
+	ApiDetectTTL time.Duration
+	// VerifyBindings is MODEL_API_VERIFY_BINDINGS: after a healthy LLM
+	// probe, one completed run per TTL, resend the probe with the
+	// reasoning.disable binding applied and with a dummy tool (design
+	// contract §5, verifier).
+	VerifyBindings bool
+	// ProbeCapabilities is MODEL_API_PROBE_CAPABILITIES: the json_schema,
+	// image and vLLM render probes on the same schedule. Both switches reach
+	// every backend, hosted vendors and gateways included, which bill per
+	// request.
+	ProbeCapabilities bool
 }
 
 func NewChecker(deps Deps, interval, timeout, probeDelay time.Duration, maxConsecutiveErrors int, log lib.ILogger) *Checker {
@@ -184,6 +217,7 @@ func NewChecker(deps Deps, interval, timeout, probeDelay time.Duration, maxConse
 		reports:              make(map[string]system.ModelHealthReport),
 		modelMeta:            make(map[string]modelMeta),
 		failures:             make(map[string]failureStreak),
+		runtime:              newRuntimeStore(deps.ApiDetectTTL),
 		triggerCh:            make(chan struct{}, 1),
 	}
 }
@@ -261,7 +295,7 @@ func (c *Checker) checkAll(ctx context.Context, walletAddr common.Address) {
 	c.firstTeeSweepDone = true
 	c.mu.Unlock()
 
-	probed := false
+	backendHit := false
 	for i, modelID := range modelIDs {
 		select {
 		case <-ctx.Done():
@@ -269,20 +303,23 @@ func (c *Checker) checkAll(ctx context.Context, walletAddr common.Address) {
 		default:
 		}
 		bidID, hasBid := bidsByModel[modelID]
-		// Pace backend probes so a provider with many models doesn't burst
-		// its upstream (often a single account behind all models) and
-		// self-inflict rate-limit failures. Only probed models (those with
-		// an active bid) hit the backend, so only they are paced.
-		if hasBid && probed && !c.sleep(ctx, c.probeDelay) {
-			return
-		}
 		var cfg config.ModelConfig
 		if i < len(modelCfgs) {
 			cfg = modelCfgs[i]
 		}
+		// Pace backend requests so a provider with many models doesn't burst
+		// its upstream (often a single account behind all models) and
+		// self-inflict rate-limit failures. Only requests that reach the
+		// backend are paced: the health probe of a model with an active bid,
+		// and an API detection the detector cannot answer from its cache.
+		// Both kinds share one pace, since they share that account.
+		willHit := hasBid || c.detectionWouldProbe(cfg)
+		if willHit && backendHit && !c.sleep(ctx, c.probeDelay) {
+			return
+		}
 		c.checkModel(ctx, modelID, bidID, hasBid, cfg, reattestTee)
-		if hasBid {
-			probed = true
+		if willHit {
+			backendHit = true
 		}
 		seen[modelID.Hex()] = true
 	}
@@ -325,9 +362,31 @@ func (c *Checker) reportUnconfigured(ctx context.Context, modelID common.Hash, b
 	c.setReport(report)
 }
 
+// detectable is the checkModel branch that hands cfg to the detector: a
+// chat-transport model without a declared apiStack.
+func (c *Checker) detectable(cfg config.ModelConfig) bool {
+	return c.deps.ApiDetect != nil && apispec.StackFor(cfg.ApiStack) == "" && config.IsChatTransport(cfg.ApiType) && (cfg.ApiURL != "" || cfg.ModelName != "")
+}
+
+// detectionWouldProbe reports whether checkModel's detection of cfg will
+// reach the backend; unknown for a detector without ProbeAwareDetector,
+// which is then treated as probing.
+func (c *Checker) detectionWouldProbe(cfg config.ModelConfig) bool {
+	if !c.detectable(cfg) {
+		return false
+	}
+	if aware, ok := c.deps.ApiDetect.(ProbeAwareDetector); ok {
+		return aware.WouldProbe(cfg)
+	}
+	return true
+}
+
 // sleep blocks for d unless the context is cancelled first; it reports
 // whether the full delay elapsed.
 func (c *Checker) sleep(ctx context.Context, d time.Duration) bool {
+	if c.sleepFn != nil {
+		return c.sleepFn(ctx, d)
+	}
 	if d <= 0 {
 		return true
 	}
@@ -349,6 +408,7 @@ func (c *Checker) prune(seen map[string]bool) {
 	for id := range c.reports {
 		if !seen[id] {
 			delete(c.reports, id)
+			c.runtime.forget(id)
 		}
 	}
 }
@@ -406,11 +466,14 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 	}
 
 	// Image adapters (prodia-*, hyperbolic-sd) and decisions have no chat API
-	// to probe; detecting them would cost ~16 requests per sweep for nothing.
+	// to probe; detecting them would cost a full engine fingerprint (a few
+	// dozen endpoint requests per TTL) for nothing.
+	// A declared capabilities block is published even when nothing detects
+	// (detection off, or a transport it does not cover).
 	var api *system.ModelApiSpec
 	if apispec.StackFor(cfg.ApiStack) != "" {
 		api = apispec.Build(cfg)
-	} else if c.deps.ApiDetect != nil && config.IsChatTransport(cfg.ApiType) && (cfg.ApiURL != "" || cfg.ModelName != "") {
+	} else if c.detectable(cfg) {
 		budget := c.timeout
 		if budget <= 0 || budget > detectBudget {
 			budget = detectBudget
@@ -418,31 +481,37 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 		detectCtx, cancel := context.WithTimeout(ctx, budget)
 		api = c.deps.ApiDetect.Detect(detectCtx, cfg)
 		cancel()
+	} else if cfg.Capabilities != nil {
+		api = apispec.Build(cfg)
 	}
-	if api != nil {
-		api.DeclaredAt = time.Now().Unix()
-		if hasPrev && prev.Api != nil && sameApiSpecIgnoringDeclaredAt(prev.Api, api) {
-			api.DeclaredAt = prev.Api.DeclaredAt
-		}
-		report.Api = api
+
+	// The api block is finalised after the probe on every exit: the probe's
+	// own response is runtime evidence (design contract §3 rule 11), and a
+	// sweep that never probes still re-merges what an earlier one harvested.
+	var meta *aiengine.ResponseMeta
+	var prevApi *system.ModelApiSpec
+	if hasPrev {
+		prevApi = prev.Api
 	}
+	defer func() {
+		report.Api = c.publishedApi(modelID, cfg, api, meta, prevApi)
+		c.setReport(report)
+	}()
 
 	if !hasBid {
 		report.Status = system.ModelHealthStatusNoBid
-		c.setReport(report)
 		return
 	}
 
-	meta, err := c.modelMetaFor(ctx, modelID)
+	modelMeta, err := c.modelMetaFor(ctx, modelID)
 	if err != nil {
 		c.log.Warnf("model %s: cannot resolve model metadata: %s", lib.Short(modelID), err)
 		report.Status = system.ModelHealthStatusSkipped
 		report.ErrorKind = system.ModelHealthErrorTypeLookup
-		c.setReport(report)
 		return
 	}
-	report.ModelName = meta.name
-	report.ModelType = string(meta.modelType)
+	report.ModelName = modelMeta.name
+	report.ModelType = string(modelMeta.modelType)
 
 	// Re-run backend attestation for TEE-tagged models on every sweep after
 	// the first (the first sweep relies on the startup attestation),
@@ -452,7 +521,7 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 	// attestation does not pass cannot serve sessions (session requests are
 	// rejected by the receiver), so it is reported as tee_unverified and the
 	// backend probe is skipped.
-	if meta.isTee && c.deps.TeeStatus != nil {
+	if modelMeta.isTee && c.deps.TeeStatus != nil {
 		if reattestTee {
 			attestCtx, cancel := context.WithTimeout(ctx, c.timeout)
 			if err := c.deps.TeeStatus.ReattestBackend(attestCtx, modelID.Hex(), cfg.ApiURL); err != nil {
@@ -466,7 +535,6 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 			c.log.Warnf("model %s: backend TEE attestation is not passed, reporting tee_unverified", lib.Short(modelID))
 			report.Status = system.ModelHealthStatusTeeUnverified
 			report.ErrorKind = system.ModelHealthErrorTeeAttestation
-			c.setReport(report)
 			return
 		}
 	}
@@ -477,10 +545,18 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 	// the probe.
 	typeGuessed := false
 
+	// Only the LLM probe harvests response metadata: the OpenAI adapter is
+	// the one that fills it, and it serves chat completions.
+	llmProbe := func(ctx context.Context, adapter aiengine.AIEngineStream, report *system.ModelHealthReport) error {
+		var err error
+		meta, err = c.probeLLM(ctx, adapter, report)
+		return err
+	}
+
 	var probe func(ctx context.Context, adapter aiengine.AIEngineStream, report *system.ModelHealthReport) error
-	switch meta.modelType {
+	switch modelMeta.modelType {
 	case structs.ModelTypeLLM:
-		probe = c.probeLLM
+		probe = llmProbe
 	case structs.ModelTypeEMBEDDING:
 		probe = c.probeEmbeddings
 	case structs.ModelTypeDECISIONS:
@@ -499,16 +575,14 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 		// classify. Those reach Unknown too, and firing a text prompt at an
 		// image or video backend buys an upstream call and a misleading
 		// unhealthy row rather than information.
-		if meta.mediaOnly {
+		if modelMeta.mediaOnly {
 			report.Status = system.ModelHealthStatusSkipped
-			c.setReport(report)
 			return
 		}
 		typeGuessed = true
-		probe = c.probeLLM
+		probe = llmProbe
 	default:
 		report.Status = system.ModelHealthStatusSkipped
-		c.setReport(report)
 		return
 	}
 
@@ -517,7 +591,6 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 		c.log.Warnf("model %s: cannot get adapter: %s", lib.Short(modelID), err)
 		report.Status = system.ModelHealthStatusUnhealthy
 		report.ErrorKind = system.ModelHealthErrorBadResponse
-		c.setReport(report)
 		return
 	}
 
@@ -554,15 +627,227 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 			report.Status = system.ModelHealthStatusUnhealthy
 			report.ErrorKind = classifyError(err)
 		}
-	} else {
-		report.Status = system.ModelHealthStatusHealthy
-		report.LastHealthy = time.Now().Unix()
-		// A passing probe is direct evidence the backend works again, so the
-		// consecutive session-failure streak (if any) is over.
-		c.resetFailures(modelID)
+		return
 	}
 
-	c.setReport(report)
+	report.Status = system.ModelHealthStatusHealthy
+	report.LastHealthy = time.Now().Unix()
+	// A passing probe is direct evidence the backend works again, so the
+	// consecutive session-failure streak (if any) is over.
+	c.resetFailures(modelID)
+
+	// The inference-traffic probes follow a healthy chat probe only: they
+	// are chat requests, and a backend that failed the plain one answers
+	// nothing about its features.
+	if (modelMeta.modelType == structs.ModelTypeLLM || typeGuessed) && api != nil {
+		c.verify(ctx, modelID, cfg, api, adapter)
+	}
+}
+
+// verify runs the verifier and the capability probes (design contract §5)
+// for a model whose probe just passed, when the flags allow: one completed
+// run per TTL per (model, spec), each request paced by probeDelay, against
+// every backend the probe reached — a hosted vendor, a gateway, an upstream
+// reached through one (Via) and a backend detection could not name
+// included. The spec the probes are chosen from carries the
+// runtime evidence already established, so a binding an earlier sweep saw
+// rejected is not sent again; the once-per-TTL key hashes the detection
+// result itself, which is stable across sweeps. A run cut short by the
+// context records nothing, so the next sweep retries. A run that meets an
+// account or rate-limit answer (apiprobe Verdict.AccountLimited: 401, 402,
+// 403, 429) stops there, since the probes left would meet the same answer,
+// and records what it established without counting as done: the next sweep
+// resumes it once and asks the rest (runtimeStore.recordVerify).
+func (c *Checker) verify(ctx context.Context, modelID common.Hash, cfg config.ModelConfig, api *system.ModelApiSpec, adapter aiengine.AIEngineStream) {
+	if !c.deps.VerifyBindings && !c.deps.ProbeCapabilities {
+		return
+	}
+	id := modelID.Hex()
+	key := verifyKey(api)
+	if !c.runtime.verifyDue(id, key) {
+		return
+	}
+	spec := api.Clone()
+	if rt, ok := c.runtime.harvest(id, nil); ok {
+		apispec.MergeRuntime(spec, rt)
+	}
+
+	_, _, prompt := generateArithmeticPrompt()
+	v := &apiprobe.Verifier{
+		Adapter: adapter, Stack: spec.Stack, ModelName: cfg.ModelName, ApiURL: cfg.ApiURL, ApiKey: cfg.ApiKey,
+		Prompt: prompt,
+		Pace:   func(ctx context.Context) bool { return c.sleep(ctx, c.probeDelay) },
+		Now:    c.runtime.now,
+	}
+	var verdicts []apiprobe.Verdict
+	stopped := false
+	// However the probes end, the run is recorded unless the context cut it
+	// short; a stopped run is recorded as not done.
+	defer func() {
+		if ctx.Err() != nil {
+			return
+		}
+		var facts apispec.Runtime
+		apiprobe.Fold(&facts, verdicts...)
+		c.runtime.recordVerify(id, key, facts, !stopped)
+	}()
+	run := func(probe func(context.Context) apiprobe.Verdict) bool {
+		probeCtx, cancel := context.WithTimeout(ctx, c.timeout)
+		verdict := probe(probeCtx)
+		cancel()
+		if ctx.Err() != nil {
+			return false
+		}
+		line := fmt.Sprintf("model %s: verify %s: %s (HTTP %d): %s", lib.Short(modelID), verdict.Probe, verdict.Outcome, verdict.Status, verdict.Reason)
+		if verdict.AccountLimited() {
+			stopped = true
+			c.log.Info(line + "; run stopped, the rest is asked next sweep")
+			return false
+		}
+		verdicts = append(verdicts, verdict)
+		switch verdict.Outcome {
+		case apiprobe.OutcomeRefuted, apiprobe.OutcomeRejected, apiprobe.OutcomeRefused:
+			c.log.Info(line)
+		default:
+			c.log.Debug(line)
+		}
+		return true
+	}
+
+	// The completion with the binding applied is the direct observation of
+	// reasoning.disable; once it answered (verified, refuted or rejected) the
+	// render check would only add a weaker verdict on the same intent, and a
+	// render that differs must not publish verified: true beside the
+	// always_on a refutation established. A run resuming a stopped one
+	// that holds the completion's verdict sends neither again.
+	disableDecided := c.runtime.pendingDisableVerdict(id, key)
+	if c.deps.VerifyBindings {
+		if apiprobe.ReasoningDisableBinding(spec) != nil && !disableDecided {
+			if !run(func(ctx context.Context) apiprobe.Verdict { return v.VerifyReasoningDisable(ctx, spec) }) {
+				return
+			}
+			disableDecided = verdicts[len(verdicts)-1].Outcome != apiprobe.OutcomeUnknown
+		}
+		if spec.Capabilities == nil || spec.Capabilities.Tools == nil {
+			if !run(v.ProbeTools) {
+				return
+			}
+		}
+	}
+	if c.deps.ProbeCapabilities {
+		if !hasCapListEntry(spec, apispec.CapFieldStructured, "json_schema") {
+			if !run(v.ProbeJSONSchema) {
+				return
+			}
+		}
+		if !hasCapListEntry(spec, apispec.CapFieldModalitiesInput, "image") {
+			if !run(v.ProbeImage) {
+				return
+			}
+		}
+		// The render check proves the template honours the kwarg without a
+		// completion; it runs only while the completion probe left the
+		// binding undecided.
+		if _, _, ok := apiprobe.TemplateToggle(spec); ok && spec.Stack == "vllm" && !disableDecided {
+			if !run(func(ctx context.Context) apiprobe.Verdict { return v.RenderThinkingToggle(ctx, spec) }) {
+				return
+			}
+		}
+	}
+}
+
+// verifyKey names the spec a verifier run answered for: the stack, the
+// gateway and the bindings (intent, kind, parameter, value). A changed
+// binding table is verified afresh before the TTL; runtime evidence is
+// excluded so the key does not change with the verdicts themselves.
+func verifyKey(api *system.ModelApiSpec) string {
+	type entry struct {
+		Kind  string `json:"kind"`
+		Param string `json:"param"`
+		Value any    `json:"value"`
+	}
+	bindings := make(map[string]entry, len(api.Bindings))
+	for intent, b := range api.Bindings {
+		if b != nil {
+			bindings[intent] = entry{Kind: b.Kind, Param: b.Param, Value: b.Value}
+		}
+	}
+	raw, _ := json.Marshal(struct {
+		Stack    string           `json:"stack"`
+		Via      string           `json:"via"`
+		Bindings map[string]entry `json:"bindings"`
+	}{api.Stack, api.Via, bindings})
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
+}
+
+func hasCapListEntry(api *system.ModelApiSpec, field, value string) bool {
+	if api.Capabilities == nil {
+		return false
+	}
+	var list []string
+	switch field {
+	case apispec.CapFieldStructured:
+		list = api.Capabilities.Structured
+	case apispec.CapFieldModalitiesInput:
+		if api.Capabilities.Modalities != nil {
+			list = api.Capabilities.Modalities.Input
+		}
+	}
+	for _, have := range list {
+		if have == value {
+			return true
+		}
+	}
+	return false
+}
+
+// publishedApi is the api block of one report: the declared or detected spec
+// with the model's runtime evidence merged onto a clone (the detector's cache
+// stays free of it), or nil when nothing is known. A LiteLLM proxy seen only
+// in the probe's headers names the stack on its own when detection found
+// nothing; the composer adds no reasoning knob to it, since no reasoning
+// evidence exists. declaredAt survives a sweep whose merged spec is equal to
+// the previous one.
+func (c *Checker) publishedApi(modelID common.Hash, cfg config.ModelConfig, api *system.ModelApiSpec, meta *aiengine.ResponseMeta, prev *system.ModelApiSpec) *system.ModelApiSpec {
+	rt, hasRuntime := c.runtime.harvest(modelID.Hex(), meta)
+	if api == nil && hasRuntime && len(rt.StackHints) > 0 {
+		if stack := apispec.StackFor(rt.StackHints[0]); stack != "" {
+			api = apispec.Compose(apispec.Evidence{Stack: stack, ModelName: cfg.ModelName, ServedModelID: rt.ServedModelID})
+			if api.Evidence == nil {
+				api.Evidence = map[string]string{}
+			}
+			api.Evidence[evidenceKeyStack] = sourceStackHeaders
+		}
+	}
+	if api == nil {
+		return nil
+	}
+	live := api.Clone()
+	if hasRuntime {
+		if trace := apispec.MergeRuntime(live, rt); len(trace) > 0 {
+			c.log.Debugf("model %s: runtime evidence: %s", lib.Short(modelID), strings.Join(trace, "; "))
+		}
+		// A refuted binding's evidence names what the probe saw
+		// (verify:reasoning_content_still_present@<at>), so the CLI can show
+		// why verified is false; MergeRuntime writes the intent's own name.
+		for intent, verdict := range rt.Verified {
+			if verdict.Verified || verdict.Reason == "" || live.Bindings[intent] == nil {
+				continue
+			}
+			if slug := apiprobe.ReasonSlug(verdict.Reason); slug != "" {
+				if live.Evidence == nil {
+					live.Evidence = map[string]string{}
+				}
+				live.Evidence[system.EvidenceKeyBinding(intent)] = apiprobe.VerifySource(slug, verdict.At)
+			}
+		}
+	}
+	live.DeclaredAt = time.Now().Unix()
+	if prev != nil && sameApiSpecIgnoringDeclaredAt(prev, live) {
+		live.DeclaredAt = prev.DeclaredAt
+	}
+	return live
 }
 
 func sameApiSpecIgnoringDeclaredAt(a, b *system.ModelApiSpec) bool {
@@ -571,7 +856,10 @@ func sameApiSpecIgnoringDeclaredAt(a, b *system.ModelApiSpec) bool {
 	return reflect.DeepEqual(ac, bc)
 }
 
-func (c *Checker) probeLLM(ctx context.Context, adapter aiengine.AIEngineStream, report *system.ModelHealthReport) error {
+// probeLLM sends the arithmetic prompt and returns what the response revealed
+// about the backend (aiengine.ResponseMeta); the meta is filled by the OpenAI
+// adapter only and stays empty for the others.
+func (c *Checker) probeLLM(ctx context.Context, adapter aiengine.AIEngineStream, report *system.ModelHealthReport) (*aiengine.ResponseMeta, error) {
 	a, b, prompt := generateArithmeticPrompt()
 
 	req := &gcs.OpenAICompletionRequestExtra{
@@ -583,9 +871,10 @@ func (c *Checker) probeLLM(ctx context.Context, adapter aiengine.AIEngineStream,
 		},
 	}
 
+	meta := &aiengine.ResponseMeta{}
 	var response strings.Builder
 	var engineErr error
-	err := adapter.Prompt(ctx, req, func(ctx context.Context, chunk gcs.Chunk, aiEngineErr *gcs.AiEngineErrorResponse) error {
+	err := adapter.Prompt(aiengine.WithResponseMeta(ctx, meta), req, func(ctx context.Context, chunk gcs.Chunk, aiEngineErr *gcs.AiEngineErrorResponse) error {
 		if aiEngineErr != nil {
 			report.HttpStatus = aiEngineErr.StatusCode
 			engineErr = errors.New("model backend returned an error response")
@@ -597,18 +886,18 @@ func (c *Checker) probeLLM(ctx context.Context, adapter aiengine.AIEngineStream,
 		return nil
 	})
 	if err != nil {
-		return err
+		return meta, err
 	}
 	if engineErr != nil {
-		return engineErr
+		return meta, engineErr
 	}
 	if response.Len() == 0 {
-		return errors.New("empty completion response")
+		return meta, errors.New("empty completion response")
 	}
 
 	correct := verifyArithmeticAnswer(response.String(), a+b)
 	report.PromptCorrect = &correct
-	return nil
+	return meta, nil
 }
 
 func (c *Checker) probeEmbeddings(ctx context.Context, adapter aiengine.AIEngineStream, report *system.ModelHealthReport) error {

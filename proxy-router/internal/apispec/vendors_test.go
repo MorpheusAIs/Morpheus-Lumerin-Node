@@ -25,6 +25,7 @@ func TestStackFromHost(t *testing.T) {
 		"https://integrate.api.nvidia.com/v1":              "nvidia-nim",
 		"https://api.cerebras.ai/v1":                       "cerebras",
 		"https://api.sambanova.ai/v1":                      "sambanova",
+		"https://router.huggingface.co/v1":                 "hf-router",
 		"http://192.168.1.10:8000/v1/chat/completions":     "",
 		"http://localhost:11434/v1":                        "",
 	}

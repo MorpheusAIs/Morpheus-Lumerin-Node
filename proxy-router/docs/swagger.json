@@ -5415,6 +5415,25 @@
                 }
             }
         },
+        "system.Modalities": {
+            "type": "object",
+            "properties": {
+                "input": {
+                    "description": "text, image, audio, video, pdf",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "output": {
+                    "description": "text, image, audio, embeddings",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "system.ModelApiSpec": {
             "type": "object",
             "properties": {
@@ -5425,8 +5444,23 @@
                         "$ref": "#/definitions/system.ParamBinding"
                     }
                 },
+                "capabilities": {
+                    "description": "Capabilities are backend-verified or declared facts about the model as\nserved; an absent field is unknown, never false. Never derived from the\nstack tables or the family name.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/system.ModelCapabilities"
+                        }
+                    ]
+                },
                 "declaredAt": {
                     "type": "integer"
+                },
+                "evidence": {
+                    "description": "Evidence maps a wire field path (capabilities.context, thinking.default,\nbindings.reasoning.disable, ...) to the source it was set from: a\nbackend endpoint, declared, registry, derived, health-probe or verify\n(see EvidenceKeyThinkingDefault).",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
                 },
                 "modelFamily": {
                     "description": "ModelFamily is the canonical model family (qwen3, deepseek-r1, claude, ...).",
@@ -5458,6 +5492,56 @@
                 "via": {
                     "description": "Via is the gateway in front of Stack when detection identified the\nupstream behind it; today only \"litellm\". Absent when the backend is\nreached directly or the upstream is unknown (then Stack is the gateway).",
                     "type": "string"
+                }
+            }
+        },
+        "system.ModelCapabilities": {
+            "type": "object",
+            "properties": {
+                "context": {
+                    "description": "Context is the served window (prompt + completion tokens): the number to\nplan requests against.",
+                    "type": "integer"
+                },
+                "contextTrained": {
+                    "description": "ContextTrained is the model's trained window when the backend reports\nboth.",
+                    "type": "integer"
+                },
+                "embeddings": {
+                    "type": "boolean"
+                },
+                "maxOutput": {
+                    "type": "integer"
+                },
+                "modalities": {
+                    "$ref": "#/definitions/system.Modalities"
+                },
+                "promptCache": {
+                    "type": "boolean"
+                },
+                "quantization": {
+                    "description": "Quantization is the backend's own label (fp8, Q4_K_M, bf16, ...).",
+                    "type": "string"
+                },
+                "reasoning": {
+                    "description": "Reasoning says the model can reason; the control is in Thinking and\nBindings.",
+                    "type": "boolean"
+                },
+                "structured": {
+                    "description": "Structured is a subset of json_object, json_schema, grammar, regex, choice.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "tools": {
+                    "type": "boolean"
+                },
+                "toolsParallel": {
+                    "type": "boolean"
+                },
+                "webSearch": {
+                    "description": "WebSearch says the backend can search the web for this model on request;\nthe knob is a web_search.* binding.",
+                    "type": "boolean"
                 }
             }
         },
@@ -5556,6 +5640,13 @@
                 },
                 "value": {
                     "description": "Value is the fixed value realizing the intent; nil when the caller\nsupplies it."
+                },
+                "verified": {
+                    "description": "Verified is set by the runtime verifier; absent means never checked.",
+                    "type": "boolean"
+                },
+                "verifiedAt": {
+                    "type": "integer"
                 }
             }
         },
@@ -5584,8 +5675,12 @@
         "system.ThinkingSpec": {
             "type": "object",
             "properties": {
+                "default": {
+                    "description": "Default is \"on\", \"off\" or an effort level name; absent when unknown.",
+                    "type": "string"
+                },
                 "mode": {
-                    "description": "always_on (cannot be disabled) | controllable (reasoning.disable/enable bindings) | tunable (effort/budget bindings only)",
+                    "description": "always_on: cannot be disabled (a reasoning.disable binding may remain only with verified: false, the verifier's refutation) | controllable: reasoning.disable/enable bindings | tunable: effort/budget bindings only",
                     "type": "string"
                 }
             }

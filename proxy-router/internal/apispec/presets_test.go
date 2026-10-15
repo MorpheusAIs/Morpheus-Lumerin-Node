@@ -1,6 +1,7 @@
 package apispec
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
@@ -35,7 +36,7 @@ func TestStackTablesMatchConfigPresets(t *testing.T) {
 
 func assertWellFormed(t *testing.T, where string, b map[string]*system.ParamBinding) {
 	t.Helper()
-	kinds := map[string]bool{system.BindingKindBodyParam: true, system.BindingKindTemplateKwarg: true, system.BindingKindSystemPrompt: true, system.BindingKindNativeBodyParam: true}
+	kinds := map[string]bool{system.BindingKindBodyParam: true, system.BindingKindTemplateKwarg: true, system.BindingKindSystemPrompt: true, system.BindingKindNativeBodyParam: true, system.BindingKindToolEntry: true}
 	types := map[string]bool{"boolean": true, "number": true, "enum": true, "string": true, "object": true, "array": true}
 	for intent, pb := range b {
 		require.NotNil(t, pb, "%s/%s", where, intent)
@@ -59,7 +60,140 @@ func assertWellFormed(t *testing.T, where string, b map[string]*system.ParamBind
 		if pb.Kind == system.BindingKindNativeBodyParam {
 			require.NotEmpty(t, pb.Hint, "%s/%s native binding needs an endpoint hint", where, intent)
 		}
+		if pb.Kind == system.BindingKindToolEntry {
+			require.Equal(t, "tools", pb.Param, "%s/%s tool_entry appends to tools[]", where, intent)
+			require.IsType(t, map[string]any{}, pb.Value, "%s/%s tool_entry value is the tool object", where, intent)
+		}
 	}
+}
+
+// Plan §6.D / contract §3 rule 8: one documented request shape per hosted
+// vendor; the local engines have no web-search knob.
+func TestStackWebSearchBindings(t *testing.T) {
+	rows := map[string]*system.ParamBinding{
+		"venice":     {Kind: system.BindingKindBodyParam, Param: "venice_parameters.enable_web_search", ParamType: "string", Value: "on"},
+		"openrouter": {Kind: system.BindingKindBodyParam, Param: "plugins", ParamType: "array", Value: []any{map[string]any{"id": "web"}}},
+		"litellm":    {Kind: system.BindingKindBodyParam, Param: "web_search_options", ParamType: "object", Value: map[string]any{}},
+		"anthropic":  {Kind: system.BindingKindToolEntry, Param: "tools", ParamType: "object", Value: map[string]any{"type": "web_search_20250305", "name": "web_search"}},
+		"openai":     {Kind: system.BindingKindBodyParam, Param: "web_search_options", ParamType: "object", Value: map[string]any{}},
+	}
+	for stack, want := range rows {
+		got := stackBindings[stack][system.IntentWebSearchEnable]
+		require.NotNil(t, got, stack)
+		require.Equal(t, want.Kind, got.Kind, stack)
+		require.Equal(t, want.Param, got.Param, stack)
+		require.Equal(t, want.ParamType, got.ParamType, stack)
+		require.Equal(t, want.Value, got.Value, stack)
+		require.NotEmpty(t, got.Hint, "%s: the row's caveats live in the hint", stack)
+	}
+	citations := stackBindings["venice"][system.IntentWebSearchCitations]
+	require.NotNil(t, citations)
+	require.Equal(t, system.BindingKindBodyParam, citations.Kind)
+	require.Equal(t, "venice_parameters.enable_web_citations", citations.Param)
+	require.Equal(t, "boolean", citations.ParamType)
+	require.Equal(t, true, citations.Value)
+	for stack, table := range stackBindings {
+		if _, hosted := rows[stack]; !hosted {
+			require.Nil(t, table[system.IntentWebSearchEnable], "%s has no web-search knob", stack)
+		}
+		if stack != "venice" {
+			require.Nil(t, table[system.IntentWebSearchCitations], "%s: only venice documents a citations switch", stack)
+		}
+	}
+}
+
+// Every row is literal to https://ai.google.dev/gemini-api/docs/openai (the
+// compatibility endpoint), never to the native generateContent API, except
+// reasoning.budget's key, which the table comment marks as inferred.
+func TestGeminiPresetTables(t *testing.T) {
+	table := stackBindings["gemini"]
+	require.Len(t, table, 5)
+
+	effort := table[system.IntentReasoningEffort]
+	require.Equal(t, system.BindingKindBodyParam, effort.Kind)
+	require.Equal(t, "reasoning_effort", effort.Param)
+	require.Equal(t, []string{"none", "minimal", "low", "medium", "high"}, effort.EnumValues)
+	require.Contains(t, effort.Hint, "2.5 Pro", "none is documented for Gemini 2.5 only, never 2.5 Pro or Gemini 3")
+
+	budget := table[system.IntentReasoningBudget]
+	require.Equal(t, system.BindingKindBodyParam, budget.Kind)
+	require.Equal(t, "extra_body.google.thinking_config.thinking_budget", budget.Param)
+	require.Equal(t, "number", budget.ParamType)
+	require.Contains(t, budget.Hint, "inferred", "the key is not shown in any example on the page")
+	require.NotContains(t, budget.Hint, "minimal|low", "3.1 Pro has no minimal level")
+
+	format := table[system.IntentReasoningFormat]
+	require.Equal(t, system.BindingKindBodyParam, format.Kind)
+	require.Equal(t, "extra_body.google.thinking_config.include_thoughts", format.Param)
+	require.Equal(t, "boolean", format.ParamType)
+
+	schema := table[system.IntentResponseFormatSchema]
+	require.Equal(t, "response_format", schema.Param)
+	require.Equal(t, "object", schema.ParamType)
+
+	usage := table[system.IntentStreamIncludeUsage]
+	require.Equal(t, "stream_options.include_usage", usage.Param)
+	require.Equal(t, true, usage.Value)
+
+	for _, intent := range []string{system.IntentReasoningDisable, system.IntentReasoningEnable, system.IntentResponseFormatJSON, system.IntentWebSearchEnable, system.IntentWebSearchCitations, system.IntentCachePrompt, system.IntentSamplingTopK, system.IntentToolsParallel} {
+		require.Nil(t, table[intent], "%s is not documented on the compatibility endpoint", intent)
+	}
+	for intent, b := range table {
+		require.False(t, strings.HasPrefix(b.Param, "generationConfig."), "%s: native generateContent vocabulary on the compatible endpoint", intent)
+	}
+
+	require.Equal(t, []string{"model", "messages", "stream", "stream_options", "tools", "tool_choice", "reasoning_effort", "response_format", "service_tier", "extra_body"}, stackParameters["gemini"])
+	require.NotContains(t, stackParameters["gemini"], "n", "the page sends n only on images.generate")
+	require.Equal(t, "openai", config.StackTransport["gemini"])
+	require.NotContains(t, familyNativeVendor, "gemini", "the gemini family's rows are native-API vocabulary; the stack table carries the compatible ones")
+	require.True(t, gatedStack("gemini"))
+}
+
+func TestBuildGeminiPreset(t *testing.T) {
+	api := Build(config.ModelConfig{ModelName: "gemini-2.5-flash", ApiType: "openai", ApiStack: "gemini", ApiURL: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"})
+	require.NotNil(t, api)
+	require.Equal(t, "gemini", api.Stack)
+	require.Equal(t, system.ApiSpecSourceDeclared, api.Source)
+	require.Equal(t, "gemini", api.ModelFamily)
+	require.Equal(t, "", api.Via)
+	require.NotNil(t, api.Thinking)
+	require.Equal(t, system.ThinkingModeTunable, api.Thinking.Mode)
+
+	require.Len(t, api.Bindings, 5)
+	require.Equal(t, "reasoning_effort", api.Bindings[system.IntentReasoningEffort].Param)
+	require.Equal(t, "extra_body.google.thinking_config.thinking_budget", api.Bindings[system.IntentReasoningBudget].Param)
+	require.Equal(t, "extra_body.google.thinking_config.include_thoughts", api.Bindings[system.IntentReasoningFormat].Param)
+	require.Equal(t, "response_format", api.Bindings[system.IntentResponseFormatSchema].Param)
+	require.Equal(t, true, api.Bindings[system.IntentStreamIncludeUsage].Value)
+	require.Nil(t, api.Bindings[system.IntentReasoningDisable], "the family's generationConfig.thinkingConfig.thinkingBudget = 0 row must not reach the compatible endpoint")
+	for intent, b := range api.Bindings {
+		require.False(t, strings.HasPrefix(b.Param, "generationConfig."), "%s: family generationConfig binding leaked onto the compatible endpoint", intent)
+	}
+	require.Equal(t, stackParameters["gemini"], api.Parameters)
+	require.Nil(t, api.Bindings[system.IntentWebSearchEnable])
+
+	api.Bindings[system.IntentReasoningEffort].Param = "mutated"
+	require.Equal(t, "reasoning_effort", stackBindings["gemini"][system.IntentReasoningEffort].Param, "composed specs never alias the table")
+}
+
+func TestComposeVeniceWebSearchGatedOnFact(t *testing.T) {
+	const source = "venice:/models.model_spec.capabilities.supportsWebSearch"
+	var f CapabilityFacts
+	f.SetWebSearch(true, source)
+	api := Compose(Evidence{Stack: "venice", ModelName: "llama-3.3-70b", Caps: f})
+	require.Equal(t, "venice_parameters.enable_web_search", api.Bindings[system.IntentWebSearchEnable].Param)
+	require.Equal(t, "on", api.Bindings[system.IntentWebSearchEnable].Value)
+	require.Equal(t, "venice_parameters.enable_web_citations", api.Bindings[system.IntentWebSearchCitations].Param)
+	require.Equal(t, source, api.Evidence["bindings.web_search.enable"])
+	require.Equal(t, source, api.Evidence["bindings.web_search.citations"])
+	require.Equal(t, source, api.Evidence[system.EvidenceKeyCapability(CapFieldWebSearch)])
+	require.True(t, *api.Capabilities.WebSearch)
+
+	api = Compose(Evidence{Stack: "venice", ModelName: "llama-3.3-70b"})
+	require.Nil(t, api.Bindings[system.IntentWebSearchEnable])
+	require.Nil(t, api.Bindings[system.IntentWebSearchCitations])
+	require.NotContains(t, api.Evidence, "bindings.web_search.enable")
+	require.NotNil(t, api.Bindings[system.IntentSamplingTopK], "only web_search.* is evidence-gated")
 }
 
 func TestAllTablesWellFormed(t *testing.T) {

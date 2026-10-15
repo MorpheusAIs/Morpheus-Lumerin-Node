@@ -13,6 +13,7 @@ import (
 const (
 	bodyParam   = system.BindingKindBodyParam
 	nativeParam = system.BindingKindNativeBodyParam
+	toolEntry   = system.BindingKindToolEntry
 )
 
 type bindingSet = map[string]*system.ParamBinding
@@ -91,6 +92,7 @@ var stackBindings = map[string]bindingSet{
 	// https://openrouter.ai/docs/use-cases/reasoning-tokens
 	// https://openrouter.ai/docs/features/structured-outputs
 	// https://openrouter.ai/docs/features/prompt-caching
+	// https://openrouter.ai/docs/features/web-search
 	"openrouter": {
 		system.IntentReasoningDisable:          {Kind: bodyParam, Param: "reasoning.effort", ParamType: "string", Value: "none", Hint: "models with reasoning.mandatory reject it; reasoning.exclude only hides output"},
 		system.IntentReasoningEnable:           {Kind: bodyParam, Param: "reasoning.enabled", ParamType: "boolean", Value: true},
@@ -106,9 +108,11 @@ var stackBindings = map[string]bindingSet{
 		system.IntentStreamIncludeUsage:        {Kind: bodyParam, Param: "stream_options.include_usage", ParamType: "boolean", Value: true, Hint: "usage is always included in the last chunk"},
 		system.IntentCachePrompt:               {Kind: bodyParam, Param: "cache_control", ParamType: "object", Value: map[string]any{"type": "ephemeral"}, Hint: "top-level applies to the last cacheable block; also per content block"},
 		system.IntentToolsParallel:             {Kind: bodyParam, Param: "parallel_tool_calls", ParamType: "boolean"},
+		system.IntentWebSearchEnable:           {Kind: bodyParam, Param: "plugins", ParamType: "array", Value: []any{map[string]any{"id": "web"}}, Hint: "equivalent to the :online model suffix; web_search_options only where supported_parameters lists it"},
 	},
 
 	// https://docs.venice.ai/api-reference/endpoint/chat/completions
+	// (venice_parameters.enable_web_search / enable_web_citations)
 	// Effort uses the reasoning object: LiteLLM validates a top-level
 	// reasoning_effort against its provider map and rejects it for openai/
 	// deployments, while it forwards reasoning{...} untouched.
@@ -123,12 +127,15 @@ var stackBindings = map[string]bindingSet{
 		system.IntentResponseFormatSchema:      {Kind: bodyParam, Param: "response_format", ParamType: "object", Hint: `{"type":"json_schema","json_schema":{...}}`},
 		system.IntentStreamIncludeUsage:        {Kind: bodyParam, Param: "stream_options.include_usage", ParamType: "boolean", Value: true},
 		system.IntentToolsParallel:             {Kind: bodyParam, Param: "parallel_tool_calls", ParamType: "boolean"},
+		system.IntentWebSearchEnable:           {Kind: bodyParam, Param: "venice_parameters.enable_web_search", ParamType: "string", Value: "on", Hint: "auto|on|off; also as a model-name suffix"},
+		system.IntentWebSearchCitations:        {Kind: bodyParam, Param: "venice_parameters.enable_web_citations", ParamType: "boolean", Value: true},
 	},
 
 	// Reasoning knobs are provider-neutral on LiteLLM, so they sit at stack level.
 	// https://docs.litellm.ai/docs/completion/input
 	// https://docs.litellm.ai/docs/reasoning_content
 	// https://docs.litellm.ai/docs/providers/anthropic
+	// https://docs.litellm.ai/docs/completion/web_search
 	"litellm": {
 		system.IntentReasoningDisable:     {Kind: bodyParam, Param: "reasoning_effort", ParamType: "string", Value: "none"},
 		system.IntentReasoningEnable:      {Kind: bodyParam, Param: "reasoning_effort", ParamType: "string", Value: "medium", Hint: "any level other than none enables; Anthropic/Bedrock/Vertex upstreams also accept thinking {type: enabled, budget_tokens >= 1024}"},
@@ -138,6 +145,7 @@ var stackBindings = map[string]bindingSet{
 		system.IntentResponseFormatSchema: {Kind: bodyParam, Param: "response_format", ParamType: "object", Hint: "translated per provider; enforced client-side only with enable_json_schema_validation"},
 		system.IntentStreamIncludeUsage:   {Kind: bodyParam, Param: "stream_options.include_usage", ParamType: "boolean", Value: true},
 		system.IntentToolsParallel:        {Kind: bodyParam, Param: "parallel_tool_calls", ParamType: "boolean"},
+		system.IntentWebSearchEnable:      {Kind: bodyParam, Param: "web_search_options", ParamType: "object", Value: map[string]any{}, Hint: "forwarded to providers that support it (supports_web_search)"},
 	},
 
 	// Reasoning toggles come from the claude family defaults.
@@ -145,11 +153,62 @@ var stackBindings = map[string]bindingSet{
 	// https://platform.claude.com/docs/en/build-with-claude/thinking
 	// https://platform.claude.com/docs/en/build-with-claude/effort
 	// https://platform.claude.com/docs/en/build-with-claude/structured-outputs
+	// https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool
 	"anthropic": {
 		system.IntentReasoningFormat:      {Kind: bodyParam, Param: "thinking.display", ParamType: "enum", EnumValues: []string{"summarized", "omitted", "updates"}, Hint: "invalid with thinking.type disabled; updates needs a beta header"},
 		system.IntentResponseFormatSchema: {Kind: bodyParam, Param: "output_config.format", ParamType: "object", Hint: `{"type":"json_schema","schema":{...,"additionalProperties":false}}; no schema-less JSON mode`},
 		system.IntentSamplingTopK:         {Kind: bodyParam, Param: "top_k", ParamType: "number", Hint: "rejected on newest models; incompatible with thinking on older ones"},
 		system.IntentCachePrompt:          {Kind: bodyParam, Param: "cache_control", ParamType: "object", Value: map[string]any{"type": "ephemeral"}, Hint: "top-level applies to the last cacheable block; ttl 5m|1h"},
+		system.IntentWebSearchEnable:      {Kind: toolEntry, Param: "tools", ParamType: "object", Value: map[string]any{"type": "web_search_20250305", "name": "web_search"}, Hint: "server tool; max_uses/allowed_domains options; 400 when the organisation disabled it"},
+	},
+
+	// Reasoning toggles come from the o-series family defaults.
+	// https://platform.openai.com/docs/guides/tools-web-search
+	"openai": {
+		system.IntentWebSearchEnable: {Kind: bodyParam, Param: "web_search_options", ParamType: "object", Value: map[string]any{}, Hint: "only on search models such as gpt-5-search-api; Responses API uses the web_search tool"},
+	},
+
+	// Gemini's OpenAI-compatible endpoint
+	// (https://generativelanguage.googleapis.com/v1beta/openai/), not the
+	// native generateContent API: Gemini-only fields travel in a top-level
+	// extra_body.google object with snake_case keys — the REST example sends
+	// "extra_body": {"google": {"thinking_config": {"thinking_level": "low",
+	// "include_thoughts": true}}}, and the SDK examples' extra_body={'extra_body':
+	// {...}} serialises to the same shape. The gemini family's
+	// generationConfig.thinkingConfig.* rows are native-API vocabulary and are
+	// skipped on this stack (gatedStack; familyNativeVendor below).
+	// https://ai.google.dev/gemini-api/docs/openai
+	// Rows the page does not support, on purpose:
+	//   reasoning.disable — the only documented off switch is reasoning_effort
+	//     "none" on Gemini 2.5 (not 2.5 Pro); Gemini 3 cannot turn thinking off.
+	//     A stack-wide row would be wrong for every current model, so "none"
+	//     stays an enum value of reasoning.effort with the caveat in its hint.
+	//   response_format.json — only the SDK parse helpers (Pydantic /
+	//     zodResponseFormat, which send type json_schema) are documented.
+	//   web_search.enable — the extra_body table lists the google_search tool
+	//     for the Images endpoint only (gemini-3-pro-image-preview), not for
+	//     chat completions.
+	//   cache.prompt — extra_body.google.cached_content names a pre-created
+	//     cache resource, not a per-request caching switch.
+	// reasoning.budget is the one inferred key: the page names thinking_budget
+	// only in the mapping-table header ("thinking_budget (Gemini 2.5)") and the
+	// overlap note ("reasoning_effort and thinking_level / thinking_budget
+	// ... can't be used at the same time"); every thinking_config example
+	// sends thinking_level and include_thoughts. Its nesting and snake_case
+	// follow those siblings (thinking_config "Corresponds to Gemini's
+	// ThinkingConfig", whose native field is thinkingBudget). The runtime
+	// verifier confirms it per model (ParamBinding.Verified).
+	// response_format.schema: the page shows only the SDK parse helpers
+	// (client.beta.chat.completions.parse(response_format=<Pydantic model>),
+	// zodResponseFormat); the json_schema wire shape is what those serialise.
+	// https://github.com/openai/openai-python/blob/main/helpers.md
+	// https://github.com/openai/openai-node/blob/master/helpers.md
+	"gemini": {
+		system.IntentReasoningEffort:      {Kind: bodyParam, Param: "reasoning_effort", ParamType: "enum", EnumValues: []string{"none", "minimal", "low", "medium", "high"}, Hint: "Gemini 3: thinking_level (minimal reads as low on 3.1 Pro); Gemini 2.5: thinking_budget 1024 / 1024 / 8192 / 24576; none only on Gemini 2.5 Flash / Flash-Lite (rejected on 2.5 Pro and Gemini 3); not combinable with extra_body.google.thinking_config"},
+		system.IntentReasoningBudget:      {Kind: bodyParam, Param: "extra_body.google.thinking_config.thinking_budget", ParamType: "number", Hint: "Gemini 2.5 only (Gemini 3 takes thinking_level low|medium|high in the same object; minimal on 3.1 Flash-Lite / 3 Flash only); key inferred from the mapping table, not shown in an example; not combinable with reasoning_effort"},
+		system.IntentReasoningFormat:      {Kind: bodyParam, Param: "extra_body.google.thinking_config.include_thoughts", ParamType: "boolean", Hint: "true returns thought summaries with the message; Gemini 3 also returns thought signatures to resend on later turns"},
+		system.IntentResponseFormatSchema: {Kind: bodyParam, Param: "response_format", ParamType: "object", Hint: `{"type":"json_schema","json_schema":{"name":...,"schema":{...}}} as client.beta.chat.completions.parse(response_format=<Pydantic/zod schema>) sends it`},
+		system.IntentStreamIncludeUsage:   {Kind: bodyParam, Param: "stream_options.include_usage", ParamType: "boolean", Value: true},
 	},
 }
 
@@ -207,6 +266,13 @@ var stackParameters = map[string][]string{
 	"anthropic": {"model", "messages", "system", "max_tokens", "stream", "temperature", "top_p", "top_k", "stop_sequences", "tools", "tool_choice", "metadata"},
 	// https://platform.openai.com/docs/api-reference/chat/create
 	"openai": openaiChatParameters,
+	// Only the request keys the compatibility page itself uses on chat
+	// completions: it publishes no exhaustive list ("Current limitations"), and
+	// silently ignored keys (the page says so for images) are not evidence.
+	// n appears only on images.generate there, so it is absent. extra_body is
+	// the documented carrier of the Gemini-only fields.
+	// https://ai.google.dev/gemini-api/docs/openai
+	"gemini": {"model", "messages", "stream", "stream_options", "tools", "tool_choice", "reasoning_effort", "response_format", "service_tier", "extra_body"},
 }
 
 var openaiChatParameters = []string{"model", "messages", "temperature", "top_p", "n", "stream", "stream_options", "stop", "max_tokens", "max_completion_tokens", "presence_penalty", "frequency_penalty", "logit_bias", "logprobs", "top_logprobs", "user", "seed", "response_format", "tools", "tool_choice", "parallel_tool_calls", "reasoning_effort"}
@@ -223,5 +289,9 @@ func StackFor(stack string) string {
 var gatewayStacks = map[string]bool{"venice": true, "openrouter": true, "litellm": true, "anthropic": true, "openai": true}
 
 // The stack whose own API a family's body-param defaults describe. gemini
-// is absent: no gemini preset exists.
+// is absent on purpose: the family's generationConfig.thinkingConfig.* rows
+// are the native generateContent API, while the gemini preset is the
+// OpenAI-compatible endpoint (thinking knobs under
+// extra_body.google.thinking_config), so gatedStack skips the family rows
+// there and the stack table supplies the compatible ones.
 var familyNativeVendor = map[string]string{"claude": "anthropic", "o-series": "openai"}

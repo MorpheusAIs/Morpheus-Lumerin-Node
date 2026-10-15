@@ -53,7 +53,24 @@
       "apiType": "openai",
       "apiStack": "vllm",
       "modelFamily": "qwen3",
-      "apiUrl": "http://localhost:8000/v1/chat/completions"
+      "apiUrl": "http://localhost:8000/v1/chat/completions",
+      "capabilities": {
+        "context": 32768,
+        "maxOutput": 4096,
+        "modalities": { "input": ["text", "image"] },
+        "tools": true,
+        "structured": ["json_schema"],
+        "webSearch": false,
+        "embeddings": false
+      }
+    },
+    {
+      "modelId": "0x0000000000000000000000000000000000000000000000000000000000000007",
+      "modelName": "gemini-2.5-flash",
+      "apiType": "openai",
+      "apiStack": "gemini",
+      "apiUrl": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+      "apiKey": "FILL_ME_IN"
     },
     {
       "modelId": "0x00000000000000000000000000000000000000000000000000000000000000a1",
