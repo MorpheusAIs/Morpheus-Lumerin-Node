@@ -19,6 +19,15 @@ import (
 
 const httpErrorMessage string = "internal error: %v; http status: %v"
 
+func getSessionDurationMinutes(c *cli.Context) uint64 {
+	duration := c.Uint64("session-duration")
+	if duration < chatCommon.MinSessionDurationMinutes {
+		log.Printf("session duration %d is below minimum of %d minutes, using minimum", duration, chatCommon.MinSessionDurationMinutes)
+		return chatCommon.MinSessionDurationMinutes
+	}
+	return duration
+}
+
 func main() {
 
 	apiClient, err := client.NewApiGatewayClientFromEnv(os.Getenv)
@@ -83,6 +92,12 @@ func main() {
 					&cli.StringFlag{
 						Name:     "session",
 						Required: false,
+					},
+					&cli.Uint64Flag{
+						Name:    "session-duration",
+						Usage:   "session duration in minutes (minimum 5)",
+						Value:   chatCommon.DefaultSessionDurationMinutes,
+						EnvVars: []string{"MOR_CLI_SESSION_DURATION"},
 					},
 				},
 			},
@@ -314,6 +329,7 @@ func (a *actions) startChatLocal(cCtx *cli.Context) error {
 
 func (a *actions) startRemoteChat(cCtx *cli.Context) error {
 	sessionId := cCtx.String("session")
+	sessionDurationMinutes := getSessionDurationMinutes(cCtx)
 
 	var options *chatCommon.Options
 
@@ -355,15 +371,17 @@ func (a *actions) startRemoteChat(cCtx *cli.Context) error {
 		}
 
 		options = &chatCommon.Options{
-			UseLocalModel: false,
-			RemoteModels:  resultModels,
-			Client:        a.client,
+			UseLocalModel:          false,
+			RemoteModels:           resultModels,
+			Client:                 a.client,
+			SessionDurationMinutes: sessionDurationMinutes,
 		}
 	} else {
 		options = &chatCommon.Options{
-			UseLocalModel: false,
-			Client:        a.client,
-			Session:       sessionId,
+			UseLocalModel:          false,
+			Client:                 a.client,
+			Session:                sessionId,
+			SessionDurationMinutes: sessionDurationMinutes,
 		}
 	}
 

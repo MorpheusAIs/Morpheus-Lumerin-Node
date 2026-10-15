@@ -29,6 +29,8 @@ type model struct {
 	messages           []string
 	completionChunkSub chan string // receive chat stream chunks
 	messagesContext    []openai.ChatCompletionMessage
+
+	sessionDurationMinutes uint64
 }
 
 func (m model) Init() tea.Cmd {
@@ -95,6 +97,8 @@ func New(opt *common.Options) model {
 		client:             opt.Client,
 		isLocalChat:        opt.UseLocalModel,
 		messagesContext:    []openai.ChatCompletionMessage{},
+
+		sessionDurationMinutes: max(opt.SessionDurationMinutes, common.MinSessionDurationMinutes),
 	}
 
 	if opt.Session != "" {

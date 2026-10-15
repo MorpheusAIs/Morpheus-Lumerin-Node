@@ -15,4 +15,6 @@ type Options struct {
 
 	UseLocalModel bool
 	Client        *client.ApiGatewayClient
+
+	SessionDurationMinutes uint64
 }
