@@ -20,6 +20,9 @@ type model struct {
 	modelId     string
 	sessionId   string
 	isLocalChat bool
+	// sessionDuration is the length in seconds of a session opened from the
+	// model picker, from --duration or common.DefaultSessionDuration.
+	sessionDuration int64
 
 	textarea textarea.Model
 	viewport viewport.Model
@@ -94,6 +97,7 @@ func New(opt *common.Options) model {
 		completionChunkSub: make(chan string),
 		client:             opt.Client,
 		isLocalChat:        opt.UseLocalModel,
+		sessionDuration:    opt.Duration(),
 		messagesContext:    []openai.ChatCompletionMessage{},
 	}
 

@@ -25,10 +25,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.isLocalChat {
 					m = m.SetLocalModel(i.desc)
 				} else {
-					defaultSessionDuration := big.NewInt(3600)
 					session, err := m.client.OpenSession(context.Background(), &client.SessionRequest{
 						ModelId:         i.desc,
-						SessionDuration: defaultSessionDuration,
+						SessionDuration: big.NewInt(m.sessionDuration),
 					})
 					if err != nil {
 						m.err = err
