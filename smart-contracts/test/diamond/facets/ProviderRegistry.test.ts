@@ -267,6 +267,26 @@ describe('ProviderRegistry', () => {
       );
     });
   });
+
+  describe('#getProviderEarningsStatus (RFP M6)', () => {
+    it('should return initial earnings capacity matching registered stake', async () => {
+      await providerRegistry.connect(PROVIDER).providerRegister(PROVIDER, wei(100), 'endpoint:1234');
+      const status = await providerRegistry.getProviderEarningsStatus(PROVIDER);
+      expect(status.stake).to.eq(wei(100));
+      expect(status.earnedThisPeriod).to.eq(0);
+      expect(status.remainingCapacity).to.eq(wei(100));
+      expect(status.periodEnd).to.be.greaterThan(0);
+    });
+
+    it('should return full stake as capacity when period has expired', async () => {
+      await providerRegistry.connect(PROVIDER).providerRegister(PROVIDER, wei(100), 'endpoint:1234');
+      await setNextTime(YEAR + 100);
+      const status = await providerRegistry.getProviderEarningsStatus(PROVIDER);
+      expect(status.stake).to.eq(wei(100));
+      expect(status.earnedThisPeriod).to.eq(0);
+      expect(status.remainingCapacity).to.eq(wei(100));
+    });
+  });
 });
 
 // npm run generate-types && npx hardhat test "test/diamond/facets/ProviderRegistry.test.ts"

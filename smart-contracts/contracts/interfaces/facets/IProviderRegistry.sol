@@ -40,4 +40,19 @@ interface IProviderRegistry is IProviderStorage {
      * @param provider_ The provider address.
      */
     function providerDeregister(address provider_) external;
+
+    /**
+     * @notice Returns provider earnings status and reward capacity for current limiter period (RFP M6).
+     * @param provider_ The provider address.
+     * @return stake Current total stake.
+     * @return earnedThisPeriod Amount of MOR earned in the current limiter period.
+     * @return remainingCapacity Remaining reward earning capacity before stake ceiling.
+     * @return periodEnd Timestamp when the current 365-day limiter period ends.
+     */
+    function getProviderEarningsStatus(address provider_) external view returns (
+        uint256 stake,
+        uint256 earnedThisPeriod,
+        uint256 remainingCapacity,
+        uint128 periodEnd
+    );
 }
