@@ -352,6 +352,100 @@ describe('Marketplace', () => {
     });
   });
 
+  describe('#updateBidPrice', async () => {
+    beforeEach(async () => {
+      await marketplace.setMarketplaceBidFee(wei(1));
+    });
+
+    it('should update bid price in-place without fee or changing bidId', async () => {
+      await setNextTime(300);
+      await marketplace.connect(SECOND).postModelBid(SECOND, modelId1, wei(10));
+
+      const bidId1 = await marketplace.getBidId(SECOND, modelId1, 0);
+      const balanceBefore = await token.balanceOf(SECOND);
+
+      await expect(marketplace.connect(SECOND).updateBidPrice(bidId1, wei(25)))
+        .to.emit(marketplace, 'MarketplaceBidPriceUpdated')
+        .withArgs(bidId1, SECOND.address, modelId1, wei(25));
+
+      const data = await marketplace.getBid(bidId1);
+      expect(data.provider).to.eq(SECOND.address);
+      expect(data.modelId).to.eq(modelId1);
+      expect(data.pricePerSecond).to.eq(wei(25));
+      expect(data.nonce).to.eq(0);
+      expect(data.createdAt).to.eq(300);
+      expect(data.deletedAt).to.eq(0);
+
+      // Verify no fee was charged
+      expect(await token.balanceOf(SECOND)).to.eq(balanceBefore);
+    });
+
+    it('should update bid price from delegatee address', async () => {
+      await delegateRegistry
+        .connect(SECOND)
+        .delegateContract(OWNER, providerRegistry, await providerRegistry.DELEGATION_RULES_MARKETPLACE(), true);
+
+      await marketplace.connect(SECOND).postModelBid(SECOND, modelId1, wei(10));
+      const bidId1 = await marketplace.getBidId(SECOND, modelId1, 0);
+
+      await expect(marketplace.connect(OWNER).updateBidPrice(bidId1, wei(30)))
+        .to.emit(marketplace, 'MarketplaceBidPriceUpdated')
+        .withArgs(bidId1, SECOND.address, modelId1, wei(30));
+
+      const data = await marketplace.getBid(bidId1);
+      expect(data.pricePerSecond).to.eq(wei(30));
+    });
+
+    it('should throw error when caller is unauthorized', async () => {
+      await marketplace.connect(SECOND).postModelBid(SECOND, modelId1, wei(10));
+      const bidId1 = await marketplace.getBidId(SECOND, modelId1, 0);
+
+      await expect(marketplace.connect(PROVIDER).updateBidPrice(bidId1, wei(20))).to.be.revertedWithCustomError(
+        marketplace,
+        'InsufficientRightsForOperation',
+      );
+    });
+
+    it('should throw error when updating inactive/deleted bid', async () => {
+      await marketplace.connect(SECOND).postModelBid(SECOND, modelId1, wei(10));
+      const bidId1 = await marketplace.getBidId(SECOND, modelId1, 0);
+      await marketplace.connect(SECOND).deleteModelBid(bidId1);
+
+      await expect(marketplace.connect(SECOND).updateBidPrice(bidId1, wei(20))).to.be.revertedWithCustomError(
+        marketplace,
+        'MarketplaceActiveBidNotFound',
+      );
+    });
+
+    it('should throw error when updating non-existent bid', async () => {
+      const nonExistentBidId = getHex(Buffer.from('non-existent'));
+      await expect(marketplace.connect(SECOND).updateBidPrice(nonExistentBidId, wei(20))).to.be.revertedWithCustomError(
+        marketplace,
+        'MarketplaceActiveBidNotFound',
+      );
+    });
+
+    it('should throw error when new price is below min price', async () => {
+      await marketplace.connect(SECOND).postModelBid(SECOND, modelId1, wei(10));
+      const bidId1 = await marketplace.getBidId(SECOND, modelId1, 0);
+
+      await expect(marketplace.connect(SECOND).updateBidPrice(bidId1, wei(0))).to.be.revertedWithCustomError(
+        marketplace,
+        'MarketplaceBidPricePerSecondInvalid',
+      );
+    });
+
+    it('should throw error when new price is above max price', async () => {
+      await marketplace.connect(SECOND).postModelBid(SECOND, modelId1, wei(10));
+      const bidId1 = await marketplace.getBidId(SECOND, modelId1, 0);
+
+      await expect(marketplace.connect(SECOND).updateBidPrice(bidId1, wei(99999))).to.be.revertedWithCustomError(
+        marketplace,
+        'MarketplaceBidPricePerSecondInvalid',
+      );
+    });
+  });
+
   describe('#withdraw', async () => {
     beforeEach(async () => {
       await marketplace.setMarketplaceBidFee(wei(1));

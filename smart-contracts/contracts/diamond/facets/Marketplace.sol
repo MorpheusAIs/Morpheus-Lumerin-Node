@@ -125,6 +125,29 @@ contract Marketplace is
         _deleteBid(bidId_);
     }
 
+    function updateBidPrice(bytes32 bidId_, uint256 newPricePerSecond_) external {
+        BidsStorage storage bidsStorage = _getBidsStorage();
+        Bid storage bid = bidsStorage.bids[bidId_];
+
+        _validateDelegatee(_msgSender(), bid.provider, DELEGATION_RULES_MARKETPLACE);
+
+        if (!isBidActive(bidId_)) {
+            revert MarketplaceActiveBidNotFound();
+        }
+
+        MarketStorage storage marketStorage = _getMarketStorage();
+        if (
+            newPricePerSecond_ < marketStorage.bidMinPricePerSecond ||
+            newPricePerSecond_ > marketStorage.bidMaxPricePerSecond
+        ) {
+            revert MarketplaceBidPricePerSecondInvalid();
+        }
+
+        bid.pricePerSecond = newPricePerSecond_;
+
+        emit MarketplaceBidPriceUpdated(bidId_, bid.provider, bid.modelId, newPricePerSecond_);
+    }
+
     function withdrawFee(address recipient_, uint256 amount_) external onlyOwner {
         BidsStorage storage bidsStorage = _getBidsStorage();
         MarketStorage storage marketStorage = _getMarketStorage();
