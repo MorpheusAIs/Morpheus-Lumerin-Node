@@ -43,6 +43,14 @@ contract ProviderRegistry is IProviderRegistry, OwnableDiamondStorage, ProviderS
             revert ProviderStakeTooLow(newStake_, minStake_);
         }
 
+        uint256 endpointLen_ = bytes(endpoint_).length;
+        if (endpointLen_ == 0) {
+            revert ProviderEndpointEmpty();
+        }
+        if (endpointLen_ > 256) {
+            revert ProviderEndpointTooLong();
+        }
+
         if (provider.createdAt == 0) {
             provider.createdAt = uint128(block.timestamp);
             provider.limitPeriodEnd = uint128(block.timestamp) + PROVIDER_REWARD_LIMITER_PERIOD;

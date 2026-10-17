@@ -11,6 +11,10 @@ interface IModelRegistry is IModelStorage {
     error ModelHasAlreadyDeregistered();
     error ModelNotFound();
     error ModelHasActiveBids();
+    error ModelNameEmpty();
+    error ModelNameTooLong();
+    error ModelTooManyTags();
+    error ModelTagTooLong();
 
     /**
      * The function to initialize the facet.
