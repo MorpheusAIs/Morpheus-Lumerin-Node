@@ -9,6 +9,7 @@ interface ISessionRouter is ISessionStorage {
     event SessionOpened(address indexed user, bytes32 indexed sessionId, address indexed providerId);
     event SessionClosed(address indexed user, bytes32 indexed sessionId, address indexed providerId);
     event UserWithdrawn(address indexed user, uint256 amount_);
+    event UserStakeOnHold(address indexed user, uint256 amount, uint128 releaseAt);
     error SessionProviderSignatureMismatch();
     error SessionApproveExpired();
     error SessionApprovedForAnotherChainId();
@@ -138,6 +139,12 @@ interface ISessionRouter is ISessionStorage {
      * @param iterations_ The loop interaction amount.
      */
     function withdrawUserStakes(address user_, uint8 iterations_) external;
+
+    /**
+     * The function to withdraw all mature user stakes on hold.
+     * @param user_ The user address.
+     */
+    function withdrawAllUserStakes(address user_) external;
 
     /**
      * Returns today's budget in MOR. 1%.

@@ -1157,6 +1157,70 @@ describe('SessionRouter', () => {
     });
   });
 
+  describe('#withdrawAllUserStakes', () => {
+    it('should withdraw all mature user stakes on hold at once and emit UserStakeOnHold on close', async () => {
+      const openedAt = payoutStart + (payoutStart % DAY) + 10 * DAY - 201;
+
+      await setTime(openedAt + 1 * DAY);
+      const { msg, signature } = await getProviderApproval(PROVIDER, SECOND, bidId);
+
+      await sessionRouter.connect(SECOND).openSession(SECOND, wei(100), false, msg, signature);
+
+      const sessionId = await sessionRouter.getSessionId(SECOND, PROVIDER, bidId, 0);
+      const { msg: receiptMsg, signature: receiptSig } = await getProviderReceipt(PROVIDER, sessionId, 0, 0, 100);
+
+      await setTime(openedAt + 1 * DAY + 100);
+      await expect(sessionRouter.connect(SECOND).closeSession(receiptMsg, receiptSig))
+        .to.emit(sessionRouter, 'UserStakeOnHold');
+
+      const stakesOnHoldBefore = await sessionRouter.getUserStakesOnHold(SECOND, 1);
+      expect(stakesOnHoldBefore[1]).to.be.gt(0);
+
+      await setTime(openedAt + 3 * DAY + 2);
+      const userBalBefore = await token.balanceOf(SECOND);
+
+      await expect(sessionRouter.connect(SECOND).withdrawAllUserStakes(SECOND))
+        .to.emit(sessionRouter, 'UserWithdrawn')
+        .withArgs(SECOND.address, stakesOnHoldBefore[1]);
+
+      const userBalAfter = await token.balanceOf(SECOND);
+      expect(userBalAfter - userBalBefore).to.eq(stakesOnHoldBefore[1]);
+
+      const stakesOnHoldAfter = await sessionRouter.getUserStakesOnHold(SECOND, 1);
+      expect(stakesOnHoldAfter[0]).to.eq(0);
+      expect(stakesOnHoldAfter[1]).to.eq(0);
+    });
+
+    it('should allow delegatee to call withdrawAllUserStakes', async () => {
+      const openedAt = payoutStart + (payoutStart % DAY) + 10 * DAY - 201;
+
+      await setTime(openedAt + 1 * DAY);
+      const { msg, signature } = await getProviderApproval(PROVIDER, SECOND, bidId);
+
+      await sessionRouter.connect(SECOND).openSession(SECOND, wei(100), false, msg, signature);
+
+      const sessionId = await sessionRouter.getSessionId(SECOND, PROVIDER, bidId, 0);
+      const { msg: receiptMsg, signature: receiptSig } = await getProviderReceipt(PROVIDER, sessionId, 0, 0, 100);
+
+      await setTime(openedAt + 1 * DAY + 100);
+      await sessionRouter.connect(SECOND).closeSession(receiptMsg, receiptSig);
+
+      await delegateRegistry
+        .connect(SECOND)
+        .delegateContract(OWNER, providerRegistry, await providerRegistry.DELEGATION_RULES_SESSION(), true);
+
+      await setTime(openedAt + 3 * DAY + 2);
+      await expect(sessionRouter.connect(OWNER).withdrawAllUserStakes(SECOND)).to.emit(sessionRouter, 'UserWithdrawn');
+    });
+
+    it('should throw error when there are no stakes on hold to withdraw', async () => {
+      await expect(sessionRouter.connect(SECOND).withdrawAllUserStakes(SECOND)).to.be.revertedWithCustomError(
+        sessionRouter,
+        'SessionUserAmountToWithdrawIsZero',
+      );
+    });
+  });
+
   describe('#stipendToStake', () => {
     it('should return zero if compute balance is zero', async () => {
       expect(await sessionRouter.connect(SECOND).stipendToStake(0, 0)).to.eq(0);
