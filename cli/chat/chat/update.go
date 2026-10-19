@@ -78,8 +78,27 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, tea.Batch(tiCmd, vpCmd, streamCompletions(m, val), waitForCompletion(m.completionChunkSub))
 				}
 			}
-		case completionMsg:
-			newMessage := botMessage(string(msg))
+		case streamEvent:
+			switch {
+			case msg.err != nil:
+				// Show the failure and stop waiting. The placeholder bubble
+				// added for the reply is dropped unless some text arrived
+				// before the failure, in which case the partial reply is kept.
+				m.err = msg.err
+				if n := len(m.messages); n > 0 && m.messages[n-1] == botMessage("") {
+					m.messages = m.messages[:n-1]
+				}
+				m.viewport.SetContent(strings.Join(m.messages, "\n\n") + "\n\n")
+				return m, tea.Batch(tiCmd, vpCmd)
+
+			case msg.done:
+				// End of stream: nothing more to render, so do not re-arm the
+				// waiting command.
+				return m, tea.Batch(tiCmd, vpCmd)
+			}
+
+			m.err = nil
+			newMessage := botMessage(msg.text)
 			trimmedMessages := m.messages[:len(m.messages)-1]
 
 			m.messages = append(trimmedMessages, wordWrap(newMessage, 78))

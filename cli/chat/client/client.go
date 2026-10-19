@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/big"
 	"net/http"
 	"strings"
@@ -137,7 +138,27 @@ func (c *ApiGatewayClient) requestChatCompletionStream(ctx context.Context, endp
 	}
 	defer resp.Body.Close()
 
+	// A non-2xx body is not an event stream. Without this check the scanner
+	// below finds no "data:" frames, the function returns (nil, nil), and the
+	// caller is left waiting for a reply that was actually refused.
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		detail := strings.TrimSpace(string(body))
+		if len(detail) > 300 {
+			detail = detail[:300] + "..."
+		}
+		if detail == "" {
+			return nil, fmt.Errorf("chat request failed: %s", resp.Status)
+		}
+		return nil, fmt.Errorf("chat request failed: %s: %s", resp.Status, detail)
+	}
+
 	scanner := bufio.NewScanner(resp.Body)
+	// The default scanner cap is 64 KB per line, and a single SSE frame can
+	// exceed that, which fails the whole stream with "token too long" and
+	// leaves the caller with no reply. This is the CLI's instance of the
+	// defect #933 reports in the proxy-router's readStream.
+	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
 	for scanner.Scan() {
 		line := scanner.Text()
 		// Handle the completion of the stream
@@ -158,8 +179,12 @@ func (c *ApiGatewayClient) requestChatCompletionStream(ctx context.Context, endp
 		if strings.HasPrefix(line, "data: ") {
 			data := line[6:] // Skip the "data: " prefix
 			var completion *openai.ChatCompletionStreamResponse
-			if err := json.Unmarshal([]byte(data), &completion); err != nil {
-				fmt.Printf("Error decoding response: %v\n", err)
+			if err := json.Unmarshal([]byte(data), &completion); err != nil || completion == nil {
+				// Skip a frame we cannot read, rather than dereferencing nil
+				// on the next line. Printing is not an option either: this
+				// runs under a full-screen TUI, where stray writes to stdout
+				// corrupt the display.
+				continue
 			}
 
 			if completion.ID != "" {
