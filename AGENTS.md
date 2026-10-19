@@ -120,7 +120,7 @@ If the user's question doesn't match anything in this file or the repo:
 
 - **Feature, docs, and fix PRs target `dev`**, including when the default branch is `main`. See [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`.ai-docs/issue-tracker.md`](.ai-docs/issue-tracker.md).
 - Promote path: `dev` → `test` (staging / nodedocs.dev) → `main` (production / nodedocs.mor.org).
-- Only maintainers open promote PRs into `test` or `main`. The title starts with `promote:`.
+- Only maintainers open promote PRs into `test` or `main`. A promote title starts with `promote:`. A release into `main` starts with `Release`.
 - The PR body contains `Refs #123`, or the no-issue line for a chore, revert, or CI-only change. The issue closes when the change reaches `main`.
 
 ## Repository sub-projects

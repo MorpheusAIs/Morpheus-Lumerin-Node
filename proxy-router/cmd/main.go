@@ -392,7 +392,9 @@ func start() error {
 		// nil check
 		var apiDetect modelhealth.ApiDetector
 		if cfg.Proxy.ModelApiDetectEnabled.Bool != nil && *cfg.Proxy.ModelApiDetectEnabled.Bool {
-			apiDetect = apidetect.NewDetector(appLog, apidetect.DefaultOptions())
+			detectOpts := apidetect.DefaultOptions()
+			detectOpts.CacheTTL = cfg.Proxy.ModelApiDetectTTL
+			apiDetect = apidetect.NewDetector(appLog, detectOpts)
 		} else {
 			appLog.Info("model API auto-detection disabled (MODEL_API_DETECT_ENABLED=false); models without apiStack advertise no api block")
 		}
@@ -404,6 +406,11 @@ func start() error {
 			ModelConfigs: modelConfigLoader,
 			TeeStatus:    backendVerifier,
 			ApiDetect:    apiDetect,
+			ApiDetectTTL: cfg.Proxy.ModelApiDetectTTL,
+			// Inference-traffic probes (design contract §5): opt-in, they
+			// cost tokens on the provider's backend.
+			VerifyBindings:    cfg.Proxy.ModelApiVerifyBindings,
+			ProbeCapabilities: cfg.Proxy.ModelApiProbeCapabilities,
 		}, cfg.Proxy.ModelHealthCheckInterval, cfg.Proxy.ModelHealthCheckTimeout, cfg.Proxy.ModelHealthCheckProbeDelay, cfg.Proxy.ModelHealthMaxConsecErrors, appLog)
 		modelHealthReporter = modelHealthChecker
 	}

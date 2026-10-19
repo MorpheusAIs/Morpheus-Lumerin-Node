@@ -19,6 +19,8 @@ var StackTransport = map[string]string{
 	"openrouter": "openai",
 	"litellm":    "openai",
 	"anthropic":  "claudeai",
+	// Gemini's OpenAI-compatible endpoint (/v1beta/openai/), not the native API.
+	"gemini": "openai",
 }
 
 // Derived from StackTransport so a new chat-capable stack cannot drift out

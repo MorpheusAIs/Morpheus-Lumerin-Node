@@ -1295,6 +1295,19 @@ definitions:
       version:
         type: string
     type: object
+  system.Modalities:
+    properties:
+      input:
+        description: text, image, audio, video, pdf
+        items:
+          type: string
+        type: array
+      output:
+        description: text, image, audio, embeddings
+        items:
+          type: string
+        type: array
+    type: object
   system.ModelApiSpec:
     properties:
       bindings:
@@ -1304,8 +1317,24 @@ definitions:
           Bindings maps canonical request intents to how this backend expresses
           them; an absent intent cannot be expressed.
         type: object
+      capabilities:
+        allOf:
+        - $ref: '#/definitions/system.ModelCapabilities'
+        description: |-
+          Capabilities are backend-verified or declared facts about the model as
+          served; an absent field is unknown, never false. Never derived from the
+          stack tables or the family name.
       declaredAt:
         type: integer
+      evidence:
+        additionalProperties:
+          type: string
+        description: |-
+          Evidence maps a wire field path (capabilities.context, thinking.default,
+          bindings.reasoning.disable, ...) to the source it was set from: a
+          backend endpoint, declared, registry, derived, health-probe or verify
+          (see EvidenceKeyThinkingDefault).
+        type: object
       modelFamily:
         description: ModelFamily is the canonical model family (qwen3, deepseek-r1,
           claude, ...).
@@ -1343,6 +1372,50 @@ definitions:
           upstream behind it; today only "litellm". Absent when the backend is
           reached directly or the upstream is unknown (then Stack is the gateway).
         type: string
+    type: object
+  system.ModelCapabilities:
+    properties:
+      context:
+        description: |-
+          Context is the served window (prompt + completion tokens): the number to
+          plan requests against.
+        type: integer
+      contextTrained:
+        description: |-
+          ContextTrained is the model's trained window when the backend reports
+          both.
+        type: integer
+      embeddings:
+        type: boolean
+      maxOutput:
+        type: integer
+      modalities:
+        $ref: '#/definitions/system.Modalities'
+      promptCache:
+        type: boolean
+      quantization:
+        description: Quantization is the backend's own label (fp8, Q4_K_M, bf16, ...).
+        type: string
+      reasoning:
+        description: |-
+          Reasoning says the model can reason; the control is in Thinking and
+          Bindings.
+        type: boolean
+      structured:
+        description: Structured is a subset of json_object, json_schema, grammar,
+          regex, choice.
+        items:
+          type: string
+        type: array
+      tools:
+        type: boolean
+      toolsParallel:
+        type: boolean
+      webSearch:
+        description: |-
+          WebSearch says the backend can search the web for this model on request;
+          the knob is a web_search.* binding.
+        type: boolean
     type: object
   system.ModelHealthReport:
     properties:
@@ -1415,6 +1488,11 @@ definitions:
         description: |-
           Value is the fixed value realizing the intent; nil when the caller
           supplies it.
+      verified:
+        description: Verified is set by the runtime verifier; absent means never checked.
+        type: boolean
+      verifiedAt:
+        type: integer
     type: object
   system.SetEthNodeURLReq:
     properties:
@@ -1432,9 +1510,13 @@ definitions:
     type: object
   system.ThinkingSpec:
     properties:
+      default:
+        description: Default is "on", "off" or an effort level name; absent when unknown.
+        type: string
       mode:
-        description: always_on (cannot be disabled) | controllable (reasoning.disable/enable
-          bindings) | tunable (effort/budget bindings only)
+        description: 'always_on: cannot be disabled (a reasoning.disable binding may
+          remain only with verified: false, the verifier''s refutation) | controllable:
+          reasoning.disable/enable bindings | tunable: effort/budget bindings only'
         type: string
     type: object
   walletapi.SetDerivationPathReqBody:
