@@ -84,6 +84,12 @@ func main() {
 						Name:     "session",
 						Required: false,
 					},
+					&cli.Int64Flag{
+						Name:     "duration",
+						Required: false,
+						Value:    chatCommon.DefaultSessionDuration,
+						Usage:    "session length in seconds; opening a session escrows stake for the whole duration up front",
+					},
 				},
 			},
 			{
@@ -355,15 +361,17 @@ func (a *actions) startRemoteChat(cCtx *cli.Context) error {
 		}
 
 		options = &chatCommon.Options{
-			UseLocalModel: false,
-			RemoteModels:  resultModels,
-			Client:        a.client,
+			UseLocalModel:   false,
+			RemoteModels:    resultModels,
+			Client:          a.client,
+			SessionDuration: cCtx.Int64("duration"),
 		}
 	} else {
 		options = &chatCommon.Options{
-			UseLocalModel: false,
-			Client:        a.client,
-			Session:       sessionId,
+			UseLocalModel:   false,
+			Client:          a.client,
+			Session:         sessionId,
+			SessionDuration: cCtx.Int64("duration"),
 		}
 	}
 
