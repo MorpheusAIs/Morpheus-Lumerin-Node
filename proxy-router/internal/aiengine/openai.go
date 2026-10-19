@@ -82,6 +82,7 @@ func (a *OpenAI) Prompt(ctx context.Context, compl *gcs.OpenAICompletionRequestE
 
 	log := a.log.With("request_id", lib.RequestIDFromContext(ctx))
 	log.Infof("AI Model responded with status code: %d", resp.StatusCode)
+	responseMetaFrom(ctx).recordResponse(resp.StatusCode, resp.Header)
 
 	if resp.StatusCode != http.StatusOK {
 		log.Warnf("AI Model responded with error: %d", resp.StatusCode)
@@ -100,6 +101,7 @@ func (a *OpenAI) readResponse(ctx context.Context, body io.Reader, cb gcs.Comple
 	if err := json.NewDecoder(body).Decode(&compl); err != nil {
 		return fmt.Errorf("failed to decode response: %v", err)
 	}
+	responseMetaFrom(ctx).recordCompletion(&compl)
 
 	chunk := gcs.NewChunkText(&compl)
 	err := cb(ctx, chunk, nil)
@@ -115,6 +117,7 @@ func (a *OpenAI) readError(ctx context.Context, statusCode int, body io.Reader, 
 	if err != nil {
 		return fmt.Errorf("failed to read error response body: %v", err)
 	}
+	responseMetaFrom(ctx).recordError(statusCode, raw)
 
 	var parsed interface{}
 	if err := json.Unmarshal(raw, &parsed); err != nil {
@@ -155,6 +158,7 @@ func (a *OpenAI) readStream(ctx context.Context, body io.Reader, cb gcs.Completi
 			if err := json.Unmarshal([]byte(data), &compl); err != nil {
 				return fmt.Errorf("error decoding response: %s\n%s", err, line)
 			}
+			responseMetaFrom(ctx).recordStreamChunk(&compl)
 
 			// Call the callback function with the unmarshalled completion
 			chunk := gcs.NewChunkStreaming(&compl)

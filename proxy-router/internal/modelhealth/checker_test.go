@@ -1144,3 +1144,152 @@ func TestCheckModelDetectedDeclaredAtStableAcrossSweeps(t *testing.T) {
 	third := reportByID(t, checker.GetReports(), modelLLM)
 	require.NotEqual(t, int64(12345), third.Api.DeclaredAt, "changed detected spec refreshes DeclaredAt")
 }
+
+func declaredContext(v int64) *config.DeclaredCapabilities {
+	return &config.DeclaredCapabilities{Context: &v}
+}
+
+func TestCheckModelPublishesDeclaredCapabilitiesWithoutDetection(t *testing.T) {
+	t.Run("detection off", func(t *testing.T) {
+		deps := &mockDeps{
+			bids: []*structs.Bid{bidFor(modelLLM)}, tags: map[common.Hash][]string{modelLLM: {"llm"}},
+			modelIDs: []common.Hash{modelLLM, modelNoBid}, adapter: &mathSolvingAdapter{},
+			configs: map[common.Hash]config.ModelConfig{
+				modelLLM:   {ModelName: "my-private-alias", ApiType: "openai", ApiURL: "http://llm:8000/v1/chat/completions", Capabilities: declaredContext(8192)},
+				modelNoBid: {ModelName: "qwen3-8b", ApiType: "openai", ApiURL: "http://llm:8001/v1/chat/completions"},
+			},
+		}
+		checker := newTestChecker(deps)
+		checker.checkAll(context.Background(), common.Address{})
+
+		llm := reportByID(t, checker.GetReports(), modelLLM)
+		require.NotNil(t, llm.Api, "the declared block is published without a detector")
+		require.Equal(t, "", llm.Api.Stack)
+		require.Equal(t, system.ApiSpecSourceDeclared, llm.Api.Source)
+		require.Equal(t, int64(8192), *llm.Api.Capabilities.Context)
+		require.Equal(t, "declared", llm.Api.Evidence["capabilities.context"])
+		require.NotZero(t, llm.Api.DeclaredAt)
+		require.Nil(t, reportByID(t, checker.GetReports(), modelNoBid).Api, "nothing declared, nothing detected: no api block")
+	})
+
+	t.Run("transport the detector does not cover", func(t *testing.T) {
+		det := &fakeDetector{spec: detectedQwen3()}
+		deps := &mockDeps{
+			bids: []*structs.Bid{bidFor(modelLLM)}, tags: map[common.Hash][]string{modelLLM: {"llm"}},
+			modelIDs: []common.Hash{modelLLM, modelImage}, adapter: &mathSolvingAdapter{}, apiDetect: det,
+			configs: map[common.Hash]config.ModelConfig{
+				modelLLM:   {ModelName: "qwen3-32b", ApiType: "openai", ApiURL: "http://llm:8000/v1/chat/completions", Capabilities: declaredContext(4096)},
+				modelImage: {ModelName: "sd-xl", ApiType: "prodia-v2", ApiURL: "https://inference.prodia.com/v2", Capabilities: declaredContext(77)},
+			},
+		}
+		checker := newTestChecker(deps)
+		checker.checkAll(context.Background(), common.Address{})
+		reports := checker.GetReports()
+
+		image := reportByID(t, reports, modelImage)
+		require.NotNil(t, image.Api)
+		require.Equal(t, system.ApiSpecSourceDeclared, image.Api.Source)
+		require.Equal(t, int64(77), *image.Api.Capabilities.Context)
+
+		llm := reportByID(t, reports, modelLLM)
+		require.Equal(t, system.ApiSpecSourceDetected, llm.Api.Source, "a chat-transport model with a block is still detected")
+		require.Equal(t, 1, det.calls)
+	})
+}
+
+// probeAwareDetector answers WouldProbe from a fixed set of model names and
+// records when each Detect call arrived.
+type probeAwareDetector struct {
+	fakeDetector
+	probes map[string]bool
+	at     []time.Time
+}
+
+func (p *probeAwareDetector) WouldProbe(cfg config.ModelConfig) bool { return p.probes[cfg.ModelName] }
+
+func (p *probeAwareDetector) Detect(ctx context.Context, cfg config.ModelConfig) *system.ModelApiSpec {
+	p.mu.Lock()
+	p.at = append(p.at, time.Now())
+	p.mu.Unlock()
+	return p.fakeDetector.Detect(ctx, cfg)
+}
+
+func TestCheckAllPacesDetectionsThatProbe(t *testing.T) {
+	modelA, modelB, modelC := common.HexToHash("0xa1"), common.HexToHash("0xb2"), common.HexToHash("0xc3")
+	newDeps := func(det ApiDetector) *mockDeps {
+		return &mockDeps{
+			modelIDs: []common.Hash{modelA, modelB, modelC}, adapter: &mathSolvingAdapter{}, apiDetect: det,
+			configs: map[common.Hash]config.ModelConfig{
+				modelA: {ModelName: "a", ApiType: "openai", ApiURL: "http://llm:8000/v1/chat/completions"},
+				modelB: {ModelName: "b", ApiType: "openai", ApiURL: "http://llm:8001/v1/chat/completions"},
+				modelC: {ModelName: "c", ApiType: "openai", ApiURL: "http://llm:8002/v1/chat/completions"},
+			},
+		}
+	}
+	const delay = 150 * time.Millisecond
+	// pausesDuring runs one sweep with the pause recorded instead of slept
+	// and returns, per pause, which detection calls had already happened.
+	pausesDuring := func(t *testing.T, deps *mockDeps, calls func() int) []int {
+		t.Helper()
+		checker := NewChecker(Deps{Adapters: deps, Bids: deps, Models: deps, ModelConfigs: deps, ApiDetect: deps.apiDetect}, time.Hour, time.Second, delay, 0, lib.NewTestLogger())
+		var pauses []int
+		checker.sleepFn = func(_ context.Context, d time.Duration) bool {
+			require.Equal(t, delay, d)
+			pauses = append(pauses, calls())
+			return true
+		}
+		checker.checkAll(context.Background(), common.Address{})
+		return pauses
+	}
+
+	t.Run("a cache miss after a cache miss waits probeDelay", func(t *testing.T) {
+		det := &probeAwareDetector{fakeDetector: fakeDetector{spec: detectedQwen3()}, probes: map[string]bool{"a": true, "b": false, "c": true}}
+		pauses := pausesDuring(t, newDeps(det), func() int { return len(det.at) })
+		require.Len(t, det.at, 3, "no model has a bid, so every call is a detection")
+		require.Equal(t, []int{2}, pauses, "one pause, before c's probe: b is a cache hit")
+	})
+
+	t.Run("cache hits are not paced", func(t *testing.T) {
+		det := &probeAwareDetector{fakeDetector: fakeDetector{spec: detectedQwen3()}, probes: map[string]bool{}}
+		pauses := pausesDuring(t, newDeps(det), func() int { return len(det.at) })
+		require.Len(t, det.at, 3)
+		require.Empty(t, pauses)
+	})
+
+	t.Run("a detector without WouldProbe is paced on every call", func(t *testing.T) {
+		det := &fakeDetector{spec: detectedQwen3()}
+		pauses := pausesDuring(t, newDeps(det), func() int { return det.calls })
+		require.Equal(t, 3, det.calls)
+		require.Equal(t, []int{1, 2}, pauses)
+	})
+
+	// A health probe and a detection cache miss reach the same upstream
+	// account, so they pace each other in either order.
+	t.Run("a cache miss after a health probe waits probeDelay", func(t *testing.T) {
+		det := &probeAwareDetector{fakeDetector: fakeDetector{spec: detectedQwen3()}, probes: map[string]bool{"a": false, "b": true, "c": false}}
+		deps := newDeps(det)
+		deps.bids = []*structs.Bid{bidFor(modelA)}
+		pauses := pausesDuring(t, deps, func() int { return len(det.at) })
+		require.Len(t, det.at, 3)
+		require.Equal(t, []int{1}, pauses, "b's cache miss follows a's health probe: paced; c is a cache hit without a bid")
+	})
+
+	t.Run("a health probe after a cache miss waits probeDelay", func(t *testing.T) {
+		det := &probeAwareDetector{fakeDetector: fakeDetector{spec: detectedQwen3()}, probes: map[string]bool{"a": true, "b": false, "c": false}}
+		deps := newDeps(det)
+		deps.bids = []*structs.Bid{bidFor(modelB)}
+		pauses := pausesDuring(t, deps, func() int { return len(det.at) })
+		require.Len(t, det.at, 3)
+		require.Equal(t, []int{1}, pauses, "b's health probe follows a's cache miss: paced; c is a cache hit without a bid")
+	})
+
+	t.Run("a cancelled pause ends the sweep", func(t *testing.T) {
+		det := &probeAwareDetector{fakeDetector: fakeDetector{spec: detectedQwen3()}, probes: map[string]bool{"a": true, "b": true, "c": true}}
+		deps := newDeps(det)
+		checker := NewChecker(Deps{Adapters: deps, Bids: deps, Models: deps, ModelConfigs: deps, ApiDetect: deps.apiDetect}, time.Hour, time.Second, time.Hour, 0, lib.NewTestLogger())
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() { time.Sleep(50 * time.Millisecond); cancel() }()
+		checker.checkAll(ctx, common.Address{})
+		require.Equal(t, 1, det.calls)
+	})
+}

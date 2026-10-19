@@ -28,13 +28,13 @@
           },
           "apiStack": {
             "title": "API Stack",
-            "description": "Optional backend API preset advertised in the model's api block (/healthcheck and pong models); it never selects the adapter. Its transport must match apiType: openai for every preset except anthropic, which requires claudeai. Trimmed and lowercased on load; an unknown preset or a mismatch is logged and ignored for that model (its backend API is then detected at runtime, as if apiStack were omitted). When omitted, the backend API is detected at runtime by probing the backend's service endpoints (never inference requests; one hop through LiteLLM) and reported with source: detected; MODEL_API_DETECT_ENABLED=false turns detection off.",
+            "description": "Optional backend API preset advertised in the model's api block (/healthcheck and pong models); it never selects the adapter. Its transport must match apiType: openai for every preset except anthropic, which requires claudeai (gemini is Gemini's OpenAI-compatible endpoint, not the native API). Trimmed and lowercased on load; an unknown preset or a mismatch is logged and ignored for that model (its backend API is then detected at runtime, as if apiStack were omitted). When omitted, the backend API is detected at runtime by probing the backend's service endpoints (never inference requests; one hop through LiteLLM) and reported with source: detected; MODEL_API_DETECT_ENABLED=false turns detection off. Detection also fills the api block's capabilities (context, modalities, tools, structured, ...) from the backend's own endpoints, each with an evidence entry; the declared capabilities object below overrides them field by field.",
             "type": "string",
-            "enum": ["openai", "vllm", "sglang", "llamacpp", "ollama", "venice", "openrouter", "litellm", "anthropic"]
+            "enum": ["openai", "vllm", "sglang", "llamacpp", "ollama", "venice", "openrouter", "litellm", "anthropic", "gemini"]
           },
           "modelFamily": {
             "title": "Model Family",
-            "description": "Optional canonical model family used to pick reasoning-control bindings. Families with bindings: qwen3, qwq, deepseek-v3.1, deepseek-r1, gpt-oss, glm, granite, hunyuan, seed-oss, nemotron, claude, o-series, gemini, gemma (Gemma 4 members only), kimi (K2.5 / K2.6 hybrid; K2.7-Code and K3 always-on), minimax (MiniMax-M2 and M2.x always-on; MiniMax-M3 hybrid via thinking_mode; Text-01 and M1 none), exaone (EXAONE 4.x hybrid; EXAONE Deep always-on). For gemma, kimi, minimax and exaone the member is detected from the model id the backend reports, or from modelName when it reports none, so modelFamily alone does not select those bindings; names match regardless of separators (., _, @ and spaces count as -) and ignore Venice's inline :key=value parameters. A thinking token in modelName marks a reasoning model, not an always-on one. Any other value (or an inferred label such as llama, mistral, phi) is accepted and reported as modelFamily without reasoning bindings; inferred from modelName when omitted. Runtime detection never overrides an explicit value; it only fills an empty one.",
+            "description": "Optional canonical model family used to pick reasoning-control bindings. Families with bindings: qwen3, qwen3.5, qwq, deepseek-v3.1, deepseek-r1, phi-4-reasoning, gpt-oss, glm, granite, hunyuan, seed-oss, nemotron, cogito, hermes (Hermes 4 only), mimo (MiMo-V2 only), olmo (Olmo 3 Think always-on), claude, o-series, gemini, gemma (Gemma 4 members only), kimi (K2.5 / K2.6 hybrid; K2.7-Code and K3 always-on), minimax (MiniMax-M2 and M2.x always-on; MiniMax-M3 hybrid via thinking_mode; Text-01 and M1 none), exaone (EXAONE 4.x hybrid; EXAONE Deep always-on). For gemma, kimi, minimax, exaone, hermes, mimo, olmo and nemotron the member is detected from the model id the backend reports, or from modelName when it reports none, so modelFamily alone does not select those bindings; names match regardless of separators (., _, @ and spaces count as -) and ignore Venice's inline :key=value parameters. A thinking token in modelName marks a reasoning model, not an always-on one. Any other value (or an inferred label such as llama, mistral, phi, magistral, arcee) is accepted and reported as modelFamily without reasoning bindings; inferred from modelName when omitted. Runtime detection never overrides an explicit value; it only fills an empty one.",
             "type": "string"
           },
           "apiUrl": {
@@ -67,6 +67,68 @@
             "description": "The policy to be used for capacity management",
             "type": "string",
             "enum": ["simple", "idle_timeout"]
+          },
+          "capabilities": {
+            "title": "Declared capabilities",
+            "description": "Optional facts about the model as served, published in the model's api block (capabilities.*) with evidence \"declared\". Precedence: declared > runtime-verified (verify:*) > backend-served > backend-trained / listing > template > registry; each declared field wins over every other source for that field, and the other fields are still filled by detection, the health probe, the verifier probes and the offline registry. Published for every model that declares it, whatever its apiType (an image or decisions model then reports an api block holding only modelFamily, the declared block, source: declared and, for an always-on family, thinking.mode always_on); detection, the health-probe harvest, the verifier probes and the offline registry fill the remaining fields on chat transports (apiType openai or claudeai) only. Fields absent from the wire block are unknown, never false. An invalid block (unknown key, wrong type, non-positive integer, unknown modality or structured kind, duplicate list value) is logged and ignored for that model; the model itself is kept. Only this subset can be declared: contextTrained, reasoning, toolsParallel, promptCache and quantization come from the backend, a probe or the registry.",
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "context": {
+                "title": "Context window",
+                "description": "Served window in tokens (prompt + completion), e.g. the vLLM --max-model-len or llama.cpp -c value; the number consumers plan requests against.",
+                "type": "integer",
+                "minimum": 1,
+                "exclusiveMaximum": 2147483648
+              },
+              "maxOutput": {
+                "title": "Max output tokens",
+                "description": "Largest completion the backend allows for this model, in tokens.",
+                "type": "integer",
+                "minimum": 1,
+                "exclusiveMaximum": 2147483648
+              },
+              "modalities": {
+                "title": "Modalities",
+                "description": "What the model accepts (input) and produces (output). text is implied for input: listing only the extras (e.g. [\"image\"]) publishes [\"text\", \"image\"]. output is published exactly as listed.",
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "input": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": { "type": "string", "enum": ["text", "image", "audio", "video", "pdf"] }
+                  },
+                  "output": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": { "type": "string", "enum": ["text", "image", "audio", "embeddings"] }
+                  }
+                }
+              },
+              "tools": {
+                "title": "Tool calling",
+                "description": "Function/tool calling accepted by the backend for this model.",
+                "type": "boolean"
+              },
+              "structured": {
+                "title": "Structured output kinds",
+                "description": "Constrained-output kinds the backend honours for this model: json_object (JSON mode), json_schema (response_format json_schema), grammar (GBNF / EBNF), regex, choice. A probe or backend fact can extend the list, never narrow it.",
+                "type": "array",
+                "uniqueItems": true,
+                "items": { "type": "string", "enum": ["json_object", "json_schema", "grammar", "regex", "choice"] }
+              },
+              "webSearch": {
+                "title": "Web search",
+                "description": "The backend can search the web for this model on request; the request knob is a web_search.* binding.",
+                "type": "boolean"
+              },
+              "embeddings": {
+                "title": "Embeddings",
+                "description": "The model serves /v1/embeddings.",
+                "type": "boolean"
+              }
+            }
           }
         },
         "required": ["modelId", "modelName", "apiType", "apiUrl"]

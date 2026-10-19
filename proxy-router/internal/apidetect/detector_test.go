@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apispec"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
@@ -277,6 +278,7 @@ func TestDetectVeniceByShape(t *testing.T) {
 						"supportsReasoning":       true,
 						"supportsFunctionCalling": true,
 						"supportsVision":          false,
+						"supportsWebSearch":       true,
 					},
 				},
 			},
@@ -288,19 +290,31 @@ func TestDetectVeniceByShape(t *testing.T) {
 	api := detect(t, srv.URL+"/api/v1/chat/completions", "openai", "qwen3-235b")
 	require.NotNil(t, api)
 	require.Equal(t, "venice", api.Stack)
-	require.Contains(t, api.Parameters, "reasoning")
-	require.Contains(t, api.Parameters, "tools")
-	require.NotContains(t, api.Parameters, "vision")
+	require.NotNil(t, api.Capabilities)
+	require.Equal(t, true, *api.Capabilities.Tools)
+	require.Equal(t, true, *api.Capabilities.WebSearch)
+	require.Equal(t, true, *api.Capabilities.Reasoning)
+	require.Nil(t, api.Capabilities.Modalities)
+	for _, name := range []string{"reasoning", "vision", "web_search"} {
+		require.NotContains(t, api.Parameters, name, "capability names are not request parameters")
+	}
+	require.Contains(t, api.Parameters, "tools", "the venice stack table supplies the request parameter names")
+	require.Equal(t, "venice:/models.model_spec.capabilities.supportsFunctionCalling", api.Evidence["capabilities.tools"])
+	require.Equal(t, "venice:/models.model_spec.capabilities.supportsWebSearch", api.Evidence["capabilities.webSearch"])
 }
 
-func TestDetectHostedVendorSkipsProbing(t *testing.T) {
+// The static anthropic spec stands whatever the vendor lookup answers: one
+// request to /v1/models/{id}, a 404, and the preset tables fill the rest.
+func TestDetectHostedVendorStaticSpecSurvivesProbeMiss(t *testing.T) {
+	origin, hits := stubVendorHost(t, "anthropic")
 	d := newTestDetector()
 	api := d.Detect(context.Background(), config.ModelConfig{
 		ModelName: "claude-sonnet-4-5",
 		ApiType:   "claudeai",
-		ApiURL:    "https://api.anthropic.com/v1/messages",
+		ApiURL:    origin + "/v1/messages",
 	})
 	require.NotNil(t, api)
+	require.Equal(t, int32(1), hits.Load(), "one vendor lookup, nothing else")
 	require.Equal(t, "anthropic", api.Stack)
 	require.Equal(t, "claude", api.ModelFamily)
 	require.NotNil(t, api.Thinking)
@@ -367,12 +381,14 @@ func TestDetectWithTraceExplainsSteps(t *testing.T) {
 }
 
 func TestDetectWithTraceHostedVendor(t *testing.T) {
+	origin, hits := stubVendorHost(t, "anthropic")
 	d := newTestDetector()
 	_, trace := d.DetectWithTrace(context.Background(), config.ModelConfig{
 		ModelName: "claude-opus-4-6",
 		ApiType:   "claudeai",
-		ApiURL:    "https://api.anthropic.com/v1/messages",
+		ApiURL:    origin + "/v1/messages",
 	})
+	require.Equal(t, int32(1), hits.Load())
 	joined := strings.Join(trace, "\n")
 	require.Contains(t, joined, "anthropic")
 	require.Contains(t, joined, "family")
@@ -437,13 +453,15 @@ func TestDetectServedIDRefinesGenericArchitecture(t *testing.T) {
 }
 
 func TestDetectHostedVendorSkipsTemplateKwargDefaults(t *testing.T) {
+	origin, hits := stubVendorHost(t, "groq")
 	d := newTestDetector()
 	api := d.Detect(context.Background(), config.ModelConfig{
 		ModelName: "qwen/qwen3-32b",
 		ApiType:   "openai",
-		ApiURL:    "https://api.groq.com/openai/v1/chat/completions",
+		ApiURL:    origin + "/openai/v1/chat/completions",
 	})
 	require.NotNil(t, api)
+	require.Equal(t, int32(1), hits.Load(), "the groq model lookup only")
 	require.Equal(t, "groq", api.Stack)
 	require.Equal(t, "qwen3", api.ModelFamily)
 	require.Empty(t, api.Bindings)
@@ -451,13 +469,15 @@ func TestDetectHostedVendorSkipsTemplateKwargDefaults(t *testing.T) {
 }
 
 func TestDetectHostedVendorKeepsNativeFamilyDefaults(t *testing.T) {
+	origin, hits := stubVendorHost(t, "together")
 	d := newTestDetector()
 	api := d.Detect(context.Background(), config.ModelConfig{
 		ModelName: "claude-sonnet-4-5",
 		ApiType:   "openai",
-		ApiURL:    "https://api.together.xyz/v1/chat/completions",
+		ApiURL:    origin + "/v1/chat/completions",
 	})
 	require.NotNil(t, api)
+	require.Equal(t, int32(1), hits.Load(), "the together listing only")
 	require.Equal(t, "together", api.Stack)
 	require.Empty(t, api.Bindings)
 }
@@ -816,9 +836,11 @@ func TestDetectRegistryListingOverLimitIsIgnoredNotFatal(t *testing.T) {
 }
 
 func TestDetectOpenAIHostAdvertisesStandardParameters(t *testing.T) {
+	origin, hits := stubVendorHost(t, "openai")
 	d := newTestDetector()
-	api := d.Detect(context.Background(), config.ModelConfig{ModelName: "gpt-4o-mini", ApiType: "openai", ApiURL: "https://api.openai.com/v1/chat/completions"})
+	api := d.Detect(context.Background(), config.ModelConfig{ModelName: "gpt-4o-mini", ApiType: "openai", ApiURL: origin + "/v1/chat/completions"})
 	require.NotNil(t, api)
+	require.Zero(t, hits.Load(), "openai has no hosted probe")
 	require.Contains(t, api.Parameters, "response_format")
 	require.Contains(t, api.Parameters, "seed")
 }
@@ -1083,17 +1105,42 @@ func TestDetectDropsStackContradictingTransport(t *testing.T) {
 		require.Equal(t, system.ThinkingModeAlwaysOn, api.Thinking.Mode)
 		require.Empty(t, api.Bindings)
 		require.Empty(t, api.Parameters)
+		require.NotNil(t, api.Capabilities)
+		require.True(t, *api.Capabilities.Reasoning, "derived from the mode that survives, not from the dropped stack's endpoints")
+		require.Equal(t, apispec.SourceDerivedThinkingMode, api.Evidence["capabilities.reasoning"])
+		require.Nil(t, api.Capabilities.Context, "vllm's max_model_len went with the stack")
+		require.Nil(t, api.Capabilities.Structured)
+		for key := range api.Evidence {
+			require.Equal(t, "capabilities.reasoning", key)
+		}
 	})
 
 	t.Run("openai model at a claudeai-only vendor host", func(t *testing.T) {
-		api, lines := newTestDetector().DetectWithTrace(context.Background(), config.ModelConfig{ModelName: "claude-sonnet-4-5", ApiType: "openai", ApiURL: "https://api.anthropic.com/v1/messages"})
+		origin, hits := stubVendorHost(t, "anthropic")
+		api, lines := newTestDetector().DetectWithTrace(context.Background(), config.ModelConfig{ModelName: "claude-sonnet-4-5", ApiType: "openai", ApiURL: origin + "/v1/messages"})
 		require.NotNil(t, api)
+		require.Equal(t, int32(1), hits.Load())
 		require.Equal(t, "", api.Stack)
 		require.Equal(t, "claude", api.ModelFamily)
 		require.Nil(t, api.Thinking)
 		require.Empty(t, api.Bindings)
 		require.Empty(t, api.Parameters)
 		require.Contains(t, strings.Join(lines, "\n"), `detected stack "anthropic" speaks "claudeai" but apiType is "openai" — stack dropped`)
+	})
+
+	// A declared webSearch opens the anthropic web_search.* bindings under the
+	// "declared" source; the drop takes the bindings, and their evidence must
+	// not outlive them just because the source is one the clear keeps.
+	t.Run("declared binding evidence goes with the dropped bindings", func(t *testing.T) {
+		withoutRegistry(t)
+		origin, _ := stubVendorHost(t, "anthropic")
+		declared := &config.DeclaredCapabilities{WebSearch: boolp(true)}
+		api := newTestDetector().Detect(context.Background(), config.ModelConfig{ModelName: "claude-sonnet-4-5", ApiType: "openai", ApiURL: origin + "/v1/messages", Capabilities: declared})
+		require.NotNil(t, api)
+		require.Equal(t, "", api.Stack)
+		require.Empty(t, api.Bindings)
+		require.Equal(t, true, *api.Capabilities.WebSearch)
+		require.Equal(t, map[string]string{"capabilities.webSearch": "declared"}, api.Evidence)
 	})
 }
 
@@ -1124,4 +1171,112 @@ func TestDetectCacheBoundedUnderFreshKeyChurn(t *testing.T) {
 	require.NotContains(t, d.cache, fmt.Sprintf("k%03d", seeded-cacheSweepAt/2-1))
 	require.Contains(t, d.cache, fmt.Sprintf("k%03d", seeded-cacheSweepAt/2), "the newest seeded entries survive")
 	require.Contains(t, d.cache, fmt.Sprintf("k%03d", seeded-1))
+}
+
+func i64(v int64) *int64 { return &v }
+
+func TestDetectComposesDeclaredCapabilities(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/props", jsonHandler(map[string]any{"total_slots": 1, "chat_template": qwen3Template}))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	noTools := false
+	caps := &config.DeclaredCapabilities{Context: i64(4096), Tools: &noTools}
+	api := newTestDetector().Detect(context.Background(), config.ModelConfig{ModelName: "qwen3-32b", ApiType: "openai", ApiURL: srv.URL + "/v1/chat/completions", Capabilities: caps})
+	require.NotNil(t, api)
+	require.Equal(t, "llamacpp", api.Stack, "declared capabilities do not replace detection")
+	require.Equal(t, system.ApiSpecSourceDetected, api.Source)
+	require.NotNil(t, api.Capabilities)
+	require.Equal(t, int64(4096), *api.Capabilities.Context)
+	require.False(t, *api.Capabilities.Tools)
+	require.Equal(t, "declared", api.Evidence["capabilities.context"])
+	require.Equal(t, "declared", api.Evidence["capabilities.tools"])
+}
+
+func TestDetectTransportDropKeepsDeclaredCapabilities(t *testing.T) {
+	vllm, _ := vllmServer(t, "Qwen/Qwen3-32B")
+	caps := &config.DeclaredCapabilities{Context: i64(32768)}
+
+	t.Run("family known", func(t *testing.T) {
+		api := newTestDetector().Detect(context.Background(), config.ModelConfig{ModelName: "Qwen/Qwen3-32B", ApiType: "claudeai", ApiURL: vllm.URL + "/v1/chat/completions", Capabilities: caps})
+		require.NotNil(t, api)
+		require.Equal(t, "", api.Stack)
+		require.Equal(t, "qwen3", api.ModelFamily)
+		require.Empty(t, api.Bindings)
+		require.Equal(t, int64(32768), *api.Capabilities.Context)
+		require.Equal(t, map[string]string{"capabilities.context": "declared"}, api.Evidence, "only declared evidence survives the drop")
+	})
+
+	t.Run("nothing but the declared block", func(t *testing.T) {
+		unknown, _ := vllmServer(t, "unknown-model-x")
+		cfg := config.ModelConfig{ModelName: "unknown-model-x", ApiType: "claudeai", ApiURL: unknown.URL + "/v1/chat/completions"}
+		require.Nil(t, newTestDetector().Detect(context.Background(), cfg), "nothing known without the block")
+		cfg.Capabilities = caps
+		api := newTestDetector().Detect(context.Background(), cfg)
+		require.NotNil(t, api, "a declared capability is something known")
+		require.Equal(t, "", api.Stack)
+		require.Equal(t, "", api.ModelFamily)
+		require.Nil(t, api.Thinking)
+		require.Equal(t, int64(32768), *api.Capabilities.Context)
+	})
+}
+
+func TestCacheKeyChangesWithDeclaredCapabilities(t *testing.T) {
+	base := config.ModelConfig{ApiURL: "u", ModelName: "m", ApiKey: "k1"}
+	a := cacheKey(base)
+
+	declared := base
+	declared.Capabilities = &config.DeclaredCapabilities{Context: i64(8192)}
+	b := cacheKey(declared)
+	require.NotEqual(t, a, b, "declaring a block changes the key")
+
+	same := base
+	same.Capabilities = &config.DeclaredCapabilities{Context: i64(8192)}
+	require.Equal(t, b, cacheKey(same), "equal blocks behind different pointers share the key")
+
+	changed := base
+	changed.Capabilities = &config.DeclaredCapabilities{Context: i64(16384)}
+	require.NotEqual(t, b, cacheKey(changed), "an edited value changes the key")
+	require.NotContains(t, b, "k1")
+}
+
+func TestNewDetectorCacheTTLOption(t *testing.T) {
+	require.Equal(t, cacheTTL, newTestDetector().ttl, "DefaultOptions keeps the built-in TTL")
+	require.Equal(t, cacheTTL, NewDetector(lib.NewTestLogger(), Options{CacheTTL: -time.Second}).ttl)
+	require.Equal(t, 5*time.Minute, NewDetector(lib.NewTestLogger(), Options{CacheTTL: 5 * time.Minute}).ttl)
+}
+
+func TestWouldProbeFollowsTheCache(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/props", jsonHandler(map[string]any{"total_slots": 1, "chat_template": qwen3Template}))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	d := newTestDetector()
+	cfg := config.ModelConfig{ModelName: "qwen3-32b", ApiType: "openai", ApiURL: srv.URL + "/v1/chat/completions"}
+	require.True(t, d.WouldProbe(cfg), "cold cache")
+
+	api, probed := d.DetectProbed(context.Background(), cfg)
+	require.NotNil(t, api)
+	require.True(t, probed)
+	require.False(t, d.WouldProbe(cfg), "fresh entry")
+
+	_, probed = d.DetectProbed(context.Background(), cfg)
+	require.False(t, probed, "served from the cache")
+
+	d.mu.Lock()
+	for key, e := range d.cache {
+		e.at = time.Now().Add(-d.ttl)
+		d.cache[key] = e
+	}
+	d.mu.Unlock()
+	require.True(t, d.WouldProbe(cfg), "expired entry")
+
+	declared := cfg
+	declared.ApiStack = "vllm"
+	require.False(t, d.WouldProbe(declared), "a declared stack is built, never probed")
+	_, probed = d.DetectProbed(context.Background(), declared)
+	require.False(t, probed)
+	require.False(t, d.WouldProbe(config.ModelConfig{ApiType: "openai"}), "nothing to detect")
 }

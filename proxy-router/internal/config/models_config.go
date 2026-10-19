@@ -52,6 +52,9 @@ type ModelConfig struct {
 	ConcurrentSlots int               `json:"concurrentSlots" validate:"number"`
 	CapacityPolicy  string            `json:"capacityPolicy"`
 	Parameters      map[string]string `json:"parameters"`
+	// Capabilities is the optional declared override; nil after load when the
+	// block was absent or invalid.
+	Capabilities *DeclaredCapabilities `json:"capabilities,omitempty"`
 }
 
 type ModelConfigs map[string]ModelConfig
@@ -171,6 +174,7 @@ func (e *ModelConfigLoader) load() (ModelConfigs, error) {
 		cfgs := make(ModelConfigs, len(modelConfigsV2.Models))
 		for _, v := range modelConfigsV2.Models {
 			v.ApiStack = e.loadApiStack(v.ID, v.ModelConfig)
+			v.Capabilities = e.loadCapabilities(v.ID, v.ModelConfig)
 			cfgs[v.ID] = v.ModelConfig
 			_ = e.Validate(context.Background(), common.HexToHash(v.ID), v.ModelConfig)
 		}
@@ -192,6 +196,7 @@ func (e *ModelConfigLoader) load() (ModelConfigs, error) {
 	}
 	for id, cfg := range modelConfigs {
 		cfg.ApiStack = e.loadApiStack(id, cfg)
+		cfg.Capabilities = e.loadCapabilities(id, cfg)
 		modelConfigs[id] = cfg
 	}
 
@@ -206,6 +211,19 @@ func (e *ModelConfigLoader) loadApiStack(modelID string, cfg ModelConfig) string
 		return ""
 	}
 	return NormalizeApiStack(cfg.ApiStack)
+}
+
+// Same degradation policy as loadApiStack: a bad block costs that model its
+// declared facts, not the node its models.
+func (e *ModelConfigLoader) loadCapabilities(modelID string, cfg ModelConfig) *DeclaredCapabilities {
+	if err := ValidateDeclaredCapabilities(modelID, cfg.Capabilities); err != nil {
+		e.log.Errorf("%s — capabilities ignored for this model", err)
+		return nil
+	}
+	if cfg.Capabilities.Empty() {
+		return nil
+	}
+	return cfg.Capabilities
 }
 
 func (e *ModelConfigLoader) ModelConfigFromID(ID string) *ModelConfig {

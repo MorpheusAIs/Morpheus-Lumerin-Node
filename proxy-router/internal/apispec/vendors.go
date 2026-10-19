@@ -25,6 +25,7 @@ var hostVendors = map[string]string{
 	"integrate.api.nvidia.com":          "nvidia-nim",
 	"api.cerebras.ai":                   "cerebras",
 	"api.sambanova.ai":                  "sambanova",
+	"router.huggingface.co":             "hf-router",
 }
 
 func StackFromHost(apiURL string) string {
@@ -59,4 +60,13 @@ var detectedOnlyEngines = map[string]bool{"tgi": true, "lmstudio": true, "kobold
 // engines.
 func gatedStack(stack string) bool {
 	return gatewayStacks[stack] || isHostedVendor(stack) || detectedOnlyEngines[stack]
+}
+
+// IsHostedOrGatewayStack reports a stack whose requests are billed by a
+// third party: a gateway (venice, openrouter, litellm, anthropic, openai) or
+// a hostname-recognised vendor. apidetect -verify warns before probing one;
+// the detected-only engines (tgi, lmstudio, koboldcpp) are self-hosted and
+// are not included.
+func IsHostedOrGatewayStack(stack string) bool {
+	return gatewayStacks[stack] || isHostedVendor(stack)
 }

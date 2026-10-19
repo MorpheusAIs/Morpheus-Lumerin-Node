@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apispec"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apispec/registry"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
@@ -28,8 +30,12 @@ const (
 	cacheSweepAt  = 256
 )
 
-// Variable so tests can map an httptest host to a vendor.
-var stackFromHost = apispec.StackFromHost
+// Variables so tests can map an httptest host to a vendor and keep a
+// vendor-probe fixture free of the offline registry's facts.
+var (
+	stackFromHost = apispec.StackFromHost
+	registryMatch = registry.Match
+)
 
 type Options struct {
 	// Diagnostics only. Not applied to the LiteLLM second hop, where
@@ -37,6 +43,9 @@ type Options struct {
 	IgnoreHostVendors bool
 	ProbeTimeout      time.Duration
 	TwoHop            bool
+	// CacheTTL bounds how long a detection result and a registry listing are
+	// reused (MODEL_API_DETECT_TTL); <= 0 keeps cacheTTL.
+	CacheTTL time.Duration
 }
 
 func DefaultOptions() Options { return Options{TwoHop: true} }
@@ -53,8 +62,9 @@ type Detector struct {
 	opts      Options
 	ttl       time.Duration
 
-	mu    sync.Mutex
-	cache map[string]cacheEntry
+	mu       sync.Mutex
+	cache    map[string]cacheEntry
+	listings map[string]listingEntry
 }
 
 func NewDetector(log lib.ILogger, opts Options) *Detector {
@@ -62,13 +72,18 @@ func NewDetector(log lib.ILogger, opts Options) *Detector {
 	if timeout <= 0 {
 		timeout = probeTimeout
 	}
+	ttl := opts.CacheTTL
+	if ttl <= 0 {
+		ttl = cacheTTL
+	}
 	return &Detector{
 		log:       log.Named("API_DETECT"),
 		client:    &http.Client{Timeout: timeout, CheckRedirect: refuseCrossHostRedirect},
 		hopClient: newHopClient(timeout),
 		opts:      opts,
-		ttl:       cacheTTL,
+		ttl:       ttl,
 		cache:     make(map[string]cacheEntry),
+		listings:  make(map[string]listingEntry),
 	}
 }
 
@@ -93,11 +108,30 @@ func refuseCrossHostRedirect(req *http.Request, via []*http.Request) error {
 }
 
 func (d *Detector) Detect(ctx context.Context, cfg config.ModelConfig) *system.ModelApiSpec {
+	api, _ := d.DetectProbed(ctx, cfg)
+	return api
+}
+
+// WouldProbe reports whether Detect for cfg would reach the backend rather
+// than answer from the cache or the static tables; the checker paces such
+// calls.
+func (d *Detector) WouldProbe(cfg config.ModelConfig) bool {
+	if apispec.StackFor(cfg.ApiStack) != "" || (cfg.ApiURL == "" && cfg.ModelName == "") {
+		return false
+	}
+	d.mu.Lock()
+	entry, ok := d.cache[cacheKey(cfg)]
+	d.mu.Unlock()
+	return !ok || time.Since(entry.at) >= d.ttl
+}
+
+// DetectProbed is Detect that also reports whether the backend was reached.
+func (d *Detector) DetectProbed(ctx context.Context, cfg config.ModelConfig) (*system.ModelApiSpec, bool) {
 	if apispec.StackFor(cfg.ApiStack) != "" {
-		return apispec.Build(cfg)
+		return apispec.Build(cfg), false
 	}
 	if cfg.ApiURL == "" && cfg.ModelName == "" {
-		return nil
+		return nil, false
 	}
 
 	key := cacheKey(cfg)
@@ -105,7 +139,7 @@ func (d *Detector) Detect(ctx context.Context, cfg config.ModelConfig) *system.M
 	entry, ok := d.cache[key]
 	d.mu.Unlock()
 	if ok && time.Since(entry.at) < d.ttl {
-		return entry.api.Clone()
+		return entry.api.Clone(), false
 	}
 
 	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
@@ -117,7 +151,7 @@ func (d *Detector) Detect(ctx context.Context, cfg config.ModelConfig) *system.M
 	api := d.detect(ctx, cfg)
 	if ctx.Err() != nil {
 		d.log.Debugf("backend %s: detection cut short (%v); result not cached", RedactURL(cfg.ApiURL), ctx.Err())
-		return api
+		return api, true
 	}
 	if api != nil {
 		d.log.Debugf("backend %s: detected api stack=%q family=%q", RedactURL(cfg.ApiURL), api.Stack, api.ModelFamily)
@@ -125,25 +159,32 @@ func (d *Detector) Detect(ctx context.Context, cfg config.ModelConfig) *system.M
 
 	d.mu.Lock()
 	if len(d.cache) >= cacheSweepAt {
-		for k, e := range d.cache {
-			if time.Since(e.at) >= d.ttl {
-				delete(d.cache, k)
-			}
-		}
-		if len(d.cache) >= cacheSweepAt {
-			keys := make([]string, 0, len(d.cache))
-			for k := range d.cache {
-				keys = append(keys, k)
-			}
-			sort.Slice(keys, func(i, j int) bool { return d.cache[keys[i]].at.Before(d.cache[keys[j]].at) })
-			for _, k := range keys[:len(keys)-cacheSweepAt/2] {
-				delete(d.cache, k)
-			}
-		}
+		sweepCache(d.cache, cacheSweepAt, d.ttl, func(e cacheEntry) time.Time { return e.at })
 	}
 	d.cache[key] = cacheEntry{api: api, at: time.Now()}
 	d.mu.Unlock()
-	return api.Clone()
+	return api.Clone(), true
+}
+
+// sweepCache drops expired entries and, when the map is still at limit,
+// the oldest half so a burst of fresh keys cannot grow it without bound.
+func sweepCache[E any](m map[string]E, limit int, ttl time.Duration, at func(E) time.Time) {
+	for k, e := range m {
+		if time.Since(at(e)) >= ttl {
+			delete(m, k)
+		}
+	}
+	if len(m) < limit {
+		return
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool { return at(m[keys[i]]).Before(at(m[keys[j]])) })
+	for _, k := range keys[:len(keys)-limit/2] {
+		delete(m, k)
+	}
 }
 
 func (d *Detector) DetectWithTrace(ctx context.Context, cfg config.ModelConfig) (*system.ModelApiSpec, []string) {
@@ -165,18 +206,35 @@ func (d *Detector) DetectWithTrace(ctx context.Context, cfg config.ModelConfig) 
 	return api, trace.lines
 }
 
+// Runs for a model whose host resolved to the hosted vendor `ev.Stack`; the
+// probe owns its own trace lines. Keyed by the stack name StackFromHost
+// returns; vendors without an entry are not probed.
+type hostedProbe func(ctx context.Context, d *Detector, bases []string, cfg config.ModelConfig, ev *apispec.Evidence)
+
+var hostedProbes = map[string]hostedProbe{}
+
+// Called from init() in the probe file that owns the vendor.
+func registerHostedProbe(stack string, probe hostedProbe) {
+	if _, dup := hostedProbes[stack]; dup {
+		panic("apidetect: hosted probe for " + stack + " registered twice")
+	}
+	hostedProbes[stack] = probe
+}
+
 func (d *Detector) detect(ctx context.Context, cfg config.ModelConfig) *system.ModelApiSpec {
-	ev := apispec.Evidence{ModelName: cfg.ModelName, ModelFamily: cfg.ModelFamily}
+	ev := apispec.Evidence{ModelName: cfg.ModelName, ModelFamily: cfg.ModelFamily, DeclaredCaps: cfg.Capabilities}
 
 	if d.opts.IgnoreHostVendors {
 		tracef(ctx, "hostname recognition disabled; identifying purely by endpoints and listing shape")
 	} else {
 		ev.Stack = stackFromHost(cfg.ApiURL)
 	}
+	// Captured before probing: a stack a probe fingerprints later is a
+	// self-hosted engine, which the registry does not describe.
+	hostRecognised := ev.Stack != ""
 	bases := baseCandidates(cfg.ApiURL)
 
-	switch ev.Stack {
-	case "":
+	if ev.Stack == "" {
 		apiURLText := "(no apiUrl)"
 		if cfg.ApiURL != "" {
 			apiURLText = RedactURL(cfg.ApiURL)
@@ -187,11 +245,14 @@ func (d *Detector) detect(ctx context.Context, cfg config.ModelConfig) *system.M
 			tracef(ctx, "no engine fingerprint matched; checking for a registry-shaped model listing")
 			d.probeRegistryShape(ctx, bases, cfg.ModelName, cfg.ApiKey, &ev)
 		}
-	case "openrouter", "venice":
-		tracef(ctx, "host recognized as %s by hostname; importing its model listing", ev.Stack)
-		d.probeRegistryShape(ctx, bases, cfg.ModelName, cfg.ApiKey, &ev)
-	default:
+	} else if probe, ok := hostedProbes[ev.Stack]; ok {
+		probe(ctx, d, bases, cfg, &ev)
+	} else {
 		tracef(ctx, "host recognized as hosted vendor %q by hostname; no probing needed", ev.Stack)
+	}
+
+	if ev.Registry == nil && hostRecognised {
+		lookupRegistry(ctx, cfg.ModelName, &ev)
 	}
 
 	api, lines := apispec.ComposeWithTrace(ev)
@@ -203,20 +264,36 @@ func (d *Detector) detect(ctx context.Context, cfg config.ModelConfig) *system.M
 	}
 
 	// A stack whose transport is not cfg.ApiType cannot be what this model
-	// speaks to, so it and its vocabulary go. Not applied behind a gateway
-	// (Via set): the wire is then LiteLLM's OpenAI-compatible surface whatever
-	// the upstream's own transport. Family and always_on describe the model,
-	// not the wire, and stay.
+	// speaks to, so it, its vocabulary and the capabilities read from its
+	// endpoints go. Not applied behind a gateway (Via set): the wire is then
+	// LiteLLM's OpenAI-compatible surface whatever the upstream's own
+	// transport. Family, always_on and declared / registry capabilities
+	// describe the model, not the wire, and stay.
 	if transport, ok := config.StackTransport[api.Stack]; ok && transport != cfg.ApiType && api.Via == "" {
 		tracef(ctx, "detected stack %q speaks %q but apiType is %q — stack dropped", api.Stack, transport, cfg.ApiType)
 		api.Stack = ""
 		api.Via = ""
 		api.Bindings = nil
 		api.Parameters = nil
+		// Binding evidence goes with the bindings whatever its source: a
+		// web_search.* entry carries the webSearch capability's source, and a
+		// declared one would otherwise survive the clear below and name a
+		// binding that no longer exists.
+		for key := range api.Evidence {
+			if strings.HasPrefix(key, "bindings.") {
+				delete(api.Evidence, key)
+			}
+		}
 		if api.Thinking != nil && api.Thinking.Mode != system.ThinkingModeAlwaysOn {
 			api.Thinking = nil
 		}
-		if api.ModelFamily == "" && api.Thinking == nil {
+		// capabilities.reasoning derived from a surviving always_on mode is
+		// that mode's fact, not the dropped stack's.
+		alwaysOn := api.Thinking != nil
+		apispec.ClearDetectedCapabilities(api, func(source string) bool {
+			return apispec.IsDeclaredOrRegistrySource(source) || (alwaysOn && source == apispec.SourceDerivedThinkingMode)
+		})
+		if api.ModelFamily == "" && api.Thinking == nil && api.Capabilities == nil {
 			tracef(ctx, "nothing known about this backend: no api block")
 			return nil
 		}
@@ -224,11 +301,45 @@ func (d *Detector) detect(ctx context.Context, cfg config.ModelConfig) *system.M
 	return api
 }
 
+// The offline registry (contract §3 rule 10, §6) describes hosted vendors'
+// catalogues, so it is consulted for a hostname-recognised vendor only (the
+// openai stack reaches it that way: nothing but the hostname names it in
+// detect, and a models-config apiStack short-circuits to the static spec
+// before probing); a self-hosted engine serves whatever window and
+// quantisation it was started with, and the snapshot would be a guess. The
+// composer lets the entry fill only fields nothing else set. The trace names
+// which candidate matched, never the id: a configured name may be anything.
+func lookupRegistry(ctx context.Context, modelName string, ev *apispec.Evidence) {
+	kinds := []string{"served model id", "bare model name", "configured model name"}
+	facts, pos, ok := registryMatch(ev.ServedModelID, bareModelID(modelName), modelName)
+	if !ok {
+		tracef(ctx, "registry: %s@%s has no entry for the served id, bare name or configured name", registry.Sources(), registry.Date())
+		return
+	}
+	ev.Registry = facts
+	tracef(ctx, "registry: %s@%s matched %q", facts.Name, facts.Date, kinds[pos])
+}
+
 // The key hash is part of the cache key so a rotated key re-inspects a
-// backend whose cached result may have failed auth.
+// backend whose cached result may have failed auth; the declared
+// capabilities are part of it because they are composed into the result.
 func cacheKey(cfg config.ModelConfig) string {
 	sum := sha256.Sum256([]byte(cfg.ApiKey))
-	return strings.Join([]string{cfg.ApiURL, cfg.ModelName, cfg.ApiStack, cfg.ModelFamily, hex.EncodeToString(sum[:8])}, "|")
+	return strings.Join([]string{cfg.ApiURL, cfg.ModelName, cfg.ApiStack, cfg.ModelFamily, hex.EncodeToString(sum[:8]), declaredCapsHash(cfg.Capabilities)}, "|")
+}
+
+// Empty for no block; otherwise a digest of its canonical JSON (struct field
+// order, so two equal blocks hash alike).
+func declaredCapsHash(caps *config.DeclaredCapabilities) string {
+	if caps == nil {
+		return ""
+	}
+	raw, err := json.Marshal(caps)
+	if err != nil {
+		return "?"
+	}
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:8])
 }
 
 const redactedURL = "<unparseable url>"
