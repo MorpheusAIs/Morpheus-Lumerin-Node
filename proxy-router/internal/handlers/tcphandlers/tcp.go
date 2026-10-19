@@ -4,7 +4,10 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net"
+	"syscall"
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
@@ -39,7 +42,7 @@ func NewTCPHandler(
 
 		msg, err := getMessage(conn)
 		if err != nil {
-			sourceLog.Error("error reading message", err)
+			logInboundReadErr(sourceLog, err)
 			return
 		}
 
@@ -93,4 +96,37 @@ func getMessage(conn net.Conn) (*morrpc.RPCMessage, error) {
 		return nil, err
 	}
 	return msg, nil
+}
+
+// logInboundReadErr chooses a level for a connection that never produced a
+// MOR-RPC message. Error attaches a stack trace, and scanners hit this path
+// constantly, so only an unexpected failure uses it.
+func logInboundReadErr(log lib.ILogger, err error) {
+	switch {
+	case peerClosed(err):
+		log.Debugf("connection closed before a message: %s", err)
+	case malformedMessage(err):
+		log.Warnf("ignored malformed message: %s", err)
+	default:
+		log.Error("error reading message", err)
+	}
+}
+
+// peerClosed reports a peer that went away without a usable frame.
+func peerClosed(err error) bool {
+	return errors.Is(err, io.EOF) ||
+		errors.Is(err, net.ErrClosed) ||
+		errors.Is(err, syscall.ECONNRESET) ||
+		errors.Is(err, syscall.EPIPE)
+}
+
+// malformedMessage reports bytes that are not a MOR-RPC message. Port probes
+// look like this; a stack trace does not make them easier to read.
+func malformedMessage(err error) bool {
+	if errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	var syntax *json.SyntaxError
+	var wrongType *json.UnmarshalTypeError
+	return errors.As(err, &syntax) || errors.As(err, &wrongType)
 }
