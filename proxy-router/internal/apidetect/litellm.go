@@ -246,7 +246,7 @@ func crossUpstreamFacts(ctx context.Context, kind string, up, ev *apispec.Eviden
 	for _, field := range fields {
 		source := up.Caps.Sources[field]
 		if own, set := ev.Caps.Sources[field]; set {
-			if !crossSmallerWindow(ctx, kind, field, up, ev) {
+			if !crossSmallerWindow(ctx, kind, field, up, ev) && !crossReasoningReport(ctx, kind, field, up, ev) {
 				tracef(ctx, "upstream %s capabilities.%s not crossed: litellm reports it (%s)", kind, field, own)
 			}
 			continue
@@ -274,6 +274,11 @@ func crossUpstreamFacts(ctx context.Context, kind string, up, ev *apispec.Eviden
 		tracef(ctx, "upstream %s capabilities.%s crosses the hop (%s)", kind, field, source)
 	}
 	ev.Caps.FillFrom(&crossing)
+	if litellmReasoningDefault(ev) && up.Caps.Reasoning == nil && upstreamReasons(up) {
+		ev.Caps.Reasoning = nil
+		delete(ev.Caps.Sources, apispec.CapFieldReasoning)
+		tracef(ctx, "litellm's supports_reasoning false dropped: upstream %s reports that the model reasons (litellm's false may be its cost-map default)", kind)
+	}
 
 	if ev.ThinkingDefault == "" && up.ThinkingDefault != "" {
 		ev.ThinkingDefault = up.ThinkingDefault
@@ -284,6 +289,28 @@ func crossUpstreamFacts(ctx context.Context, kind string, up, ev *apispec.Eviden
 		ev.MandatoryReasoning = true
 		tracef(ctx, "upstream %s reports reasoning as mandatory for this model", kind)
 	}
+}
+
+// LiteLLM's supports_reasoning false is also what its cost map says for a
+// model it does not know, so the upstream's own report about the model wins.
+func litellmReasoningDefault(ev *apispec.Evidence) bool {
+	return ev.Caps.Reasoning != nil && ev.Caps.Sources[apispec.CapFieldReasoning] == litellmGroupSource+"supports_reasoning"
+}
+
+func upstreamReasons(up *apispec.Evidence) bool {
+	return up.GatewayReasoning || up.OllamaThinking || up.MandatoryReasoning || len(up.ReasoningEfforts) > 0
+}
+
+// crossReasoningReport replaces LiteLLM's supports_reasoning false with the
+// upstream's own reasoning value.
+func crossReasoningReport(ctx context.Context, kind, field string, up, ev *apispec.Evidence) bool {
+	if field != apispec.CapFieldReasoning || up.Caps.Reasoning == nil || !litellmReasoningDefault(ev) {
+		return false
+	}
+	source := up.Caps.Sources[field]
+	ev.Caps.SetReasoning(*up.Caps.Reasoning, source)
+	tracef(ctx, "upstream %s capabilities.reasoning %t replaces litellm's supports_reasoning false (which may be its cost-map default) and crosses the hop (%s)", kind, *up.Caps.Reasoning, source)
+	return true
 }
 
 func claimsSupport(caps *apispec.CapabilityFacts, field string) bool {

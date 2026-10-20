@@ -1215,12 +1215,16 @@ func TestDetectLiteLLMCapabilityFacts(t *testing.T) {
 		require.NotNil(t, api.Capabilities)
 		require.Equal(t, int64(128000), *api.Capabilities.Context)
 		require.Equal(t, true, *api.Capabilities.PromptCache)
-		require.Nil(t, api.Capabilities.Reasoning, "the group's false against the reasoning knobs the upstream listing opened: contested, published as unknown")
-		require.NotContains(t, api.Evidence, "capabilities.reasoning")
-		require.Contains(t, trace, "capabilities.reasoning: backend false (litellm:/model_group/info.supports_reasoning) contradicts the surviving reasoning.* bindings; left unknown")
+		require.Equal(t, true, *api.Capabilities.Reasoning, "the listing says the model reasons: the group's cost-map false is dropped and true is derived from the knobs")
+		require.Equal(t, "derived:bindings.reasoning", api.Evidence["capabilities.reasoning"])
+		require.Contains(t, trace, "litellm's supports_reasoning false dropped: upstream venice reports that the model reasons")
+		require.NotContains(t, trace, "contradicts the surviving reasoning.* bindings")
 		require.Equal(t, "litellm:/model_group/info.max_input_tokens", api.Evidence["capabilities.context"])
 		require.Equal(t, "litellm:/model/info.model_info.supports_prompt_caching", api.Evidence["capabilities.promptCache"])
 		for key, source := range api.Evidence {
+			if key == "capabilities.reasoning" {
+				continue
+			}
 			require.True(t, strings.HasPrefix(source, "litellm:"), "%s = %s", key, source)
 			require.NotContains(t, source, venice.URL)
 		}
@@ -1600,4 +1604,79 @@ func TestDetectLiteLLMTwoHopUnidentifiedUpstreamCrossesNothing(t *testing.T) {
 		require.True(t, strings.HasPrefix(source, "litellm:"), "%s = %s", key, source)
 	}
 	require.NotContains(t, trace, "crosses the hop")
+}
+
+// LiteLLM's supports_reasoning false is also its cost-map default for a
+// model it does not know; the upstream's own report about the model wins.
+func TestDetectLiteLLMTwoHopUpstreamReasoningWins(t *testing.T) {
+	t.Run("venice false replaces litellm's false", func(t *testing.T) {
+		venice, _ := registryServer(t, veniceEntry("llama-3.3-70b", false), 0)
+		mapHostToVendor(t, venice.URL, "venice")
+		litellm, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "openai/llama-3.3-70b", venice.URL+"/api/v1", nil)})
+
+		api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
+		require.Equal(t, "venice", api.Stack)
+		require.Equal(t, false, *api.Capabilities.Reasoning)
+		require.Equal(t, veniceCapsSource+".supportsReasoning", api.Evidence["capabilities.reasoning"])
+		require.Contains(t, trace, "upstream venice capabilities.reasoning false replaces litellm's supports_reasoning false")
+	})
+
+	t.Run("ollama's thinking replaces litellm's false", func(t *testing.T) {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/api/tags", jsonHandler(map[string]any{"models": []map[string]any{{"name": "qwen3:32b"}}}))
+		mux.HandleFunc("/api/show", jsonHandler(map[string]any{
+			"template":     qwen3Template,
+			"capabilities": []string{"completion", "thinking"},
+			"thinking":     map[string]any{"values": []any{true, false}},
+			"model_info":   map[string]any{"general.architecture": "qwen3"},
+		}))
+		ollama, _ := loggingServer(t, mux)
+		litellm, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "ollama_chat/qwen3:32b", ollama.URL, nil)})
+
+		api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
+		require.Equal(t, "litellm", api.Stack)
+		require.Equal(t, true, *api.Capabilities.Reasoning)
+		require.Equal(t, srcOllamaThinkValues, api.Evidence["capabilities.reasoning"])
+		require.Contains(t, trace, "upstream ollama capabilities.reasoning true replaces litellm's supports_reasoning false")
+	})
+
+	t.Run("openrouter's reasoning param drops litellm's false", func(t *testing.T) {
+		openrouter, _ := registryServer(t, map[string]any{"id": "deepseek/deepseek-r1", "supported_parameters": []string{"temperature", "reasoning", "tools"}}, 0)
+		mapHostToVendor(t, openrouter.URL, "openrouter")
+		litellm, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "openrouter/deepseek/deepseek-r1", openrouter.URL+"/api/v1", nil)})
+
+		api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
+		require.Equal(t, "openrouter", api.Stack)
+		require.Equal(t, system.ThinkingModeAlwaysOn, api.Thinking.Mode)
+		require.Equal(t, true, *api.Capabilities.Reasoning)
+		require.Equal(t, "derived:thinking.mode", api.Evidence["capabilities.reasoning"])
+		require.Contains(t, trace, "litellm's supports_reasoning false dropped: upstream openrouter reports that the model reasons")
+	})
+
+	t.Run("effort levels alone drop litellm's false; with no other fact there is no block", func(t *testing.T) {
+		venice, _ := registryServer(t, map[string]any{"id": "qwen3-235b", "model_spec": map[string]any{"capabilities": map[string]any{
+			"supportsReasoningEffort": true, "reasoningEffortOptions": []string{"low", "medium", "high"},
+		}}}, 0)
+		mapHostToVendor(t, venice.URL, "venice")
+		litellm, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "openai/qwen3-235b", venice.URL+"/api/v1", nil)})
+
+		api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
+		require.Equal(t, "venice", api.Stack)
+		require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
+		require.Nil(t, api.Capabilities, "as for venice reached directly: reasoning is derived only beside some capability fact")
+		require.Contains(t, trace, "litellm's supports_reasoning false dropped: upstream venice reports that the model reasons")
+	})
+
+	t.Run("an upstream that says nothing about reasoning leaves litellm's false", func(t *testing.T) {
+		venice, _ := registryServer(t, map[string]any{"id": "llama-3.3-70b", "model_spec": map[string]any{"availableContextTokens": 128000}}, 0)
+		mapHostToVendor(t, venice.URL, "venice")
+		litellm, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "openai/llama-3.3-70b", venice.URL+"/api/v1", nil)})
+
+		api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
+		require.Equal(t, "venice", api.Stack)
+		require.Equal(t, false, *api.Capabilities.Reasoning)
+		require.Equal(t, "litellm:/model_group/info.supports_reasoning", api.Evidence["capabilities.reasoning"])
+		require.NotContains(t, trace, "supports_reasoning false dropped")
+		require.NotContains(t, trace, "replaces litellm's supports_reasoning false")
+	})
 }
