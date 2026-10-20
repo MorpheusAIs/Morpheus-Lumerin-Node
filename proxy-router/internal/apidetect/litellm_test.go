@@ -1201,7 +1201,9 @@ func TestDetectLiteLLMCapabilityFacts(t *testing.T) {
 		require.NotContains(t, trace, "supports_web_search")
 	})
 
-	t.Run("identified upstream keeps litellm as the source prefix", func(t *testing.T) {
+	// veniceEntry carries no capability fact, so every source here is litellm's;
+	// TestDetectLiteLLMTwoHopUpstreamCapabilitiesCross covers the mix.
+	t.Run("fields litellm reports keep litellm's source behind an identified upstream", func(t *testing.T) {
 		venice, veniceLog := registryServer(t, veniceEntry("qwen3-235b", true), 0)
 		mapHostToVendor(t, venice.URL, "venice")
 		litellm, _ := litellmServer(t, capsGroup, []map[string]any{deploymentWithInfo("my-chat", "openai/qwen3-235b", venice.URL+"/api/v1", capsModelInfo)})
@@ -1391,4 +1393,211 @@ func TestDetectLiteLLMCapabilityFacts(t *testing.T) {
 		require.Nil(t, api.Capabilities)
 		require.Nil(t, api.Evidence)
 	})
+}
+
+// A Venice model_spec with every field the listing reader takes, as the live
+// listing serves it for deepseek-v4-flash (2026-10-20).
+func veniceFullEntry(id string) map[string]any {
+	return map[string]any{"id": id, "model_spec": map[string]any{
+		"availableContextTokens": 1000000, "maxCompletionTokens": 32768,
+		"capabilities": map[string]any{
+			"supportsFunctionCalling": true, "supportsVision": true, "supportsWebSearch": true,
+			"supportsResponseSchema": true, "supportsReasoning": true, "supportsReasoningEffort": true,
+			"reasoningEffortOptions": []string{"none", "low", "medium", "high"}, "defaultReasoningEffort": "low",
+			"quantization": "fp8",
+		},
+	}}
+}
+
+// The dev TEE's LiteLLM group for an openai/-prefixed Venice deployment: no
+// limits, no flags, supports_reasoning false from the cost-map default.
+var bareVeniceGroup = map[string]any{
+	"model_group": "my-chat", "supports_reasoning": false,
+	"supported_openai_params": []string{"temperature", "tools", "response_format", "max_tokens", "stream_options"},
+}
+
+func TestDetectLiteLLMTwoHopUpstreamCapabilitiesCross(t *testing.T) {
+	detectEntry := func(t *testing.T, group, entry map[string]any) (*system.ModelApiSpec, string) {
+		t.Helper()
+		venice, veniceLog := registryServerMulti(t, entry, veniceEntry("llama-3.3-70b", false))
+		mapHostToVendor(t, venice.URL, "venice")
+		litellm, _ := litellmServer(t, group, []map[string]any{deployment("my-chat", "openai/deepseek-v4-flash", venice.URL+"/api/v1", nil)})
+		api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
+		require.NotNil(t, api)
+		require.Equal(t, "venice", api.Stack)
+		require.Equal(t, "litellm", api.Via)
+		veniceLog.requireAnonymous(t)
+		return api, trace
+	}
+	detect := func(t *testing.T, group map[string]any) (*system.ModelApiSpec, string) {
+		t.Helper()
+		return detectEntry(t, group, veniceFullEntry("deepseek-v4-flash"))
+	}
+
+	t.Run("the listing fills what litellm left unset", func(t *testing.T) {
+		api, trace := detect(t, bareVeniceGroup)
+		caps := api.Capabilities
+		require.NotNil(t, caps)
+		require.Equal(t, int64(1000000), *caps.Context)
+		require.Equal(t, int64(32768), *caps.MaxOutput)
+		require.Equal(t, []string{"text", "image"}, caps.Modalities.Input)
+		require.Equal(t, true, *caps.Tools)
+		require.Equal(t, true, *caps.WebSearch)
+		require.Equal(t, "fp8", caps.Quantization)
+		require.Equal(t, veniceSpecSource+".availableContextTokens", api.Evidence["capabilities.context"])
+		require.Equal(t, veniceSpecSource+".maxCompletionTokens", api.Evidence["capabilities.maxOutput"])
+		require.Equal(t, veniceCapsSource+".supportsFunctionCalling", api.Evidence["capabilities.tools"])
+		require.Equal(t, veniceCapsSource+".supportsWebSearch", api.Evidence["capabilities.webSearch"])
+
+		// LiteLLM's own reading of response_format keeps precedence.
+		require.Equal(t, []string{"json_object"}, caps.Structured)
+		require.Equal(t, "litellm:/model_group/info.supported_openai_params", api.Evidence["capabilities.structured"])
+		require.Contains(t, trace, "upstream venice capabilities.structured not crossed: litellm reports it (litellm:/model_group/info.supported_openai_params)")
+
+		// webSearch reported true opens Venice's knob, a provider kwarg litellm forwards.
+		require.Equal(t, "venice_parameters.enable_web_search", api.Bindings[system.IntentWebSearchEnable].Param)
+		require.Equal(t, veniceCapsSource+".supportsWebSearch", api.Evidence["bindings."+system.IntentWebSearchEnable])
+
+		require.Equal(t, "low", api.Thinking.Default)
+		require.Equal(t, veniceCapsSource+".defaultReasoningEffort", api.Evidence["thinking.default"])
+		require.Equal(t, []string{"none", "low", "medium", "high"}, api.Bindings[system.IntentReasoningEffort].EnumValues)
+
+		for _, line := range []string{
+			"upstream venice capabilities.context crosses the hop (" + veniceSpecSource + ".availableContextTokens)",
+			"upstream venice capabilities.tools crosses the hop (" + veniceCapsSource + ".supportsFunctionCalling)",
+			"upstream venice capabilities.webSearch crosses the hop (" + veniceCapsSource + ".supportsWebSearch)",
+			`upstream venice thinking default "low" crosses the hop (` + veniceCapsSource + ".defaultReasoningEffort)",
+		} {
+			require.Contains(t, trace, line)
+		}
+	})
+
+	t.Run("litellm's own facts win, a smaller window of its own included", func(t *testing.T) {
+		api, trace := detect(t, groupWith(bareVeniceGroup, map[string]any{"max_input_tokens": 200000, "supports_vision": true}))
+		require.Equal(t, int64(200000), *api.Capabilities.Context)
+		require.Equal(t, "litellm:/model_group/info.max_input_tokens", api.Evidence["capabilities.context"])
+		require.Equal(t, "litellm:/model_group/info.supports_vision", api.Evidence["capabilities.modalities.input"])
+		require.Equal(t, int64(32768), *api.Capabilities.MaxOutput, "a field litellm left unset still crosses")
+		require.Contains(t, trace, "upstream venice capabilities.context not crossed: litellm reports it (litellm:/model_group/info.max_input_tokens)")
+	})
+
+	t.Run("the upstream's smaller window wins over litellm's", func(t *testing.T) {
+		api, trace := detect(t, groupWith(bareVeniceGroup, map[string]any{"max_input_tokens": 2000000, "max_output_tokens": 65536}))
+		require.Equal(t, int64(1000000), *api.Capabilities.Context)
+		require.Equal(t, veniceSpecSource+".availableContextTokens", api.Evidence["capabilities.context"])
+		require.Equal(t, int64(32768), *api.Capabilities.MaxOutput)
+		require.Equal(t, veniceSpecSource+".maxCompletionTokens", api.Evidence["capabilities.maxOutput"])
+		require.Contains(t, trace, "upstream venice capabilities.context 1000000 is below litellm's 2000000 (litellm:/model_group/info.max_input_tokens); the smaller crosses the hop ("+veniceSpecSource+".availableContextTokens)")
+		require.Contains(t, trace, "upstream venice capabilities.maxOutput 32768 is below litellm's 65536")
+	})
+
+	t.Run("a negative fact crosses whatever litellm forwards", func(t *testing.T) {
+		entry := veniceFullEntry("deepseek-v4-flash")
+		entry["model_spec"].(map[string]any)["capabilities"].(map[string]any)["supportsFunctionCalling"] = false
+		api, trace := detectEntry(t, groupWith(bareVeniceGroup, map[string]any{"supported_openai_params": []string{"temperature", "max_tokens"}}), entry)
+		require.Equal(t, false, *api.Capabilities.Tools)
+		require.Equal(t, veniceCapsSource+".supportsFunctionCalling", api.Evidence["capabilities.tools"])
+		require.NotContains(t, trace, "capabilities.tools not crossed")
+	})
+
+	t.Run("a param litellm does not forward keeps its fact behind", func(t *testing.T) {
+		api, trace := detect(t, groupWith(bareVeniceGroup, map[string]any{"supported_openai_params": []string{"temperature", "max_tokens"}}))
+		require.Nil(t, api.Capabilities.Tools)
+		require.Nil(t, api.Capabilities.Structured)
+		require.NotContains(t, api.Evidence, "capabilities.tools")
+		require.NotContains(t, api.Evidence, "capabilities.structured")
+		require.Equal(t, int64(1000000), *api.Capabilities.Context)
+		require.Contains(t, trace, "upstream venice capabilities.tools not crossed: litellm does not forward tools for this model")
+		require.Contains(t, trace, "upstream venice capabilities.structured not crossed: litellm does not forward response_format for this model")
+	})
+
+	t.Run("supported params unknown: gated facts cross", func(t *testing.T) {
+		group := map[string]any{"model_group": "my-chat"}
+		api, _ := detect(t, group)
+		require.Equal(t, true, *api.Capabilities.Tools)
+		require.Equal(t, []string{"json_schema"}, api.Capabilities.Structured)
+		require.Equal(t, veniceCapsSource+".supportsResponseSchema", api.Evidence["capabilities.structured"])
+	})
+}
+
+func TestDetectLiteLLMTwoHopOpenRouterMandatoryReasoningCrosses(t *testing.T) {
+	openrouter, orLog := registryServer(t, map[string]any{
+		"id": "qwen/qwen3-235b-a22b-thinking-2507", "context_length": 262144,
+		"supported_parameters": []string{"temperature", "reasoning", "include_reasoning", "tools", "parallel_tool_calls"},
+		"reasoning":            map[string]any{"mandatory": true},
+	}, 0)
+	mapHostToVendor(t, openrouter.URL, "openrouter")
+	litellm, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "openrouter/qwen/qwen3-235b-a22b-thinking-2507", openrouter.URL+"/api/v1", nil)})
+
+	api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
+	require.Equal(t, "openrouter", api.Stack)
+	require.Equal(t, "litellm", api.Via)
+	require.Equal(t, system.ThinkingModeAlwaysOn, api.Thinking.Mode)
+	require.Nil(t, api.Bindings[system.IntentReasoningDisable], "a mandatory reasoner cannot be switched off through litellm either")
+	require.Nil(t, api.Bindings[system.IntentReasoningEnable])
+	require.Equal(t, int64(262144), *api.Capabilities.Context)
+	require.Equal(t, openrouterModelsSource+".context_length", api.Evidence["capabilities.context"])
+	require.Equal(t, true, *api.Capabilities.Tools, "litellm lists tools")
+	require.Nil(t, api.Capabilities.ToolsParallel, "litellm does not list parallel_tool_calls")
+	require.Contains(t, trace, "upstream openrouter capabilities.toolsParallel not crossed: litellm does not forward parallel_tool_calls for this model")
+	require.Equal(t, "on", api.Thinking.Default)
+	require.Contains(t, trace, "upstream openrouter reports reasoning as mandatory for this model")
+	orLog.requireAnonymous(t)
+}
+
+func TestDetectLiteLLMTwoHopOllamaFactsCross(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/tags", jsonHandler(map[string]any{"models": []map[string]any{{"name": "qwen3:32b"}}}))
+	mux.HandleFunc("/api/show", jsonHandler(map[string]any{
+		"template":     qwen3Template,
+		"capabilities": []string{"completion", "tools", "vision", "audio", "thinking"},
+		"thinking":     map[string]any{"values": []any{true}, "default": true},
+		"model_info":   map[string]any{"general.architecture": "qwen3", "qwen3.context_length": 40960},
+	}))
+	mux.HandleFunc("/api/ps", jsonHandler(map[string]any{"models": []map[string]any{{"name": "qwen3:32b", "context_length": 4096}}}))
+	ollama, ollamaLog := loggingServer(t, mux)
+	group := groupWith(noReasoningGroup, map[string]any{"max_input_tokens": 40960})
+	delete(group, "supports_reasoning")
+	litellm, _ := litellmServer(t, group, []map[string]any{deployment("my-chat", "ollama_chat/qwen3:32b", ollama.URL, nil)})
+
+	api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
+	require.Equal(t, "litellm", api.Stack, "ollama stays evidence-only")
+	require.Equal(t, int64(4096), *api.Capabilities.Context, "the loaded window, not litellm's trained figure")
+	require.Equal(t, srcOllamaLoadedCtx, api.Evidence["capabilities.context"])
+	require.Equal(t, int64(40960), *api.Capabilities.ContextTrained)
+	require.Equal(t, []string{"text", "image"}, api.Capabilities.Modalities.Input, "audio is not known to survive litellm's ollama translation")
+	require.Contains(t, trace, "audio not crossed")
+	require.Equal(t, system.ThinkingModeAlwaysOn, api.Thinking.Mode)
+	require.Equal(t, "on", api.Thinking.Default)
+	require.Equal(t, srcOllamaThinkDefault, api.Evidence["thinking.default"])
+	require.Equal(t, true, *api.Capabilities.Reasoning)
+	require.Contains(t, trace, "upstream ollama reports reasoning as mandatory for this model")
+	ollamaLog.requireAnonymous(t)
+}
+
+func TestDetectLiteLLMTwoHopOllamaCapabilitiesCross(t *testing.T) {
+	ollama, ollamaLog := ollamaServer(t, "llama", []string{"completion", "tools", "vision"})
+	litellm, _ := litellmServer(t, noReasoningGroup, []map[string]any{deployment("my-chat", "ollama_chat/some-alias", ollama.URL, nil)})
+
+	api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
+	require.Equal(t, "litellm", api.Stack, "ollama stays evidence-only")
+	require.Equal(t, "", api.Via)
+	require.Equal(t, true, *api.Capabilities.Tools)
+	require.Equal(t, []string{"text", "image"}, api.Capabilities.Modalities.Input)
+	require.Equal(t, srcOllamaCapabilities, api.Evidence["capabilities.tools"])
+	require.Contains(t, trace, "upstream ollama capabilities.tools crosses the hop ("+srcOllamaCapabilities+")")
+	ollamaLog.requireAnonymous(t)
+}
+
+func TestDetectLiteLLMTwoHopUnidentifiedUpstreamCrossesNothing(t *testing.T) {
+	venice, _ := registryServer(t, nil, http.StatusUnauthorized)
+	mapHostToVendor(t, venice.URL, "venice")
+	litellm, _ := litellmServer(t, bareVeniceGroup, []map[string]any{deployment("my-chat", "openai/deepseek-v4-flash", venice.URL+"/api/v1", nil)})
+
+	api, trace := detectVia(t, litellm.URL, "my-chat", DefaultOptions())
+	require.Equal(t, "litellm", api.Stack)
+	for key, source := range api.Evidence {
+		require.True(t, strings.HasPrefix(source, "litellm:"), "%s = %s", key, source)
+	}
+	require.NotContains(t, trace, "crosses the hop")
 }
