@@ -1,5 +1,15 @@
 # Stage 1: Build
-FROM golang:1.25-bookworm AS builder
+FROM golang:1.26-bookworm AS builder
+
+# Refresh the CA bundle that is copied into the scratch image below.
+# Upgrade ca-certificates to the current Debian security release, remove the
+# emSign roots and rebuild /etc/ssl/certs/ca-certificates.crt.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends --only-upgrade ca-certificates && \
+    rm -rf /var/lib/apt/lists/* && \
+    sed -i -E 's|^(mozilla/emSign_[^/]*\.crt)$|!\1|' /etc/ca-certificates.conf && \
+    update-ca-certificates --fresh && \
+    if ls /etc/ssl/certs | grep -qi emsign; then echo "emSign roots still present" >&2; exit 1; fi
 
 # Create and set permissions for /tmp directory
 RUN mkdir -p /tmp && chmod 1777 /tmp
