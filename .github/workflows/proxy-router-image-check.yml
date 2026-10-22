@@ -1,0 +1,68 @@
+name: Proxy-router image check
+# Build-only check of proxy-router/Dockerfile for pull requests.
+# No registry login, no push, no secrets.
+
+on:
+  pull_request:
+    paths:
+      - "proxy-router/**"
+      - ".github/workflows/proxy-router-image-check.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: proxy-router-image-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  image-check:
+    name: Build proxy-router image and check CA bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Build image (local only, no push)
+        env:
+          COMMIT: ${{ github.sha }}
+        run: |
+          docker build \
+            --build-arg TAG_NAME=pr-check \
+            --build-arg COMMIT="$COMMIT" \
+            -t proxy-router:pr-check \
+            -f proxy-router/Dockerfile \
+            proxy-router
+
+      - name: Check CA bundle certificate subjects
+        run: |
+          set -euo pipefail
+          cid=$(docker create proxy-router:pr-check)
+          docker cp "$cid:/etc/ssl/certs/ca-certificates.crt" "$RUNNER_TEMP/ca-certificates.crt"
+          docker rm "$cid" >/dev/null
+          bundle="$RUNNER_TEMP/ca-certificates.crt"
+          openssl crl2pkcs7 -nocrl -certfile "$bundle" \
+            | openssl pkcs7 -print_certs -noout \
+            | grep '^subject=' > "$RUNNER_TEMP/subjects.txt"
+          total=$(wc -l < "$RUNNER_TEMP/subjects.txt")
+          pem=$(grep -c 'BEGIN CERTIFICATE' "$bundle")
+          echo "Certificates decoded: $total (PEM blocks: $pem)"
+          if [ "$total" -ne "$pem" ] || [ "$total" -lt 100 ]; then
+            echo "::error::CA bundle could not be fully decoded"
+            exit 1
+          fi
+          if grep -iE 'emSign|AAA Certificate Services' "$RUNNER_TEMP/subjects.txt"; then
+            echo "::error::CA bundle contains emSign or AAA Certificate Services roots"
+            exit 1
+          fi
+          echo "No emSign or AAA Certificate Services subjects in the CA bundle"
+
+      - name: Smoke test binary
+        run: |
+          set -uo pipefail
+          docker run --rm proxy-router:pr-check --help > "$RUNNER_TEMP/help.txt" 2>&1 || true
+          cat "$RUNNER_TEMP/help.txt"
+          grep -q 'help requested' "$RUNNER_TEMP/help.txt"

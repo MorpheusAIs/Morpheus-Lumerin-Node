@@ -1,15 +1,32 @@
 # Stage 1: Build
-FROM golang:1.26-bookworm AS builder
+FROM golang:1.26-bookworm@sha256:632dff7351799a5a9954a48dc06670ade72ee44e8c351cdc0e5a57af2fea21af AS builder
 
 # Refresh the CA bundle that is copied into the scratch image below.
-# Upgrade ca-certificates to the current Debian security release, remove the
-# emSign roots and rebuild /etc/ssl/certs/ca-certificates.crt.
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends --only-upgrade ca-certificates && \
-    rm -rf /var/lib/apt/lists/* && \
-    sed -i -E 's|^(mozilla/emSign_[^/]*\.crt)$|!\1|' /etc/ca-certificates.conf && \
-    update-ca-certificates --fresh && \
-    if ls /etc/ssl/certs | grep -qi emsign; then echo "emSign roots still present" >&2; exit 1; fi
+# - apt-get update fails on any index error (retried for transient mirror errors)
+# - ca-certificates is upgraded to the current Debian security release
+# - the emSign roots are disabled in /etc/ca-certificates.conf and the bundle is regenerated
+# - the regenerated bundle is checked by certificate subject
+RUN set -e; \
+    ok=; for i in 1 2 3 4 5; do \
+      if apt-get update -o APT::Update::Error-Mode=any; then ok=1; break; fi; \
+      rm -rf /var/lib/apt/lists/*; sleep 10; \
+    done; \
+    [ -n "$ok" ]; \
+    apt-get install -y --no-install-recommends --only-upgrade ca-certificates; \
+    rm -rf /var/lib/apt/lists/*; \
+    dpkg --compare-versions "$(dpkg-query -W -f='${Version}' ca-certificates)" ge 20250419~deb12u2; \
+    sed -i -E 's|^(mozilla/emSign_[^/]*\.crt)$|!\1|' /etc/ca-certificates.conf; \
+    update-ca-certificates --fresh; \
+    bundle=/etc/ssl/certs/ca-certificates.crt; \
+    openssl crl2pkcs7 -nocrl -certfile "$bundle" | openssl pkcs7 -print_certs -noout | grep '^subject=' > /tmp/ca-subjects.txt; \
+    total=$(wc -l < /tmp/ca-subjects.txt); pem=$(grep -c 'BEGIN CERTIFICATE' "$bundle"); \
+    echo "CA bundle: $total certificates"; \
+    [ "$total" -eq "$pem" ]; \
+    [ "$total" -ge 100 ]; \
+    if grep -iE 'emSign|AAA Certificate Services' /tmp/ca-subjects.txt; then \
+      echo "CA bundle still contains disabled roots" >&2; exit 1; \
+    fi; \
+    rm -f /tmp/ca-subjects.txt
 
 # Create and set permissions for /tmp directory
 RUN mkdir -p /tmp && chmod 1777 /tmp
