@@ -16,6 +16,9 @@ RUN set -e; \
     rm -rf /var/lib/apt/lists/*; \
     dpkg --compare-versions "$(dpkg-query -W -f='${Version}' ca-certificates)" ge 20250419~deb12u2; \
     sed -i -E 's|^(mozilla/emSign_[^/]*\.crt)$|!\1|' /etc/ca-certificates.conf; \
+    for c in mozilla/emSign_ECC_Root_CA_-_G3.crt mozilla/Comodo_AAA_Services_root.crt; do \
+      grep -qxF "!$c" /etc/ca-certificates.conf || echo "!$c" >> /etc/ca-certificates.conf; \
+    done; \
     update-ca-certificates --fresh; \
     bundle=/etc/ssl/certs/ca-certificates.crt; \
     openssl crl2pkcs7 -nocrl -certfile "$bundle" | openssl pkcs7 -print_certs -noout | grep '^subject=' > /tmp/ca-subjects.txt; \
