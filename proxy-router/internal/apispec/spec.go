@@ -27,10 +27,6 @@ type Evidence struct {
 	RegistryBindings map[string]*system.ParamBinding
 	Parameters       []string
 	ReasoningEfforts []string
-	// Effort levels the backend's own model listing offers for this model
-	// (Venice reasoningEffortOptions). "none" among them means the backend can
-	// turn reasoning off, whatever the family does on its own.
-	RegistryEfforts []string
 	// The backend's own listing says the model takes no effort level (Venice
 	// supportsReasoningEffort false).
 	NoEffort    bool
@@ -38,14 +34,37 @@ type Evidence struct {
 	// nil means the list could not be read; an empty list is a known, empty list.
 	LiteLLMSupportedParams []string
 	Declared               bool
+
+	// EffortsSource is the evidence entry for ReasoningEfforts
+	// (litellm:/model_group/info.supported_reasoning_efforts); empty leaves
+	// the binding without an evidence entry.
+	EffortsSource string
+	// Caps are the backend- or vendor-reported capability facts (own host or
+	// listing), each with its source.
+	Caps CapabilityFacts
+	// ThinkingDefault is "on", "off" or a level name as reported (Ollama
+	// thinking.default, LM Studio reasoning.default, OpenRouter
+	// default_enabled / default_effort, Venice defaultReasoningEffort);
+	// booleans are mapped by the producer.
+	ThinkingDefault       string
+	ThinkingDefaultSource string
+	// MandatoryReasoning is OpenRouter reasoning.mandatory: the model cannot
+	// be asked not to reason.
+	MandatoryReasoning bool
+	// Anthropic facts apply on the anthropic stack only.
+	Anthropic *AnthropicFacts
+	// DeclaredCaps is the models-config override; every field wins.
+	DeclaredCaps *config.DeclaredCapabilities
+	// Registry fills only what nothing else set.
+	Registry *RegistryFacts
 }
 
 func Build(cfg config.ModelConfig) *system.ModelApiSpec {
 	stack := StackFor(cfg.ApiStack)
-	if stack == "" {
+	if stack == "" && cfg.Capabilities == nil {
 		return nil
 	}
-	return Compose(Evidence{Stack: stack, ModelName: cfg.ModelName, ModelFamily: cfg.ModelFamily, Declared: true})
+	return Compose(Evidence{Stack: stack, ModelName: cfg.ModelName, ModelFamily: cfg.ModelFamily, Declared: true, DeclaredCaps: cfg.Capabilities})
 }
 
 func Compose(ev Evidence) *system.ModelApiSpec {
@@ -59,7 +78,6 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 
 	ev.Parameters = sanitizeNames(ev.Parameters, maxParameters, "parameters", tracef)
 	ev.ReasoningEfforts = sanitizeNames(ev.ReasoningEfforts, maxReasoningEfforts, "reasoning efforts", tracef)
-	ev.RegistryEfforts = sanitizeNames(ev.RegistryEfforts, maxReasoningEfforts, "listing reasoning efforts", tracef)
 	if ev.LiteLLMSupportedParams != nil {
 		// Keep it a known list: nil means unread.
 		supported := sanitizeNames(ev.LiteLLMSupportedParams, maxParameters, "litellm supported params", tracef)
@@ -114,17 +132,55 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 		tracef("thinking: the configured name %q says the model reasons; the served id %q names no checkpoint, so its family's toggles stay", ev.ModelName, name)
 	}
 
+	// Rule 5's list, a source-less one being LiteLLM's. Only levels the
+	// serving stack lists for this very model say that it reasons (and, with
+	// none, that the backend turns it off): LiteLLM's group info reports what
+	// the provider accepts, so its list stays out of those decisions.
+	effortsLabel, effortsStack := ev.EffortsSource, sourceStack(ev.EffortsSource)
+	if effortsLabel == "" {
+		effortsLabel, effortsStack = "litellm supported_reasoning_efforts", "litellm"
+	}
+	var listedEfforts []string
+	if effortsStack == stack && effortsStack != "litellm" {
+		listedEfforts = ev.ReasoningEfforts
+	}
 	alwaysOn := false
 	var bindings bindingSet
 	if len(ev.RegistryBindings) > 0 {
 		bindings = cloneSet(ev.RegistryBindings)
 		tracef("bindings: from the %s model listing", stack)
 	}
-	if len(bindings) == 0 && ev.OllamaThinking {
+	// Anthropic's listing states what claudeBindings guesses from the name;
+	// stated facts decide even when they yield no reasoning knob.
+	var bindingSources map[string]string
+	anthropicDecided := false
+	// ev is a copy, but ev.Caps.Sources is the caller's map: vendor-derived
+	// facts go to their own carrier so composing never writes back.
+	var anthropicCaps CapabilityFacts
+	if len(bindings) == 0 && ev.Anthropic != nil {
+		if stack != "anthropic" {
+			tracef("anthropic model facts skipped — stack is %q", stack)
+		} else {
+			anthropicDecided = true
+			bindings = anthropicBindings(ev.Anthropic, tracef)
+			bindingSources = map[string]string{}
+			for intent := range bindings {
+				bindingSources[intent] = ev.Anthropic.Source
+			}
+			tracef("bindings: from anthropic's reported capabilities (%s) -> %s", describeAnthropicFacts(ev.Anthropic), describeBindings(bindings))
+			if ev.Anthropic.Structured {
+				anthropicCaps.SetStructured([]string{"json_schema"}, ev.Anthropic.Source)
+			}
+		}
+	}
+	if len(bindings) == 0 && !anthropicDecided && ev.OllamaThinking {
 		// The capability only says the model thinks; whether it can be toggled is
 		// a family fact.
 		famAlwaysOn, fam := bindingsForFamily(family, name)
 		switch {
+		case famAlwaysOn && containsString(listedEfforts, "none") && !thinkingCheckpoint:
+			bindings = ollamaThinkBindings()
+			tracef("bindings: ollama reports the 'thinking' capability; family %q reasons unconditionally, but %s offers none -> /v1 reasoning_effort (none = off)", family, effortsLabel)
 		case famAlwaysOn:
 			alwaysOn = true
 			tracef("bindings: ollama reports the 'thinking' capability; family %q reasons unconditionally", family)
@@ -138,7 +194,7 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 			tracef("bindings: ollama reports the 'thinking' capability -> /v1 reasoning_effort (none = off)")
 		}
 	}
-	if len(bindings) == 0 && !alwaysOn {
+	if len(bindings) == 0 && !alwaysOn && !anthropicDecided {
 		if stack == "" {
 			if bindingsFromTemplate(ev.ChatTemplate) != nil {
 				tracef("bindings: chat template evidence skipped — stack undetermined (unknown wire vocabulary)")
@@ -148,7 +204,7 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 		}
 	}
 	familyReasons := false
-	if len(bindings) == 0 && !alwaysOn {
+	if len(bindings) == 0 && !alwaysOn && !anthropicDecided {
 		var defaults bindingSet
 		alwaysOn, defaults = bindingsForFamily(family, name)
 		familyReasons = alwaysOn || len(defaults) > 0
@@ -182,20 +238,75 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 
 	// Family always-on facts describe the weights; a backend that offers effort
 	// none for the model has its own off switch (Venice turns MiniMax-M2.7 off).
-	if alwaysOn && containsString(ev.RegistryEfforts, "none") {
+	if alwaysOn && containsString(listedEfforts, "none") {
 		alwaysOn = false
-		tracef("thinking: family %q reasons unconditionally, but the %s listing offers reasoning effort none — the backend turns it off itself", family, stack)
+		tracef("thinking: family %q reasons unconditionally, but %s offers reasoning effort none — the backend turns it off itself", family, effortsLabel)
 	}
+
+	if ev.MandatoryReasoning {
+		if !alwaysOn {
+			alwaysOn = true
+			tracef("thinking: the backend reports reasoning as mandatory -> always_on")
+		}
+		for _, intent := range []string{system.IntentReasoningDisable, system.IntentReasoningEnable} {
+			if bindings[intent] != nil {
+				delete(bindings, intent)
+				tracef("bindings: %s dropped — reasoning is mandatory", intent)
+			}
+		}
+	}
+
+	// Declared, backend and template facts are known before the stack tables
+	// merge (web_search.* bindings are gated on capabilities.webSearch); the
+	// registry fills last, after reasoning is derived from the final bindings.
+	var caps capState
+	declared := declaredLayer(ev.DeclaredCaps)
+	caps.fill(declared, layerDeclared, tracef)
+	caps.fill(factsLayer(&ev.Caps), layerBackend, tracef)
+	caps.fill(factsLayer(&anthropicCaps), layerBackend, tracef)
+	var tpl templateFacts
+	if stack != "" {
+		tpl = capsFromTemplate(ev.ChatTemplate)
+		caps.fill(factsLayer(&tpl.caps), layerTemplate, tracef)
+	}
+	webSearch := caps.caps.WebSearch != nil && *caps.caps.WebSearch
+	// The registry fills after the tables merge (rule 10, lowest precedence):
+	// a snapshot's view of a model id may publish webSearch, never open a knob.
+	registryWebSearch := !webSearch && ev.Registry != nil && ev.Registry.WebSearch != nil && *ev.Registry.WebSearch
 
 	// A detected gateway may hide its upstream's knob, so family knowledge alone
 	// counts as reasoning evidence only for a declared stack.
-	reasoningKnown := alwaysOn || thinkingName || ev.GatewayReasoning || len(ev.RegistryEfforts) > 0 || hasReasoningBindings(bindings) || (ev.Declared && familyReasons)
+	reasoningKnown := alwaysOn || thinkingName || ev.GatewayReasoning || len(listedEfforts) > 0 || hasReasoningBindings(bindings) || (ev.Declared && familyReasons)
 	if len(ev.Parameters) > 0 {
 		api.Parameters = append([]string(nil), ev.Parameters...)
 		sort.Strings(api.Parameters)
 	}
 	before := len(bindings)
-	mergeStackTables(api, stack, bindings, reasoningKnown, alwaysOn, len(ev.RegistryEfforts) > 0)
+	mergeStackTables(api, stack, bindings, reasoningKnown, alwaysOn, len(listedEfforts) > 0)
+	// web_search.* table entries are the one evidence-gated kind (rule 8): a
+	// stack's knob says nothing about the model behind it, so they stay only
+	// with capabilities.webSearch reported true.
+	for _, intent := range sortedIntents(api.Bindings) {
+		if !strings.HasPrefix(intent, "web_search.") || bindings[intent] != nil {
+			continue
+		}
+		if !webSearch {
+			delete(api.Bindings, intent)
+			if registryWebSearch {
+				tracef("bindings: %s dropped — capabilities.webSearch true comes from the registry only, which never opens a knob", intent)
+			} else {
+				tracef("bindings: %s dropped — capabilities.webSearch is not reported true", intent)
+			}
+			continue
+		}
+		if bindingSources == nil {
+			bindingSources = map[string]string{}
+		}
+		bindingSources[intent] = caps.evidence[system.EvidenceKeyCapability(CapFieldWebSearch)]
+	}
+	if len(api.Bindings) == 0 {
+		api.Bindings = nil
+	}
 	if added := len(api.Bindings) - before; added > 0 {
 		tracef("bindings: +%d from the %s stack table (documented request params)", added, stack)
 	}
@@ -209,17 +320,32 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 		tracef("bindings: no remappable knobs known for this backend")
 	}
 
-	if stack == "litellm" && len(ev.ReasoningEfforts) > 0 {
-		if effort := api.Bindings[system.IntentReasoningEffort]; effort != nil {
+	// Rule 5: a backend-reported effort list is the binding's enum on the
+	// stack that reported it, and decides whether none (off) and a level (on)
+	// are expressible through that same param (litellm / ollama
+	// reasoning_effort, openrouter reasoning.effort); toggles on another param
+	// (venice disable_thinking, openrouter reasoning.enabled) are untouched.
+	// A list read at a gateway describes the gateway's param, not an
+	// identified upstream's: a source-less list is LiteLLM's.
+	if len(ev.ReasoningEfforts) > 0 {
+		if effortsStack != stack {
+			tracef("bindings: reasoning.effort levels from %s skipped — they describe %s's param, not %s's", effortsLabel, effortsStack, stack)
+		} else if effort := api.Bindings[system.IntentReasoningEffort]; effort != nil {
 			effort.EnumValues = append([]string(nil), ev.ReasoningEfforts...)
-			tracef("bindings: reasoning.effort levels from litellm supported_reasoning_efforts -> %s", strings.Join(effort.EnumValues, "|"))
+			tracef("bindings: reasoning.effort levels from %s -> %s", effortsLabel, strings.Join(effort.EnumValues, "|"))
+			if ev.EffortsSource != "" {
+				if bindingSources == nil {
+					bindingSources = map[string]string{}
+				}
+				bindingSources[system.IntentReasoningEffort] = ev.EffortsSource
+			}
 			if !containsString(ev.ReasoningEfforts, "none") {
-				if disable := api.Bindings[system.IntentReasoningDisable]; disable != nil && disable.Value == "none" {
+				if disable := api.Bindings[system.IntentReasoningDisable]; disable != nil && disable.Param == effort.Param && disable.Value == "none" {
 					delete(api.Bindings, system.IntentReasoningDisable)
-					tracef("bindings: reasoning.disable dropped — litellm does not list none among the supported efforts")
+					tracef("bindings: reasoning.disable dropped — %s does not list none among the supported efforts", effortsLabel)
 				}
 			}
-			if enable := api.Bindings[system.IntentReasoningEnable]; enable != nil {
+			if enable := api.Bindings[system.IntentReasoningEnable]; enable != nil && enable.Param == effort.Param {
 				level := ""
 				for _, e := range ev.ReasoningEfforts {
 					if e != "none" {
@@ -229,25 +355,27 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 				}
 				if level == "" {
 					delete(api.Bindings, system.IntentReasoningEnable)
-					tracef("bindings: reasoning.enable dropped — litellm lists no supported effort other than none")
+					tracef("bindings: reasoning.enable dropped — %s lists no supported effort other than none", effortsLabel)
 				} else {
 					enable.Value = level
-					tracef("bindings: reasoning.enable value from litellm supported_reasoning_efforts -> %s", level)
+					tracef("bindings: reasoning.enable value from %s -> %s", effortsLabel, level)
 				}
 			}
-		}
-	}
-
-	if stack == "venice" && len(ev.RegistryEfforts) > 0 {
-		if effort := api.Bindings[system.IntentReasoningEffort]; effort != nil {
-			effort.EnumValues = append([]string(nil), ev.RegistryEfforts...)
-			tracef("bindings: reasoning.effort levels from the venice listing -> %s", strings.Join(effort.EnumValues, "|"))
 		}
 	}
 
 	if ev.NoEffort && api.Bindings[system.IntentReasoningEffort] != nil {
 		delete(api.Bindings, system.IntentReasoningEffort)
 		tracef("bindings: reasoning.effort dropped — the %s listing says the model takes no effort level", stack)
+	}
+
+	// An always-on model takes no none (OpenRouter rejects it for mandatory
+	// reasoning), even when a listing names it.
+	if alwaysOn {
+		if effort := api.Bindings[system.IntentReasoningEffort]; effort != nil && containsString(effort.EnumValues, "none") {
+			effort.EnumValues = withoutString(effort.EnumValues, "none")
+			tracef("bindings: reasoning.effort none withheld — the model reasons unconditionally")
+		}
 	}
 
 	// Ollama's effort none is think=false, the toggle a checkpoint is not given.
@@ -267,7 +395,56 @@ func ComposeWithTrace(ev Evidence) (*system.ModelApiSpec, []string) {
 		api.Thinking = &system.ThinkingSpec{Mode: system.ThinkingModeTunable}
 	}
 
-	if stack == "" && api.ModelFamily == "" && api.Thinking == nil && len(api.Bindings) == 0 && len(api.Parameters) == 0 {
+	evidence := map[string]string{}
+	// Rule 7: the reported default, else the template's; only alongside a
+	// thinking mode, since the block's mode is not optional.
+	thinkingDefault, thinkingDefaultSource := ev.ThinkingDefault, ev.ThinkingDefaultSource
+	if thinkingDefault == "" {
+		thinkingDefault, thinkingDefaultSource = tpl.thinkingDefault, tpl.thinkingDefaultSource
+	}
+	if thinkingDefault != "" {
+		switch {
+		case !validThinkingDefault(thinkingDefault):
+			tracef("thinking.default: reported value is not on|off|<level>; ignored")
+		case api.Thinking == nil:
+			tracef("thinking.default = %s ignored — thinking mode undetermined", thinkingDefault)
+		case thinkingDefaultSource == "":
+			// Same policy as a source-less capability fact: without provenance
+			// the value is not published.
+			tracef("thinking.default = %s ignored — no source", thinkingDefault)
+		default:
+			api.Thinking.Default = thinkingDefault
+			evidence[system.EvidenceKeyThinkingDefault] = thinkingDefaultSource
+			tracef("thinking.default = %s (%s)", thinkingDefault, thinkingDefaultSource)
+		}
+	}
+
+	// Without any capability evidence there is no capabilities block at all
+	// (the pre-capabilities wire shape); with some (a declared value, a
+	// backend, vendor or template fact, a registry entry), reasoning is
+	// derived from the final thinking mode and bindings before the registry
+	// fills the rest.
+	if declared != nil || !ev.Caps.Empty() || anthropicDecided || !tpl.caps.Empty() || ev.Registry != nil {
+		caps.deriveReasoning(alwaysOn, api.Bindings, tracef)
+	}
+	caps.fill(registryLayer(ev.Registry, tracef), layerRegistry, tracef)
+	caps.noteContextGap(ev.Registry, tracef)
+	caps.implyTextInput(tracef)
+	var capEvidence map[string]string
+	api.Capabilities, capEvidence = caps.result()
+	for k, v := range capEvidence {
+		evidence[k] = v
+	}
+	for intent, source := range bindingSources {
+		if api.Bindings[intent] != nil && source != "" {
+			evidence[system.EvidenceKeyBinding(intent)] = source
+		}
+	}
+	if len(evidence) > 0 {
+		api.Evidence = evidence
+	}
+
+	if stack == "" && api.ModelFamily == "" && api.Thinking == nil && len(api.Bindings) == 0 && len(api.Parameters) == 0 && api.Capabilities == nil {
 		tracef("nothing known about this backend: no api block")
 		return nil, lines
 	}
@@ -300,6 +477,21 @@ func sanitizeNames(list []string, limit int, what string, tracef func(string, ..
 		tracef("%s: %d of %d backend-reported entries dropped (invalid name, duplicate or beyond the %d cap); %d kept", what, dropped, len(list), limit, len(out))
 	}
 	return out
+}
+
+// The producing stack of a "<stack>:<endpoint>.<field>" source.
+func sourceStack(source string) string {
+	stack, _, _ := strings.Cut(source, ":")
+	return stack
+}
+
+func sortedIntents(b bindingSet) []string {
+	intents := make([]string, 0, len(b))
+	for intent := range b {
+		intents = append(intents, intent)
+	}
+	sort.Strings(intents)
+	return intents
 }
 
 func hasReasoningBindings(b bindingSet) bool {

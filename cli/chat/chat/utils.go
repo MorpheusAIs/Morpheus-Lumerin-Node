@@ -18,7 +18,18 @@ const (
 	Chat
 )
 
-type completionMsg string
+// streamEvent is one update from an in-flight completion: more text, a
+// failure, or the end of the stream.
+//
+// Failures travel the same channel as chunks on purpose. The command waiting
+// on that channel is the only thing that turns an update into something the UI
+// renders, so a failure that never reaches it leaves the chat waiting on a
+// reply that is not coming.
+type streamEvent struct {
+	text string
+	err  error
+	done bool
+}
 
 // WordWrap wraps the given string to fit within a specified width.
 func wordWrap(text string, width int) string {
@@ -52,35 +63,50 @@ func wordWrap(text string, width int) string {
 
 func streamCompletions(m model, val string) tea.Cmd {
 	return func() tea.Msg {
-
 		newChunk := ""
 
-		m.err = m.sendChat(val, func(completion interface{}) error {
-			openAiCompletion, ok := (completion).(*openai.ChatCompletionStreamResponse)
-			if ok {
-				if openAiCompletion.Choices[0].Delta.Content != "[DONE]" {
-					newChunk += openAiCompletion.Choices[0].Delta.Content
-					m.completionChunkSub <- newChunk
+		// Note this runs on a value copy of the model, so assigning to m.err
+		// here would be discarded. The result has to be sent, not stored.
+		err := m.sendChat(val, func(completion interface{}) error {
+			switch c := (completion).(type) {
+			case *openai.ChatCompletionStreamResponse:
+				// A frame can legitimately carry no choices; indexing [0]
+				// unconditionally panics when one does.
+				if len(c.Choices) == 0 {
+					return nil
 				}
-			} else {
-				prodiaCompletion := (completion).(map[string]interface{})
-				newChunk += prodiaCompletion["imageUrl"].(string)
-				m.completionChunkSub <- newChunk
+				if content := c.Choices[0].Delta.Content; content != "[DONE]" {
+					newChunk += content
+					m.completionChunkSub <- streamEvent{text: newChunk}
+				}
+			case map[string]interface{}:
+				url, ok := c["imageUrl"].(string)
+				if !ok {
+					return nil
+				}
+				newChunk += url
+				m.completionChunkSub <- streamEvent{text: newChunk}
 			}
 
 			return nil
 		})
 
+		// Always close out the turn, so the waiting command stops waiting:
+		// with the error if there was one, otherwise with a plain end-of-stream.
+		if err != nil {
+			m.completionChunkSub <- streamEvent{err: err}
+		} else {
+			m.completionChunkSub <- streamEvent{done: true}
+		}
+
 		return nil
 	}
 }
 
-// A command that waits for the next chunk on a channel.
-func waitForCompletion(sub chan string) tea.Cmd {
+// A command that waits for the next event on a channel.
+func waitForCompletion(sub chan streamEvent) tea.Cmd {
 	return func() tea.Msg {
-		chunk := <-sub
-
-		return completionMsg(chunk)
+		return <-sub
 	}
 }
 

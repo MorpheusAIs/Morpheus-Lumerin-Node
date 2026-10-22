@@ -1,0 +1,10 @@
+[
+  {"id": "a/dup", "context": 1000, "in": ["text"], "out": ["text"], "src": 1},
+  {"id": "b/dup", "context": 2000, "in": ["text"], "out": ["text"], "src": 1},
+  {"id": "flagless", "context": 4096, "in": ["text"], "out": ["text"], "src": 2},
+  {"id": "gpt-4o", "context": 128000, "output": 16384, "toolCall": true, "structured": true, "webSearch": true, "promptCache": true, "attachment": true, "in": ["text", "image", "pdf"], "out": ["text"], "src": 3},
+  {"id": "meta-llama/llama-3-70b", "context": 8192, "output": 4096, "toolCall": true, "in": ["text"], "out": ["text"], "src": 1},
+  {"id": "o1-pro", "context": 200000, "output": 100000, "reasoning": true, "structured": true, "in": ["text"], "out": ["text"], "src": 2},
+  {"id": "qwen/qwen3-235b-a22b", "context": 40960, "reasoning": true, "toolCall": true, "in": ["text"], "out": ["text"], "src": 3},
+  {"id": "qwen3-235b-a22b", "context": 131072, "reasoning": true, "in": ["text"], "out": ["text"], "src": 1}
+]

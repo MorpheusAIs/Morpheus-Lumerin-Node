@@ -21,7 +21,7 @@ you → [PR] → dev  →  [promote] → test  →  [promote] → main
 When you open a pull request on GitHub, set the **base branch to `dev`** (not `main`).
 
 - First-time and external contributors: always target **`dev`**.
-- Only maintainers open promote PRs into `test` or `main` (e.g. `promote: … to test`).
+- Only maintainers open promote PRs into `test` or `main` (e.g. `promote: … to test`). A production release into `main` is titled `Release vX.Y.Z — …`.
 - If GitHub defaults your PR to `main`, change it before requesting review (`Edit` → base → `dev`), or ask a maintainer to retarget.
 
 ## How to submit a change
@@ -45,6 +45,7 @@ Prefer conventional prefixes so history stays scannable:
 
 - `feat(proxy-router): …` / `fix(…): …` / `docs(…): …` / `ci: …`
 - Promote PRs: `promote: <summary> to test` (or `to main`)
+- Release PRs into `main`: `Release vX.Y.Z — <themes>`
 
 ## What lives where
 
@@ -81,7 +82,7 @@ File a bug, a feature request, or a docs correction with the issue forms. Questi
 
 An issue closes when the change is on `main` and production has deployed. The local rules and the setup checklist are in [`.ai-docs/issue-tracker.md`](.ai-docs/issue-tracker.md). Maintainers follow the practice in `MorpheusMaintainerContext` (`.ai-docs/how-we-work.md`).
 
-A feature or fix pull request targets `dev`. The body contains `Refs #123`, or the no-issue line for a chore, revert, or CI-only change. A promote pull request targets `test` or `main` and its title starts with `promote:`.
+A feature or fix pull request targets `dev`. The body contains `Refs #123`, or the no-issue line for a chore, revert, or CI-only change. A promote pull request targets `test` or `main` and its title starts with `promote:`. A release pull request targets `main` and its title starts with `Release`.
 
 ## Review expectations
 

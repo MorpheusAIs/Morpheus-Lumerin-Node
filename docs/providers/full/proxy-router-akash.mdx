@@ -25,7 +25,7 @@ Unlike a typical Docker run, on Akash the proxy-router uses **environment variab
 
 | Variable | Purpose |
 |----------|---------|
-| `COOKIE_CONTENT` | API authentication: `username:password` |
+| `COOKIE_CONTENT` | Admin API login: `admin:<password>` (the username is always `admin`). Applied on every start, so it replaces a password changed through `POST /auth/users`. |
 | `MODELS_CONFIG_CONTENT` | Single-line JSON for model endpoints (see [models-config](/reference/models-config)) |
 | `WALLET_PRIVATE_KEY` | For blockchain interactions |
 | Plus chain ID, contract addresses, etc. | See [Env: proxy-router](/reference/env-proxy-router) |

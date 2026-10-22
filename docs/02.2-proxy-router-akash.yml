@@ -14,7 +14,9 @@ services:
         to:
           - global: true
     env:
-      - COOKIE_CONTENT=admin:superpassword
+      # Admin API login (admin:<password>). A non-empty value is applied on
+      # every start and replaces a password changed through POST /auth/users.
+      - COOKIE_CONTENT=admin:<your_secure_password>
       - WALLET_PRIVATE_KEY=
       - WEB_PUBLIC_URL=http://localhost:8082
       - WEB_ADDRESS=0.0.0.0:8082

@@ -2,6 +2,7 @@ package config
 
 import (
 	"testing"
+	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/ethereum/go-ethereum/common"
@@ -33,4 +34,36 @@ func TestSetDefaultsModelApiDetectEnabled(t *testing.T) {
 	public := cfg.GetSanitized().(Config)
 	require.NotNil(t, public.Proxy.ModelApiDetectEnabled)
 	require.False(t, *public.Proxy.ModelApiDetectEnabled.Bool, "the switch is public config")
+}
+
+func TestSetDefaultsModelApiDetectTTL(t *testing.T) {
+	t.Run("unset follows MODEL_HEALTH_CHECK_INTERVAL", func(t *testing.T) {
+		cfg := newConfigForDefaults()
+		cfg.Proxy.ModelHealthCheckInterval = 2 * time.Hour
+		cfg.SetDefaults()
+		require.Equal(t, 2*time.Hour, cfg.Proxy.ModelApiDetectTTL)
+	})
+
+	t.Run("both unset is one hour", func(t *testing.T) {
+		cfg := newConfigForDefaults()
+		cfg.SetDefaults()
+		require.Equal(t, time.Hour, cfg.Proxy.ModelHealthCheckInterval)
+		require.Equal(t, time.Hour, cfg.Proxy.ModelApiDetectTTL)
+	})
+
+	t.Run("values under the floor are clamped", func(t *testing.T) {
+		cfg := newConfigForDefaults()
+		cfg.Proxy.ModelApiDetectTTL = 10 * time.Second
+		cfg.SetDefaults()
+		require.Equal(t, MinModelApiDetectTTL, cfg.Proxy.ModelApiDetectTTL)
+	})
+
+	t.Run("explicit values are kept and public", func(t *testing.T) {
+		cfg := newConfigForDefaults()
+		cfg.Proxy.ModelApiDetectTTL = 5 * time.Minute
+		cfg.SetDefaults()
+		require.Equal(t, 5*time.Minute, cfg.Proxy.ModelApiDetectTTL)
+		public := cfg.GetSanitized().(Config)
+		require.Equal(t, 5*time.Minute, public.Proxy.ModelApiDetectTTL)
+	})
 }

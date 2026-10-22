@@ -34,7 +34,7 @@ func TestDetectVeniceListingEffortsDecideAlwaysOn(t *testing.T) {
 	require.Equal(t, system.ThinkingModeControllable, minimax.Thinking.Mode, "venice offers effort none, so the M2.x always-on rule does not apply")
 	require.Equal(t, "venice_parameters.disable_thinking", minimax.Bindings[system.IntentReasoningDisable].Param)
 	require.Equal(t, []string{"none", "low", "medium", "high"}, minimax.Bindings[system.IntentReasoningEffort].EnumValues)
-	require.Contains(t, strings.Join(trace, "\n"), `venice listing offers reasoning efforts ["none" "low" "medium" "high"]`)
+	require.Contains(t, strings.Join(trace, "\n"), `reasoningEffortOptions [none low medium high] -> reasoning.effort levels`)
 
 	kimi := d.Detect(context.Background(), config.ModelConfig{ModelName: "kimi-k2-7-code", ApiType: "openai", ApiURL: srv.URL + "/api/v1/chat/completions"})
 	require.Equal(t, "kimi", kimi.ModelFamily)
@@ -205,4 +205,20 @@ func TestDetectVLLMTracesASpellingMatch(t *testing.T) {
 	require.Equal(t, "vllm", api.Stack)
 	require.Equal(t, "gemma", api.ModelFamily)
 	require.Contains(t, strings.Join(trace, "\n"), `vllm /v1/models lists "google.gemma-4-31b-it" as "google-gemma-4-31b-it" (same name in normalized spelling)`)
+}
+
+func TestDetectVLLMTokenizeKeepsTheServedID(t *testing.T) {
+	var tokenized []string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/version", jsonHandler(map[string]any{"version": "0.18.0"}))
+	mux.HandleFunc("/v1/models", jsonHandler(map[string]any{"object": "list", "data": []map[string]any{{"id": "qwen3-32b-thinking", "root": "Qwen/Qwen3-32B"}}}))
+	mux.HandleFunc("/tokenize", tokenizeHandler(t, 32768, &tokenized))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	d := NewDetector(lib.NewTestLogger(), DefaultOptions())
+	api := d.Detect(context.Background(), config.ModelConfig{ModelName: "qwen3-32b-thinking", ApiType: "openai", ApiURL: srv.URL + "/v1/chat/completions"})
+	require.Equal(t, []string{"qwen3-32b-thinking"}, tokenized, "/tokenize names the model the server accepts, not the weights")
+	require.EqualValues(t, 32768, *api.Capabilities.Context)
+	require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode, "the weights still name a hybrid")
 }
