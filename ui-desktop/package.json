@@ -132,7 +132,7 @@
     "@types/yauzl": "^2.10.3",
     "@vitejs/plugin-react": "^4.2.1",
     "babel-plugin-styled-components": "^2.1.4",
-    "electron": "^28.2.0",
+    "electron": "^42.11.16",
     "electron-builder": "26.0.12",
     "electron-vite": "^2.3.0",
     "eslint": "^8.56.0",
