@@ -21,14 +21,34 @@ const httpErrorMessage string = "internal error: %v; http status: %v"
 
 func main() {
 
-	apiClient, err := client.NewApiGatewayClientFromEnv(os.Getenv)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	actions := NewActions(apiClient)
+	// The API client is built in Before, not here. Building it up front made
+	// every invocation depend on a reachable router and a readable cookie --
+	// including `mor-cli --help`, `mor-cli help <command>`, `--version` and a
+	// mistyped command name. A new user whose node was not running got a
+	// cookie error instead of the usage text, with no way to discover the
+	// commands at all.
+	//
+	// urfave/cli runs Before only when it is about to execute a command, so
+	// help and version output no longer need a router.
+	actions := NewActions(nil)
 	app := &cli.App{
 		Usage: "A client to call the Morpheus Lumerin API",
+		Before: func(cCtx *cli.Context) error {
+			// The --help and --version flags short-circuit before Before runs,
+			// but the `help` command does reach it, so exempt it explicitly:
+			// `mor-cli help chat` is exactly what someone types when they do
+			// not yet have a node running.
+			switch cCtx.Args().First() {
+			case "help", "h":
+				return nil
+			}
+			apiClient, err := client.NewApiGatewayClientFromEnv(os.Getenv)
+			if err != nil {
+				return err
+			}
+			actions.client = apiClient
+			return nil
+		},
 		Commands: []*cli.Command{
 			{
 				Name:    "healthcheck",
