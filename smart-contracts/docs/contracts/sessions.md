@@ -39,6 +39,18 @@ Checks:
   is shared by regular and pool sessions.
 - Regular `openSession` does not compare the approval's `user` with the session user
   (legacy behaviour). `openSessionFromPool` requires them to be equal.
+- **Known consequences (open question, unchanged from `dev`):**
+  - *Griefing.* Anyone who sees an approval in the mempool can spend it first in their own
+    `openSession` (with their own stake, returned on close). The intended `openSession` or
+    `openSessionFromPool` then reverts with `SessionDuplicateApproval`. No funds are lost.
+  - *Delegate spending.* A session delegate (or a full delegate) can open a direct-pay
+    session for the user to a bid of a provider it controls; the stake, pulled from the
+    user's wallet up to its allowance to the diamond, becomes that provider's reward. See
+    [delegation.md](delegation.md).
+  - A possible fix is to require the approval's user to equal `user_` in `openSession`. It
+    stops the griefing (not the delegate case, since such a provider can sign an approval
+    naming the victim) and changes behaviour for integrations that open with an approval
+    issued for another address, so it waits for a decision.
 
 ## Stipend and session length
 

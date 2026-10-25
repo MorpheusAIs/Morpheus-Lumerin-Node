@@ -371,11 +371,13 @@ describe('Protocol properties', () => {
           let principal = 0n;
           let pending = 0n;
           let exposure = 0n;
+          let lockedExposure = 0n;
           for (const funder of funders) {
             const allowance = await delegateStakingFunding.getStakingAllowance(hot, funder);
             principal += allowance.currentPrincipal;
             pending += allowance.pending;
             exposure += allowance.exposure;
+            lockedExposure += allowance.lockedExposure;
             expect(allowance.lifetimeFunded - (paid.get(key(hot, funder)) ?? 0n), context).to.eq(
               allowance.currentPrincipal + allowance.pending,
             );
@@ -385,6 +387,7 @@ describe('Protocol properties', () => {
           );
           expect(pending, context).to.eq(balances.pendingTotal);
           expect(exposure, context).to.eq(balances.inSession);
+          expect(lockedExposure, context).to.be.lessThanOrEqual(balances.locked);
 
           // A lock is always dated the next day and every lock-creating operation releases matured buckets
           // first, so a pool never holds more than one unreleased bucket.
@@ -394,6 +397,16 @@ describe('Protocol properties', () => {
             buckets.reduce((sum, bucket) => sum + bucket.amount, 0n),
             context,
           ).to.eq(balances.locked);
+
+          // funders keep their shares of the unreleased lock exactly until its date; the second right
+          // before the date is skipped because a view may run at the next block time
+          // (more than one bucket already fails above)
+          const now = await getCurrentBlockTime();
+          if (buckets.length === 1 && buckets[0].releaseAt > now + 1n) {
+            expect(lockedExposure, context).to.eq(buckets[0].amount);
+          } else if (buckets.length === 0 || buckets[0].releaseAt <= now) {
+            expect(lockedExposure, context).to.eq(0n);
+          }
           poolsTotal += balances.free + balances.inSession + balances.locked;
         }
 
@@ -540,6 +553,37 @@ describe('Protocol properties', () => {
 
       console.log(`      gas: draw 129 = ${first.gas}, close 129 = ${closeGas}, settle 129 = ${settleGas}`);
       for (const gas of [first.gas, closeGas, settleGas]) expect(gas).to.be.lessThan(GAS_BUDGET);
+    });
+
+    it('should close 129 draws with a day lock split across every funder within the gas budget', async function () {
+      this.timeout(300_000);
+      await setTime(openTime);
+      await delegateStakingFunding.setMaxActiveFunders(128);
+      await delegateStakingFunding.setMinPrincipal(1);
+      const wallets = await createFunders(HOT_A, 128, wei(1), openTime + 5 * DAY);
+      await token.transfer(HOT_A, wei(1));
+      await token.connect(HOT_A).approve(diamond, wei(1));
+      await delegateStakingFunding.connect(HOT_A).grantStakingAllowance(HOT_A, wei(1), openTime + 5 * DAY);
+      await delegateStakingFunding.connect(HOT_A).fundStakingAllowance(HOT_A, wei(1));
+
+      const { sessionId } = await openFromPool(HOT_A, wei(129), 0);
+      const session = await sessionRouter.getSession(sessionId);
+      // an early close on the same day leaves a lock on every draw
+      await setTime(Number(session.openedAt) + 3600);
+      const closeGas = await closeFromPool(HOT_A, sessionId);
+
+      const [[bucket]] = await delegateStakingFunding.getPoolLockBuckets(HOT_A, 0, 1);
+      let lockedExposure = 0n;
+      for (const funder of [...wallets.map((wallet) => wallet.address), HOT_A.address]) {
+        const share = (await delegateStakingFunding.getStakingAllowance(HOT_A, funder)).lockedExposure;
+        expect(share).to.be.greaterThan(0);
+        lockedExposure += share;
+      }
+      expect(bucket.amount).to.be.greaterThan(0);
+      expect(lockedExposure).to.eq(bucket.amount);
+
+      console.log(`      gas: close 129 with lock = ${closeGas}`);
+      expect(closeGas).to.be.lessThan(GAS_BUDGET);
     });
 
     it('should purge a full list of expired grants when admitting a new funder within the gas budget', async function () {

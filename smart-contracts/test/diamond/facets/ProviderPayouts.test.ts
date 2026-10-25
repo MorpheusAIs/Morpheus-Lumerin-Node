@@ -507,7 +507,7 @@ describe('ProviderPayouts', () => {
       return sessionRouter.connect(USER).closeSession(msg, signature);
     }
 
-    it('should turn a new reward into debt while funding only covers outstanding debts of another provider', async () => {
+    it('should pay a new reward at once when funding covers it, even with another provider debt outstanding', async () => {
       const secondBidId = await setupSecondProvider();
       await drainFunding();
       const first = await openSession();
@@ -515,48 +515,59 @@ describe('ProviderPayouts', () => {
       expect(await providerPayouts.getProviderOwed(PROVIDER)).to.eq(reward);
 
       await token.transfer(FUNDING, reward);
+      const claimedBefore = await sessionRouter.getProvidersTotalClaimed();
       const second = await openSecondProviderSession(secondBidId);
       await expect(closeSecondProviderSession(second.sessionId, second.session.openedAt))
         .to.emit(providerPayouts, 'ProviderRewardAccrued')
-        .withArgs(second.sessionId, TARGET, reward, 0, reward);
-      expect(await token.balanceOf(FUNDING)).to.eq(reward);
-      expect(await providerPayouts.getPendingProviderClaims()).to.eq(reward * 2n);
+        .withArgs(second.sessionId, TARGET, reward, reward, 0);
+      expect(await token.balanceOf(FUNDING)).to.eq(0);
+      expect(await providerPayouts.getProviderOwed(TARGET)).to.eq(0);
+      expect(await providerPayouts.getProviderOwed(PROVIDER)).to.eq(reward);
+      expect(await providerPayouts.getPendingProviderClaims()).to.eq(reward);
+      expect(await sessionRouter.getProvidersTotalClaimed()).to.eq(claimedBefore + reward);
 
+      // the older debt is paid by a claim once the funding account is topped up again;
+      // paying it moves the amount from pending to claimed, the emission debit stays the same
+      await token.transfer(FUNDING, reward);
       await expect(sessionRouter.connect(STRANGER).claimForProvider(first.sessionId)).to.changeTokenBalances(
         token,
         [FUNDING, PROVIDER],
         [-reward, reward],
       );
-      expect(await providerPayouts.getProviderOwed(PROVIDER)).to.eq(0);
-      expect(await providerPayouts.getProviderOwed(TARGET)).to.eq(reward);
+      expect(await providerPayouts.getPendingProviderClaims()).to.eq(0);
+      expect(await sessionRouter.getProvidersTotalClaimed()).to.eq(claimedBefore + reward * 2n);
     });
 
-    it('should pay a new reward immediately once funding covers outstanding debts plus the reward', async () => {
+    it('should pay a new reward of the same provider at once while its older debt stays outstanding', async () => {
       await drainFunding();
       const first = await openSession();
       await closeSession(first.sessionId, first.session.openedAt);
 
-      await token.transfer(FUNDING, reward * 2n);
+      await token.transfer(FUNDING, reward);
       const second = await openSession();
       await expect(closeSession(second.sessionId, second.session.openedAt))
         .to.emit(providerPayouts, 'ProviderRewardAccrued')
         .withArgs(second.sessionId, PROVIDER, reward, reward, 0);
       expect(await providerPayouts.getProviderOwed(PROVIDER)).to.eq(reward);
-      expect(await token.balanceOf(FUNDING)).to.eq(reward);
+      expect(await providerPayouts.getPendingProviderClaims()).to.eq(reward);
+      expect(await token.balanceOf(FUNDING)).to.eq(0);
     });
 
-    it('should reserve allowance for outstanding debts as well as balance', async () => {
-      await drainFunding();
+    it('should turn a new reward into debt when the allowance does not cover it and pay the next reward once it does', async () => {
+      await token.connect(FUNDING).approve(diamond, reward - 1n);
       const first = await openSession();
-      await closeSession(first.sessionId, first.session.openedAt);
+      await expect(closeSession(first.sessionId, first.session.openedAt))
+        .to.emit(providerPayouts, 'ProviderRewardAccrued')
+        .withArgs(first.sessionId, PROVIDER, reward, 0, reward);
+      expect(await providerPayouts.getProviderOwed(PROVIDER)).to.eq(reward);
 
-      await token.transfer(FUNDING, reward * 10n);
-      await token.connect(FUNDING).approve(diamond, reward * 2n - 1n);
+      // with an outstanding debt, an allowance that covers only the new reward still pays it
+      await token.connect(FUNDING).approve(diamond, reward);
       const second = await openSession();
       await expect(closeSession(second.sessionId, second.session.openedAt))
         .to.emit(providerPayouts, 'ProviderRewardAccrued')
-        .withArgs(second.sessionId, PROVIDER, reward, 0, reward);
-      expect(await providerPayouts.getProviderOwed(PROVIDER)).to.eq(reward * 2n);
+        .withArgs(second.sessionId, PROVIDER, reward, reward, 0);
+      expect(await providerPayouts.getProviderOwed(PROVIDER)).to.eq(reward);
     });
 
     it('should pay debts best-effort in claim order when funding cannot cover all of them', async () => {

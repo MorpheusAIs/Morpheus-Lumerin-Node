@@ -19,9 +19,15 @@ unchanged; everything else is additive unless noted.
 - After `endsAt + settlementGrace` anyone can call `settleExpiredSession(sessionId)`. It
   returns the stake to the pool and records the provider reward as debt; it does not change
   stats or ratings.
+- After an early close, the day-locked part of the stake stays on the funders that financed
+  the session (`lockedExposure` in `getStakingAllowance`) until the next UTC midnight, so
+  `getAvailablePoolStake` drops by that amount until then.
+- A repeated withdrawal request of a funder moves its queue entry to the tail.
 - Delegation: the `delegation.rules.delegate.staking` right (or a full delegation) lets a
   delegate of the hot wallet approve/revoke funders and a delegate of a funder request or
-  cancel that funder's withdrawals. Funds still go only to the funder.
+  cancel that funder's withdrawals. Funds still go only to the funder. A cold funder should
+  not give the hot wallet a full delegation or session rights: those let it spend the
+  funder's MOR allowance in regular sessions ([delegation.md](contracts/delegation.md)).
 
 ## Close no longer reverts on a short funding account (`SessionRouter`, `DelegateStaking`)
 
@@ -32,11 +38,12 @@ unchanged; everything else is additive unless noted.
   `totalMORSupply` use `providersTotalClaimed + pendingProviderClaims`. Paying the debt later
   moves tokens only. `getProvidersTotalClaimed` still means "actually paid".
 - When the emission is exhausted, the compute balance is 0 instead of reverting.
-- **Debt priority.** A new reward is paid at accrual only if the funding account's balance
-  and allowance cover all outstanding debts plus the new amount; otherwise it becomes debt
-  too. Debts are paid best-effort on claim: `claimForProvider` pays the claimed provider's
-  debt up to `min(balance, allowance, owed)`, first claim first paid. There is no FIFO or
-  age priority between providers; keepers may claim for any provider after each top-up.
+- **New rewards and old debts.** A new reward is paid at accrual whenever the funding account's balance
+  and allowance cover it, as before; outstanding debts are not reserved. Debts are paid
+  best-effort on claim: `claimForProvider` pays the claimed provider's debt up to
+  `min(balance, allowance, owed)`, first claim first paid. There is no FIFO or age priority
+  between providers, and new rewards may be paid before older debts; keepers should claim
+  for every provider with debt after each top-up.
 - New events: `ProviderRewardAccrued(sessionId, provider, accrued, paid, owed)`,
   `ProviderDebtPaid(provider, payoutTarget, amount)`.
 - Direct-pay sessions are paid from the session escrow as before and never create debt.
@@ -72,12 +79,20 @@ unchanged; everything else is additive unless noted.
 - Every receipt close emits `SessionRating(sessionId, modelId, provider, closeoutType,
   tpsScaled1000, ttftMs)`; `closeoutType = 1` marks a disputed close. Settlement is unchanged.
 
-## Views moved, ABI unchanged
+## Views moved: diamond selectors unchanged, facet ABI changed
 
 `getSessionId`, `getSessionEnd`, `stakeToStipend`, `stipendToStake`, `getUserStakesOnHold`,
 `getTodaysBudget`, `getComputeBalance`, `totalMORSupply`, `startOfTheDay` are served by the
 `ProviderPayouts` facet with the same selectors and return values (plus the debt term in the
-emission views, which is 0 at upgrade time).
+emission views, which is 0 at upgrade time). Calls to the diamond keep working.
+
+They are no longer in the `SessionRouter` / `ISessionRouter` ABI. Clients that build from
+per-facet ABIs must take them from `ProviderPayouts`: after `npm run bindings-go` and
+`npm run copy-bindings`, the `sessionrouter` Go binding no longer has these methods, and
+proxy-router calls such as `GetUserStakesOnHold`, `GetTodaysBudget` and `TotalMORSupply`
+must move to the `providerpayouts` binding (or to a binding built from the merged diamond
+ABI) before it builds against the new bindings. Solidity code that calls them through
+`ISessionRouter` must use `IProviderPayouts`.
 
 ## Intentional tightening
 
@@ -91,6 +106,15 @@ emission views, which is 0 at upgrade time).
 
 - MOR is a standard ERC-20: no transfer fees, rebasing, hooks or blacklist. Pool and payout
   accounting credit the requested amounts.
+
+## Known legacy behaviour (open question)
+
+- Regular `openSession` does not check that the provider approval names `user_`, and the
+  "approval used" flag is shared with `openSessionFromPool`. A third party can spend an
+  approval seen in the mempool and make the intended open revert, and a session delegate
+  can open a direct-pay session to a provider it controls with the user's MOR. Unchanged
+  from `dev`; details and the possible fix in [sessions.md](contracts/sessions.md#signed-messages)
+  and [delegation.md](contracts/delegation.md).
 
 ## Upgrade policy
 

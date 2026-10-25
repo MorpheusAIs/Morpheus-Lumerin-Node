@@ -151,14 +151,17 @@ describe('DelegateStakingFunding', () => {
     let principals = 0n;
     let pending = 0n;
     let exposure = 0n;
+    let lockedExposure = 0n;
     for (const entry of page) {
       principals += entry.allowance.currentPrincipal;
       pending += entry.allowance.pending;
       exposure += entry.allowance.exposure;
+      lockedExposure += entry.allowance.lockedExposure;
     }
     const balances = await stakingFunding.getPoolBalances(hot);
     expect(principals + pending).to.eq(balances.free + balances.inSession + balances.locked);
     expect(exposure).to.eq(balances.inSession);
+    expect(lockedExposure).to.be.lessThanOrEqual(balances.locked);
     expect(pending).to.eq(balances.pendingTotal);
     if (expectedDiamondDelta !== undefined && before !== undefined) {
       expect((await token.balanceOf(diamond)) - before).to.eq(expectedDiamondDelta);
@@ -581,6 +584,24 @@ describe('DelegateStakingFunding', () => {
       await expectAccountingInvariant(HOT);
     });
 
+    it('should move a repeated request behind earlier requests of other funders', async () => {
+      await approveGrantFund(funders[0], wei(100));
+      await approveGrantFund(funders[1], wei(100));
+      const sessionId = await openPoolSession(wei(200));
+      await stakingFunding.connect(funders[0]).requestStakingWithdrawal(HOT, funders[0], wei(10));
+      await stakingFunding.connect(funders[1]).requestStakingWithdrawal(HOT, funders[1], wei(20));
+      await stakingFunding.connect(funders[0]).requestStakingWithdrawal(HOT, funders[0], wei(30));
+
+      const [queue, , total] = await stakingFunding.getPoolWithdrawalQueue(HOT, ethers.ZeroAddress, 10);
+      expect(queue.map((q) => [q.funder, q.amount])).to.deep.eq([
+        [funders[1].address, wei(20)],
+        [funders[0].address, wei(40)],
+      ]);
+      expect(total).to.eq(2);
+      await closePoolSession(sessionId, 1);
+      await expectAccountingInvariant(HOT);
+    });
+
     it('should validate cancellation and restore/re-admit at the tail', async () => {
       await expect(stakingFunding.connect(funders[0]).cancelStakingWithdrawal(HOT, funders[0])).to.be
         .revertedWithCustomError(stakingFunding, 'DelegateStakingWithdrawalNotFound');
@@ -974,7 +995,7 @@ describe('DelegateStakingFunding', () => {
       const exp = await expiry();
       await approveGrantFund(funders[0], wei(3), HOT, wei(5), exp);
       const allowance = await stakingFunding.getStakingAllowance(HOT, funders[0]);
-      expect(allowance).to.deep.eq([wei(5), exp, false, wei(3), wei(3), 0n, 0n, true, true]);
+      expect(allowance).to.deep.eq([wei(5), exp, false, wei(3), wei(3), 0n, 0n, 0n, true, true]);
       expect((await stakingFunding.getPoolFunders(HOT, 1, 10))).to.deep.eq([[], 1n]);
       expect((await stakingFunding.getPoolFunders(HOT, 0, 1))[0][0].inActiveList).to.eq(true);
       await expect(stakingFunding.getPoolFunders(HOT, 0, 129)).to.be.revertedWithCustomError(

@@ -30,6 +30,7 @@ Each funder has a `Grant` in the pool:
 | `lifetimeFunded` | Total funded so far (never decreases) |
 | `currentPrincipal` | The funder's current share of the pool |
 | `exposure` | Part of the principal drawn into open sessions |
+| `lockedExposure` | Funder's share of the unreleased day lock of closed sessions it financed; counts against its capacity until the next UTC midnight |
 | `pending` | Queued withdrawal amount |
 | `expiry`, `revoked` | Grant liveness: live = not revoked and `expiry > now` |
 | `approved` | Hot wallet's approval of this funder |
@@ -39,6 +40,7 @@ Invariants (checked by the randomized tests after every step):
 ```
 Σ currentPrincipal + pendingTotal == free + inSession + locked
 Σ exposure                        == inSession
+Σ lockedExposure                  <= locked     (equal until the bucket matures)
 lifetimeFunded − Σ paid withdrawals == currentPrincipal + pending      (per funder)
 unreleased lock buckets           <= 1
 ```
@@ -102,7 +104,8 @@ openSessionFromPool(address hot_, uint256 amount_, bytes approval_, bytes signat
   2. Liquidity: `amount <= free − pendingTotal`. Queued withdrawals come first; otherwise
      `DelegateStakingInsufficientLiquidity`.
   3. Walk the active list from the head (at most 128 nodes), unlinking inactive entries,
-     and take `min(currentPrincipal − exposure, remaining)` from each funder.
+     and take `min(max(0, currentPrincipal − exposure − lockedExposure), remaining)` from each
+     funder (after a withdrawal `exposure + lockedExposure` may exceed the principal).
   4. Take the rest from self-escrow.
   5. If something is still missing: `DelegateStakingInsufficientCapacity`.
 - Each draw is stored with the session (`getPoolSession`) and emitted as
@@ -123,6 +126,10 @@ closePoolSession(bytes receipt_, bytes signature_)
   `inSession −= stake`, `free += stake − lock`, a lock bucket gets `lock`.
 - Every draw is returned to its funder's exposure (`DelegateStakingPoolReturned`). Principal
   does not change: sessions never spend funder money.
+- The lock is split across the draws pro rata to the drawn amounts (the shares add up to
+  the lock exactly) and kept as each funder's `lockedExposure` until the lock date. Until
+  then that part of the principal cannot be drawn again, so a new session cannot be backed
+  by idle MOR of funders who left the pool.
 - Provider reward, dispute hold, stats and `SessionRating` are exactly as for a regular
   close; the reward is paid from the funding account or becomes debt
   ([provider-payouts.md](provider-payouts.md)).
@@ -161,14 +168,18 @@ cancelStakingWithdrawal(address hot_, address funder_)
 servePoolWithdrawals(address hot_, uint256 maxEntries_)   // anyone, ≤ 32
 ```
 
-- Request and cancel: the funder or its delegate with `delegation.rules.delegate.staking`.
-  Money always goes to the funder.
+- Request and cancel: the funder or its delegate with `delegation.rules.delegate.staking`
+  (a full delegation passes too, see [delegation.md](delegation.md)). Money always goes to
+  the funder.
 - No live grant or approval is needed: a revoked or expired funder can always leave.
 - `amount <= currentPrincipal`, and what remains must be 0 or at least `minPrincipal`
   (a full exit is always allowed).
 - Principal decreases at once. If the queue is empty, `min(amount, free)` is paid
   immediately; the rest is queued. If the queue is not empty, everything is queued behind
-  it. One queue entry per funder; repeated requests add to it.
+  it. One queue entry per funder; a repeated request adds to it and moves the whole entry,
+  including its earlier part, to the queue tail, so later money waits behind earlier
+  requests of other funders. To keep its place, a funder waits until the entry is paid
+  before requesting more.
 - The queue is served in FIFO order from `free`, paying the head partially when needed. It
   is served automatically (up to `maxAutoService` entries) after funding, draws, closes,
   settlements, lock releases and requests, and by `servePoolWithdrawals`.
@@ -177,7 +188,10 @@ servePoolWithdrawals(address hot_, uint256 maxEntries_)   // anyone, ≤ 32
   funders are never locked pro rata.
 - Cancel returns the whole pending amount to principal (subject to `minPrincipal` while the
   funder is approved and live). If the funder is not the hot wallet, is approved and live, and
-  is not linked, it is admitted at the tail of the active list.
+  is not linked, it is admitted at the tail of the active list. If that list is full (for
+  example after a full withdrawal freed the slot for another funder, or after the owner
+  lowered `maxActiveFunders`), the cancel reverts with `DelegateStakingActiveFundersLimitExceeded`
+  and the withdrawal stays queued and is paid as usual.
 
 ## Permissionless maintenance
 

@@ -914,6 +914,93 @@ describe('DelegateStaking', () => {
       ).to.changeTokenBalances(token, [FUNDER_2, HOT], [wei(30), 0n]);
       expect(await delegateStakingFunding.getPoolBalances(HOT)).to.deep.eq([0n, 0n, 0n, 0n]);
     });
+
+    it('should keep the day lock on the funder that financed the session until the lock is released', async () => {
+      await setTime(openTime);
+      await fundPool(HOT, FUNDER, wei(50));
+      await fundPool(HOT, FUNDER_2, wei(50));
+      const { sessionId } = await openPoolSession(wei(50));
+      const session = await sessionRouter.getSession(sessionId);
+      await setTime(Number(session.openedAt) + 200);
+      await closePoolSession(sessionId);
+      const [[bucket]] = await delegateStakingFunding.getPoolLockBuckets(HOT, 0, 1);
+      expect(bucket.amount).to.be.greaterThan(0);
+
+      const funder = await delegateStakingFunding.getStakingAllowance(HOT, FUNDER);
+      expect(funder.exposure).to.eq(0);
+      expect(funder.lockedExposure).to.eq(bucket.amount);
+      expect((await delegateStakingFunding.getStakingAllowance(HOT, FUNDER_2)).lockedExposure).to.eq(0);
+
+      // the second funder leaves: its idle MOR must not back a new draw in the first funder's name
+      await delegateStakingFunding.connect(FUNDER_2).revokeStakingAllowance(HOT);
+      expect(await delegateStakingFunding.getAvailablePoolStake(HOT)).to.eq(wei(50) - bucket.amount);
+      const { msg, signature } = await getProviderApproval(PROVIDER, HOT, bidId);
+      await expect(
+        delegateStaking.connect(HOT).openSessionFromPool(HOT, wei(50), msg, signature),
+      ).to.be.revertedWithCustomError(delegateStaking, 'DelegateStakingInsufficientCapacity');
+
+      await setTime(Number(bucket.releaseAt));
+      expect((await delegateStakingFunding.getStakingAllowance(HOT, FUNDER)).lockedExposure).to.eq(0);
+      expect(await delegateStakingFunding.getAvailablePoolStake(HOT)).to.eq(wei(50));
+      await openPoolSession(wei(50), HOT, HOT, 1);
+      expect((await delegateStakingFunding.getStakingAllowance(HOT, FUNDER)).exposure).to.eq(wei(50));
+    });
+
+    it('should add same-day locks together and replace a matured lock share with the new one', async () => {
+      // the lock depends on the emission left before the close pays the provider, so it is computed first
+      const closeWithLock = async (sessionId: string, closeAt: bigint) => {
+        const opened = await sessionRouter.getSession(sessionId);
+        const startOfDay = await providerPayouts.startOfTheDay(closeAt);
+        const lock = await providerPayouts.stipendToStake((closeAt - opened.openedAt) * bidPricePerSecond, startOfDay);
+        await setNextTime(Number(closeAt));
+        await closePoolSession(sessionId);
+        return lock;
+      };
+      await setTime(openTime);
+      await fundPool(HOT, FUNDER, wei(100));
+      const first = await openPoolSession(wei(20), HOT, HOT, 0);
+      const second = await openPoolSession(wei(20), HOT, HOT, 1);
+      const opened = await sessionRouter.getSession(first.sessionId);
+      const firstLock = await closeWithLock(first.sessionId, opened.openedAt + 100n);
+      expect(firstLock).to.be.greaterThan(0);
+      expect((await delegateStakingFunding.getStakingAllowance(HOT, FUNDER)).lockedExposure).to.eq(firstLock);
+      const secondLock = await closeWithLock(second.sessionId, opened.openedAt + 101n);
+
+      const [[bucket]] = await delegateStakingFunding.getPoolLockBuckets(HOT, 0, 1);
+      expect(bucket.amount).to.eq(firstLock + secondLock);
+      expect((await delegateStakingFunding.getStakingAllowance(HOT, FUNDER)).lockedExposure).to.eq(
+        firstLock + secondLock,
+      );
+
+      await setTime(Number(bucket.releaseAt));
+      const third = await openPoolSession(wei(20), HOT, HOT, 2);
+      const thirdData = await sessionRouter.getSession(third.sessionId);
+      const expectedLock = await closeWithLock(third.sessionId, thirdData.openedAt + 100n);
+
+      const [[nextBucket], count] = await delegateStakingFunding.getPoolLockBuckets(HOT, 0, 1);
+      expect(count).to.eq(1n);
+      expect(nextBucket.releaseAt).to.eq(bucket.releaseAt + BigInt(DAY));
+      expect(nextBucket.amount).to.eq(expectedLock);
+      // the matured share is replaced, not carried over
+      expect((await delegateStakingFunding.getStakingAllowance(HOT, FUNDER)).lockedExposure).to.eq(expectedLock);
+    });
+
+    it('should split the day lock across the draws pro rata with an exact total', async () => {
+      await setTime(openTime);
+      await fundPool(HOT, FUNDER, wei(30));
+      await fundPool(HOT, FUNDER_2, wei(30));
+      const { sessionId } = await openPoolSession(wei(50));
+      const session = await sessionRouter.getSession(sessionId);
+      await setTime(Number(session.openedAt) + 201);
+      await closePoolSession(sessionId);
+
+      const [[bucket]] = await delegateStakingFunding.getPoolLockBuckets(HOT, 0, 1);
+      const first = (await delegateStakingFunding.getStakingAllowance(HOT, FUNDER)).lockedExposure;
+      const second = (await delegateStakingFunding.getStakingAllowance(HOT, FUNDER_2)).lockedExposure;
+      expect(first).to.eq((wei(30) * bucket.amount) / wei(50));
+      expect(first + second).to.eq(bucket.amount);
+      expect(await delegateStakingFunding.getAvailablePoolStake(HOT)).to.eq(wei(60) - bucket.amount);
+    });
   });
 
   describe('pool session draw cap', () => {

@@ -10,7 +10,7 @@ Everything below is readable from storage views and events by anyone.
 | Link | Where it is visible |
 |---|---|
 | cold funder ↔ hot wallet | `DelegateStakingAllowanceGranted`, `DelegateStakingAllowanceFunded`, `DelegateStakingPoolFunderApproved`; views `getStakingAllowance`, `getPoolFunders` |
-| amounts per funder | grant cap, lifetime funded, principal, exposure, pending (`getStakingAllowance`) |
+| amounts per funder | grant cap, lifetime funded, principal, exposure, locked exposure, pending (`getStakingAllowance`) |
 | funder ↔ individual session | `DelegateStakingPoolDrawn` / `DelegateStakingPoolReturned` per funder and session; `getPoolSession` while open |
 | hot wallet ↔ provider, model, timing | unchanged from regular sessions: `SessionOpened`, `SessionClosed`, session getters |
 | funder withdrawals | `DelegateStakingWithdrawalRequested` / `Paid` / `Cancelled` |

@@ -21,7 +21,6 @@ Related documents in `smart-contracts/docs/`:
 - [client-impact.md](../client-impact.md): what Stage 1 changes for proxy-router, wallets and indexers.
 - [delegate-staking-funder-economics.md](../delegate-staking-funder-economics.md): what a pool funder can rely on.
 - [privacy-assessment.md](../privacy-assessment.md): on-chain linkability of the new features.
-- [traceability.md](../traceability.md): Stage 1 acceptance criteria → tests.
 - [session-day-lock-upgrade-runbook.md](../session-day-lock-upgrade-runbook.md): the previous SessionRouter cut ceremony.
 - Product docs (user-facing behaviour): `docs/` at the repository root.
 

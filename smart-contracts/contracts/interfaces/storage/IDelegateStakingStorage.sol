@@ -10,6 +10,7 @@ interface IDelegateStakingStorage {
      * @param lifetimeFunded The total amount funded, never decreases.
      * @param currentPrincipal The funder share of the pool.
      * @param exposure The part of the principal drawn into open sessions.
+     * @param lockedExposure The part of the principal in the unreleased day lock of closed sessions.
      * @param pending The queued withdrawal amount.
      * @param active If true, the grant is live (not revoked and not expired).
      * @param approved If true, the funder is approved by the hot wallet (always true for self-escrow).
@@ -21,6 +22,7 @@ interface IDelegateStakingStorage {
         uint256 lifetimeFunded;
         uint256 currentPrincipal;
         uint256 exposure;
+        uint256 lockedExposure;
         uint256 pending;
         bool active;
         bool approved;

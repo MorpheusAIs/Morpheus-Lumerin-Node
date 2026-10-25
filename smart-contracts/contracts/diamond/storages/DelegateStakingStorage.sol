@@ -14,6 +14,9 @@ contract DelegateStakingStorage is IDelegateStakingStorage {
         bool revoked;
         bool approved;
         bool known;
+        // funder share of the pool day lock; counts against capacity until lockedUntil
+        uint128 lockedExposure;
+        uint64 lockedUntil;
     }
 
     struct LinkedNode {

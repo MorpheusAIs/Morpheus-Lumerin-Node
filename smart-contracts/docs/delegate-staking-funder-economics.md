@@ -45,7 +45,8 @@ tokens.
 
 - If no withdrawal is queued, a withdrawal is paid at once from the pool's free balance and
   any shortfall is queued; if others are already queued, the whole amount joins the queue
-  behind them (one queue entry per funder). The queue is paid in order as sessions close
+  behind them (one queue entry per funder; a repeated request moves the whole entry,
+  including the earlier part, to the tail). The queue is paid in order as sessions close
   and day-locks release.
 - **Last out waits.** If another funder withdrew first, your withdrawal may wait even if
   "your" part of the pool is not in a session. Other funders are never locked pro-rata.
@@ -71,3 +72,11 @@ tokens.
   returns the whole stake to the free balance at once; a day-lock applies only if the owner
   sets the grace below one day.
 - The contract assumes MOR is a standard ERC-20 (no transfer fees, hooks or blacklists).
+- **Delegation.** A cold funder does not need to delegate anything to the hot wallet: it
+  only grants, funds and withdraws, all from its own key. Do not give the hot wallet a full
+  delegation or `delegation.rules.session`. With either, the hot wallet can open regular
+  sessions in the funder's name that pull MOR from the funder's wallet up to its remaining
+  allowance to the diamond (and, in direct-pay mode, pay it to a provider it controls); a
+  full delegation also lets it cancel the funder's withdrawals. Approve the diamond for
+  exactly the amount being funded. To let someone else manage withdrawals, delegate only
+  `delegation.rules.delegate.staking`.

@@ -22,6 +22,16 @@ The registry returns true for:
 Delegation never changes where money goes: tokens are pulled from and paid to the
 principal (or, for provider rewards, the provider's payout target).
 
+It does let a delegate spend the principal's MOR inside the protocol. A delegate with
+`delegation.rules.session` (or a full delegation) opens sessions for the principal, and
+`openSession` pulls the stake from the principal's wallet, up to its ERC-20 allowance to the
+diamond. A regular session does not check that the provider approval names the principal,
+so such a delegate can open a direct-pay session to a bid of a provider it controls and
+receive the stake as payment. Treat a session delegate as trusted with the principal's
+allowance. A cold wallet that funds a delegate-staking pool should not give the hot wallet
+session rights or a full delegation (see
+[delegate-staking-funder-economics.md](../delegate-staking-funder-economics.md)).
+
 ## Rights
 
 | Right | `bytes32` | Lets a delegate of… |

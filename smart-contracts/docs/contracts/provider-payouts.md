@@ -24,7 +24,7 @@ Every path that owes a provider money (regular close, pool close, `claimForProvi
    | Session | Paid now when | Otherwise |
    |---|---|---|
    | Direct pay | Always, from the diamond's session escrow | — |
-   | Stake, close or claim | The funding account's balance **and** allowance each cover `pendingProviderClaims + amount` | Whole amount becomes debt |
+   | Stake, close or claim | The funding account's balance **and** allowance each cover `amount` | Whole amount becomes debt |
    | Stake, `settleExpiredSession` | Never (settlement makes no transfer) | Whole amount becomes debt |
 
 5. **Book.** Paid: `providersTotalClaimed += paid`, `lifetimeClaimed[provider] += paid`.
@@ -55,15 +55,19 @@ works, including a fully settled one. The payment is best-effort:
 amount = min(providerOwed[provider], balanceOf(fundingAccount), allowance(fundingAccount, diamond))
 ```
 
-**Priority between new rewards and old debts.** A new reward is paid at once only if the
-funding account can cover *all* outstanding debts plus the new reward. Otherwise it joins the
-debt. A small top-up therefore cannot be spent on new sessions while older debts wait.
+**New rewards and old debts.** A new reward is paid at once whenever the funding account
+covers it; outstanding debts are not reserved. Reserving them would stop automatic payouts
+for every provider as long as some debt stays unclaimed (for example the debt that
+`settleExpiredSession` records for a dead node), while a claim could still take the money
+first. Old debts are paid when someone calls `claimForProvider` for them.
 
 **Between providers there is no queue.** Debts are paid in the order claims arrive. There is
 no reservation for other providers' debts, because reservation can strand money: with debts
 A = 100 and B = 100 and 150 MOR in the funding account, reserving would leave 50 MOR that
-nobody can take. After a top-up, keepers can call `claimForProvider` for every provider with
-debt.
+nobody can take. Paying debt is best-effort, not guaranteed: a top-up can be spent on new
+rewards of later closes before a claim arrives, so a debt (for example a dead node's) may
+wait indefinitely. To pay debts first, top up and call `claimForProvider` for every provider
+with debt in one transaction (for example a multisig batch).
 
 Paying debt changes only `providerOwed`, `pendingProviderClaims`, `providersTotalClaimed`
 and `lifetimeClaimed`; the emission views do not move (see below).

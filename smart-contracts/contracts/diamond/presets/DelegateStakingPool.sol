@@ -28,6 +28,29 @@ abstract contract DelegateStakingPool is BidStorage, DelegationStorage, Delegate
         return _isPoolFunderApproved(pool_, hot_, funder_) && _isGrantLive(grant_) && grant_.currentPrincipal != 0;
     }
 
+    function _getLockedExposure(Grant storage grant_) internal view returns (uint256) {
+        return block.timestamp < grant_.lockedUntil ? grant_.lockedExposure : 0;
+    }
+
+    function _getAvailablePrincipal(Grant storage grant_) internal view returns (uint256) {
+        uint256 used_ = uint256(grant_.exposure) + _getLockedExposure(grant_);
+        return grant_.currentPrincipal > used_ ? grant_.currentPrincipal - used_ : 0;
+    }
+
+    function _addLockedExposure(Grant storage grant_, uint256 amount_, uint128 releaseAt_) internal {
+        if (amount_ == 0) {
+            return;
+        }
+        if (block.timestamp >= grant_.lockedUntil) {
+            grant_.lockedExposure = amount_.toUint128();
+        } else {
+            grant_.lockedExposure = (uint256(grant_.lockedExposure) + amount_).toUint128();
+        }
+        if (releaseAt_ > grant_.lockedUntil) {
+            grant_.lockedUntil = uint256(releaseAt_).toUint64();
+        }
+    }
+
     function _admitActiveFunder(PoolData storage pool_, address hot_, address funder_) internal {
         uint256 maxActiveFunders_ = _maxActiveFunders();
         if (pool_.activeCount >= maxActiveFunders_) {
@@ -229,9 +252,8 @@ abstract contract DelegateStakingPool is BidStorage, DelegationStorage, Delegate
         uint256 inspected_;
 
         while (current_ != address(0) && inspected_ < MAX_ACTIVE_FUNDERS_LIMIT) {
-            Grant storage grant_ = pool_.grants[current_];
-            if (_isActiveFunder(pool_, hot_, current_) && grant_.currentPrincipal > grant_.exposure) {
-                capacity_ += grant_.currentPrincipal - grant_.exposure;
+            if (_isActiveFunder(pool_, hot_, current_)) {
+                capacity_ += _getAvailablePrincipal(pool_.grants[current_]);
             }
             current_ = pool_.activeNodes[current_].next;
             unchecked {
@@ -240,8 +262,8 @@ abstract contract DelegateStakingPool is BidStorage, DelegationStorage, Delegate
         }
 
         Grant storage selfGrant_ = pool_.grants[hot_];
-        if (_isGrantLive(selfGrant_) && selfGrant_.currentPrincipal > selfGrant_.exposure) {
-            capacity_ += selfGrant_.currentPrincipal - selfGrant_.exposure;
+        if (_isGrantLive(selfGrant_)) {
+            capacity_ += _getAvailablePrincipal(selfGrant_);
         }
     }
 
@@ -269,12 +291,14 @@ abstract contract DelegateStakingPool is BidStorage, DelegationStorage, Delegate
             Grant storage grant_ = pool_.grants[current_];
             if (!_isActiveFunder(pool_, hot_, current_)) {
                 _removeActiveFunder(pool_, current_);
-            } else if (remaining_ != 0 && grant_.currentPrincipal > grant_.exposure) {
-                uint256 drawn_ = (uint256(grant_.currentPrincipal) - grant_.exposure).min(remaining_);
-                grant_.exposure = (uint256(grant_.exposure) + drawn_).toUint128();
-                remaining_ -= drawn_;
-                poolSession_.draws.push(PoolSessionDrawData(current_, drawn_.toUint96()));
-                emit DelegateStakingPoolDrawn(sessionId_, hot_, current_, drawn_);
+            } else if (remaining_ != 0) {
+                uint256 drawn_ = _getAvailablePrincipal(grant_).min(remaining_);
+                if (drawn_ != 0) {
+                    grant_.exposure = (uint256(grant_.exposure) + drawn_).toUint128();
+                    remaining_ -= drawn_;
+                    poolSession_.draws.push(PoolSessionDrawData(current_, drawn_.toUint96()));
+                    emit DelegateStakingPoolDrawn(sessionId_, hot_, current_, drawn_);
+                }
             }
             current_ = next_;
             unchecked {
@@ -284,8 +308,8 @@ abstract contract DelegateStakingPool is BidStorage, DelegationStorage, Delegate
 
         if (remaining_ != 0) {
             Grant storage selfGrant_ = pool_.grants[hot_];
-            if (_isGrantLive(selfGrant_) && selfGrant_.currentPrincipal > selfGrant_.exposure) {
-                uint256 drawn_ = (uint256(selfGrant_.currentPrincipal) - selfGrant_.exposure).min(remaining_);
+            uint256 drawn_ = _isGrantLive(selfGrant_) ? _getAvailablePrincipal(selfGrant_).min(remaining_) : 0;
+            if (drawn_ != 0) {
                 selfGrant_.exposure = (uint256(selfGrant_.exposure) + drawn_).toUint128();
                 remaining_ -= drawn_;
                 poolSession_.draws.push(PoolSessionDrawData(hot_, drawn_.toUint96()));
@@ -337,7 +361,7 @@ abstract contract DelegateStakingPool is BidStorage, DelegationStorage, Delegate
             _addPoolLock(pool_, hot_, releaseAt_, lock_);
         }
 
-        if (_releasePoolDraws(poolSession_, pool_, sessionId_, hot_) != stake_) {
+        if (_releasePoolDraws(poolSession_, pool_, sessionId_, stake_, lock_, releaseAt_) != stake_) {
             revert DelegateStakingInvalidPoolSettlement();
         }
         delete poolSession_.draws;
@@ -345,12 +369,20 @@ abstract contract DelegateStakingPool is BidStorage, DelegationStorage, Delegate
         _servicePoolWithdrawals(hot_, _maxAutoService());
     }
 
+    /**
+     * @dev Returns every draw to its funder and splits the session day lock across the draws
+     * pro rata to the drawn amounts. Cumulative rounding makes the shares add up to `lock_`.
+     */
     function _releasePoolDraws(
         PoolSessionData storage poolSession_,
         PoolData storage pool_,
         bytes32 sessionId_,
-        address hot_
+        uint256 stake_,
+        uint256 lock_,
+        uint128 releaseAt_
     ) internal returns (uint256 returned_) {
+        address hot_ = poolSession_.hot;
+        uint256 lockedSoFar_;
         uint256 drawsLength_ = poolSession_.draws.length;
         for (uint256 i = 0; i < drawsLength_; ) {
             PoolSessionDrawData storage draw_ = poolSession_.draws[i];
@@ -362,6 +394,11 @@ abstract contract DelegateStakingPool is BidStorage, DelegationStorage, Delegate
             }
             grant_.exposure = (uint256(grant_.exposure) - amount_).toUint128();
             returned_ += amount_;
+            if (lock_ != 0 && returned_ <= stake_) {
+                uint256 lockedTotal_ = (returned_ * lock_) / stake_;
+                _addLockedExposure(grant_, lockedTotal_ - lockedSoFar_, releaseAt_);
+                lockedSoFar_ = lockedTotal_;
+            }
             emit DelegateStakingPoolReturned(sessionId_, hot_, funder_, amount_);
             unchecked {
                 i++;
@@ -383,6 +420,7 @@ abstract contract DelegateStakingPool is BidStorage, DelegationStorage, Delegate
                 grant_.lifetimeFunded,
                 grant_.currentPrincipal,
                 grant_.exposure,
+                _getLockedExposure(grant_),
                 grant_.pending,
                 _isGrantLive(grant_),
                 _isPoolFunderApproved(pool_, hot_, funder_)

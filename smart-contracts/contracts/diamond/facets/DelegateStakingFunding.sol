@@ -176,6 +176,10 @@ contract DelegateStakingFunding is IDelegateStakingFunding, OwnableDiamondStorag
         if (pending_ != 0) {
             grant_.pending = (uint256(grant_.pending) + pending_).toUint128();
             pool_.pendingTotal = (uint256(pool_.pendingTotal) + pending_).toUint128();
+            // a repeated request moves the merged entry to the tail: later money waits behind earlier requests
+            if (pool_.withdrawalNodes[funder_].linked && pool_.withdrawalTail != funder_) {
+                _removeWithdrawal(pool_, funder_);
+            }
             if (!pool_.withdrawalNodes[funder_].linked) {
                 _appendWithdrawal(pool_, funder_);
             }

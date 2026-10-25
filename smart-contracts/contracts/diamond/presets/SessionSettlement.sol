@@ -299,7 +299,7 @@ abstract contract SessionSettlement is
             paid_ = amount_;
         } else if (payNow_) {
             token_ = IERC20(_getBidsStorage().token);
-            if (_canFundingPayAfterDebts(token_, sessionsStorage.fundingAccount, payoutStorage, amount_)) {
+            if (_canFundingPay(token_, sessionsStorage.fundingAccount, amount_)) {
                 paid_ = amount_;
             } else {
                 owed_ = amount_;
@@ -330,23 +330,13 @@ abstract contract SessionSettlement is
     }
 
     /**
-     * @dev Outstanding provider debts are reserved first: a new reward is paid at accrual only if the
-     * funding account covers all pending debts plus this amount. Debts themselves are paid on claim.
+     * @dev A reward is paid at accrual when the funding account's balance and allowance cover it;
+     * otherwise it becomes debt. Outstanding debts are not reserved: they are paid on claim.
      */
-    function _canFundingPayAfterDebts(
-        IERC20 token_,
-        address fundingAccount_,
-        ProviderPayoutsStorage storage payoutStorage,
-        uint256 amount_
-    ) private view returns (bool) {
-        uint256 reserved_ = payoutStorage.pendingProviderClaims;
-        uint256 balance_ = token_.balanceOf(fundingAccount_);
-        if (balance_ < reserved_ || balance_ - reserved_ < amount_) {
-            return false;
-        }
-
-        uint256 allowance_ = token_.allowance(fundingAccount_, address(this));
-        return allowance_ >= reserved_ && allowance_ - reserved_ >= amount_;
+    function _canFundingPay(IERC20 token_, address fundingAccount_, uint256 amount_) private view returns (bool) {
+        return
+            token_.balanceOf(fundingAccount_) >= amount_ &&
+            token_.allowance(fundingAccount_, address(this)) >= amount_;
     }
 
     function _payProviderDebt(address provider_) internal returns (uint256 amount_) {
