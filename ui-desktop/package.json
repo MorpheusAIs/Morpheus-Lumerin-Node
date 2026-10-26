@@ -127,12 +127,12 @@
     "@types/redux-actions": "^2.6.5",
     "@types/styled-components": "^5.1.34",
     "@types/yauzl": "^2.10.3",
-    "@vitejs/plugin-react": "^4.2.1",
-    "@vitest/coverage-v8": "^2.1.8",
+    "@vitejs/plugin-react": "^4.7.0",
+    "@vitest/coverage-v8": "^4.1.12",
     "babel-plugin-styled-components": "^2.1.4",
     "electron": "^43.8.3",
     "electron-builder": "26.0.12",
-    "electron-vite": "^2.3.0",
+    "electron-vite": "^3.1.0",
     "eslint": "^8.56.0",
     "eslint-plugin-react": "^7.33.2",
     "jsdom": "^25.0.1",
@@ -141,9 +141,9 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "typescript": "^5.3.3",
-    "vite": "^5.0.12",
-    "vite-plugin-node-polyfills": "^0.21.0",
+    "vite": "^6.4.5",
+    "vite-plugin-node-polyfills": "^0.24.0",
     "vite-plugin-svgr": "^4.2.0",
-    "vitest": "^2.1.8"
+    "vitest": "^4.1.12"
   }
 }
