@@ -5,18 +5,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/netip"
 	"os"
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/filters"
-	"github.com/docker/docker/client"
-	"github.com/docker/docker/pkg/archive"
-	"github.com/docker/docker/pkg/jsonmessage"
-	"github.com/docker/go-connections/nat"
+	"github.com/moby/go-archive"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/jsonstream"
+	"github.com/moby/moby/api/types/network"
+	"github.com/moby/moby/client"
+	"github.com/moby/moby/client/pkg/jsonmessage"
 )
+
+// buildProgressWidth is the bar width the old jsonmessage.JSONProgress.String used without a terminal
+const buildProgressWidth = 200
 
 // DockerManager is a wrapper for the Docker SDK
 type DockerManager struct {
@@ -65,7 +68,8 @@ type BuildProgressCallback func(progress BuildProgress) error
 // NewDockerManager creates a new Docker manager
 func NewDockerManager(log lib.ILogger) *DockerManager {
 	fmt.Println("Creating Docker client with env", os.Getenv("DOCKER_HOST"))
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	// The client negotiates the API version with the daemon by default
+	cli, err := client.New(client.FromEnv)
 	if err != nil {
 		log.Error("Error creating Docker client:", err)
 		return &DockerManager{client: nil, log: log}
@@ -101,7 +105,7 @@ func (d *DockerManager) BuildImage(ctx context.Context, contextPath, dockerfile,
 	defer buildContextTar.Close()
 
 	// Prepare build options
-	buildOptions := types.ImageBuildOptions{
+	buildOptions := client.ImageBuildOptions{
 		Context:    buildContextTar,
 		Dockerfile: dockerfile,
 		Tags:       []string{tag},
@@ -128,7 +132,7 @@ func (d *DockerManager) BuildImage(ctx context.Context, contextPath, dockerfile,
 	// Parse the response
 	decoder := json.NewDecoder(resp.Body)
 	for {
-		var msg jsonmessage.JSONMessage
+		var msg jsonstream.Message
 		if err := decoder.Decode(&msg); err != nil {
 			if err == io.EOF {
 				break
@@ -148,7 +152,7 @@ func (d *DockerManager) BuildImage(ctx context.Context, contextPath, dockerfile,
 			fmt.Println("Progress message", msg)
 			progressStr := ""
 			if msg.Progress != nil {
-				progressStr = msg.Progress.String()
+				progressStr = jsonmessage.RenderTUIProgress(*msg.Progress, buildProgressWidth)
 			}
 			progress := BuildProgress{
 				Status:      msg.Status,
@@ -194,14 +198,21 @@ func (d *DockerManager) StartContainer(ctx context.Context, imageName string, co
 	}
 
 	// Create port bindings
-	portBindings := nat.PortMap{}
-	exposedPorts := nat.PortSet{}
+	portBindings := network.PortMap{}
+	exposedPorts := network.PortSet{}
 	for containerPort, hostPort := range ports {
-		port := nat.Port(containerPort)
+		port, err := network.ParsePort(containerPort)
+		if err != nil {
+			return "", fmt.Errorf("invalid container port %q: %w", containerPort, err)
+		}
+		// "8080" and "8080/tcp" parse to the same port; map order would pick the binding
+		if _, ok := portBindings[port]; ok {
+			return "", fmt.Errorf("container port %q is listed more than once", port.String())
+		}
 		exposedPorts[port] = struct{}{}
-		portBindings[port] = []nat.PortBinding{
+		portBindings[port] = []network.PortBinding{
 			{
-				HostIP:   "0.0.0.0",
+				HostIP:   netip.IPv4Unspecified(),
 				HostPort: hostPort,
 			},
 		}
@@ -232,13 +243,17 @@ func (d *DockerManager) StartContainer(ctx context.Context, imageName string, co
 	}
 
 	// Create container
-	resp, err := d.client.ContainerCreate(ctx, config, hostConfig, nil, nil, containerName)
+	resp, err := d.client.ContainerCreate(ctx, client.ContainerCreateOptions{
+		Config:     config,
+		HostConfig: hostConfig,
+		Name:       containerName,
+	})
 	if err != nil {
 		return "", fmt.Errorf("failed to create container: %w", err)
 	}
 
 	// Start container
-	if err := d.client.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
+	if _, err := d.client.ContainerStart(ctx, resp.ID, client.ContainerStartOptions{}); err != nil {
 		return "", fmt.Errorf("failed to start container: %w", err)
 	}
 
@@ -256,9 +271,10 @@ func (d *DockerManager) StopContainer(ctx context.Context, containerID string, t
 		timeout = 10
 	}
 
-	return d.client.ContainerStop(ctx, containerID, container.StopOptions{
+	_, err := d.client.ContainerStop(ctx, containerID, client.ContainerStopOptions{
 		Timeout: &timeout,
 	})
+	return err
 }
 
 // RemoveContainer removes a Docker container
@@ -267,11 +283,12 @@ func (d *DockerManager) RemoveContainer(ctx context.Context, containerID string,
 		return err
 	}
 
-	options := container.RemoveOptions{
+	options := client.ContainerRemoveOptions{
 		Force: force,
 	}
 
-	return d.client.ContainerRemove(ctx, containerID, options)
+	_, err := d.client.ContainerRemove(ctx, containerID, options)
+	return err
 }
 
 // GetContainerInfo retrieves information about a container
@@ -280,20 +297,21 @@ func (d *DockerManager) GetContainerInfo(ctx context.Context, containerID string
 		return nil, err
 	}
 
-	resp, err := d.client.ContainerInspect(ctx, containerID)
+	result, err := d.client.ContainerInspect(ctx, containerID, client.ContainerInspectOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to inspect container: %w", err)
 	}
+	resp := result.Container
 
 	// Extract port mappings
 	ports := []PortMapping{}
 	for containerPort, bindings := range resp.NetworkSettings.Ports {
 		for _, binding := range bindings {
 			ports = append(ports, PortMapping{
-				HostIP:        binding.HostIP,
+				HostIP:        addrString(binding.HostIP),
 				HostPort:      binding.HostPort,
 				ContainerPort: containerPort.Port(),
-				Protocol:      containerPort.Proto(),
+				Protocol:      string(containerPort.Proto()),
 			})
 		}
 	}
@@ -302,8 +320,8 @@ func (d *DockerManager) GetContainerInfo(ctx context.Context, containerID string
 		ID:          resp.ID,
 		Name:        resp.Name,
 		Image:       resp.Config.Image,
-		Status:      resp.State.Status,
-		State:       resp.State.Status,
+		Status:      string(resp.State.Status),
+		State:       string(resp.State.Status),
 		CreatedAt:   resp.Created,
 		Ports:       ports,
 		Labels:      resp.Config.Labels,
@@ -320,13 +338,13 @@ func (d *DockerManager) ListContainers(ctx context.Context, all bool, filterLabe
 	}
 
 	// Create filters
-	filterArgs := filters.NewArgs()
+	filterArgs := make(client.Filters)
 	for k, v := range filterLabels {
 		filterArgs.Add("label", fmt.Sprintf("%s=%s", k, v))
 	}
 
 	// List containers
-	containers, err := d.client.ContainerList(ctx, container.ListOptions{
+	list, err := d.client.ContainerList(ctx, client.ContainerListOptions{
 		All:     all,
 		Filters: filterArgs,
 	})
@@ -335,13 +353,13 @@ func (d *DockerManager) ListContainers(ctx context.Context, all bool, filterLabe
 	}
 
 	// Process containers
-	result := make([]ContainerInfo, 0, len(containers))
-	for _, c := range containers {
+	result := make([]ContainerInfo, 0, len(list.Items))
+	for _, c := range list.Items {
 		// Extract port mappings
 		ports := []PortMapping{}
 		for _, port := range c.Ports {
 			ports = append(ports, PortMapping{
-				HostIP:        port.IP,
+				HostIP:        addrString(port.IP),
 				HostPort:      fmt.Sprintf("%d", port.PublicPort),
 				ContainerPort: fmt.Sprintf("%d", port.PrivatePort),
 				Protocol:      port.Type,
@@ -363,7 +381,7 @@ func (d *DockerManager) ListContainers(ctx context.Context, all bool, filterLabe
 			Name:      name,
 			Image:     c.Image,
 			Status:    c.Status,
-			State:     c.State,
+			State:     string(c.State),
 			CreatedAt: time.Unix(c.Created, 0).Format(time.RFC3339),
 			Ports:     ports,
 			Labels:    c.Labels,
@@ -381,7 +399,7 @@ func (d *DockerManager) GetContainerLogs(ctx context.Context, containerID string
 		return nil, err
 	}
 
-	options := container.LogsOptions{
+	options := client.ContainerLogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
 		Follow:     follow,
@@ -400,7 +418,7 @@ func (d *DockerManager) GetDockerVersion(ctx context.Context) (string, error) {
 		return "", err
 	}
 
-	versionInfo, err := d.client.ServerVersion(ctx)
+	versionInfo, err := d.client.ServerVersion(ctx, client.ServerVersionOptions{})
 	if err != nil {
 		return "", fmt.Errorf("failed to get Docker version: %w", err)
 	}
@@ -414,12 +432,12 @@ func (d *DockerManager) PruneImages(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 
-	report, err := d.client.ImagesPrune(ctx, filters.NewArgs())
+	result, err := d.client.ImagePrune(ctx, client.ImagePruneOptions{})
 	if err != nil {
 		return 0, fmt.Errorf("failed to prune images: %w", err)
 	}
 
-	return int64(report.SpaceReclaimed), nil
+	return int64(result.Report.SpaceReclaimed), nil
 }
 
 // PruneContainers removes stopped containers
@@ -428,10 +446,18 @@ func (d *DockerManager) PruneContainers(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 
-	report, err := d.client.ContainersPrune(ctx, filters.NewArgs())
+	result, err := d.client.ContainerPrune(ctx, client.ContainerPruneOptions{})
 	if err != nil {
 		return 0, fmt.Errorf("failed to prune containers: %w", err)
 	}
 
-	return int64(report.SpaceReclaimed), nil
+	return int64(result.Report.SpaceReclaimed), nil
+}
+
+// addrString returns "" for an unset address, as the string fields of the old API types did
+func addrString(addr netip.Addr) string {
+	if !addr.IsValid() {
+		return ""
+	}
+	return addr.String()
 }
