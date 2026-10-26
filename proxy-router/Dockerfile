@@ -1,6 +1,6 @@
 # Stage 1: Build
-# Go 1.26.10. Keep it equal to the toolchain line in go.mod, which CI uses for the release binaries.
-FROM golang:1.26-bookworm@sha256:632dff7351799a5a9954a48dc06670ade72ee44e8c351cdc0e5a57af2fea21af AS builder
+# Go 1.26.10, the version in the go line of go.mod. CI builds the release binaries with the same version.
+FROM golang:1.26.10-bookworm@sha256:632dff7351799a5a9954a48dc06670ade72ee44e8c351cdc0e5a57af2fea21af AS builder
 
 # Refresh the CA bundle that is copied into the scratch image below.
 # - apt-get update fails on any index error (retried for transient mirror errors)
@@ -47,6 +47,9 @@ WORKDIR /app
 
 # Copy go mod files first for better caching
 COPY go.mod go.sum ./
+# Stop when the Go in this image differs from the go line in go.mod
+RUN want="go$(sed -n 's/^go //p' go.mod)"; have="$(go env GOVERSION)"; \
+    [ "$have" = "$want" ] || { echo "builder has $have, go.mod says $want" >&2; exit 1; }
 RUN go mod download
 
 # Copy source code after dependencies are cached

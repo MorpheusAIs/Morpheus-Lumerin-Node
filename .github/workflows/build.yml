@@ -155,7 +155,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      # The toolchain line in proxy-router/go.mod sets the Go version.
+      # The go line in proxy-router/go.mod sets the Go version.
       # Keep it equal to the Go version of the builder image in proxy-router/Dockerfile.
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -1232,7 +1232,7 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      # The toolchain line in proxy-router/go.mod sets the Go version.
+      # The go line in proxy-router/go.mod sets the Go version.
       # Keep it equal to the Go version of the builder image in proxy-router/Dockerfile.
       - name: Set up Go
         uses: actions/setup-go@v6

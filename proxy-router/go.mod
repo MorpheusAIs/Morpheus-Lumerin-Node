@@ -1,8 +1,6 @@
 module github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router
 
-go 1.26.5
-
-toolchain go1.26.10
+go 1.26.10
 
 require (
 	github.com/btcsuite/btcd v0.24.2
