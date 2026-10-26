@@ -360,6 +360,7 @@ declare global {
   interface Window {
     ipcRenderer: IpcRendererBridge
     openLink: (url: string) => Promise<void>
+    getPathForFile: (file: File) => string
     getAppVersion: () => string
     copyToClipboard: (text: string) => Promise<void>
     cowork: CoworkApi

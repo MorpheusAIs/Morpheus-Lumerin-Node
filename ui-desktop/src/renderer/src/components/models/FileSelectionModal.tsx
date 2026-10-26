@@ -125,8 +125,6 @@ const ErrorMessage = styled.p`
   margin: 0;
 `;
 
-type ModelFile = File & { path?: string };
-
 const formatFileSize = (bytes: number) => {
   if (bytes < 1024) return `${bytes} bytes`;
   if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(2)} KB`;
@@ -152,7 +150,9 @@ const FileSelectionModal = ({
   pinFile,
   toasts,
 }) => {
-  const [file, setFile] = useState<ModelFile | null>(null);
+  const [file, setFile] = useState<File | null>(null);
+  // Electron 32 removed `File.path`; the preload resolves it instead.
+  const [filePath, setFilePath] = useState('');
   const [modelName, setModelName] = useState('');
   const [modelID, setModelID] = useState('');
   const [tags, setTags] = useState('');
@@ -175,7 +175,7 @@ const FileSelectionModal = ({
   const onPinModel = async (event: React.FormEvent) => {
     event.preventDefault();
     if (pendingRef.current) return;
-    if (!file?.path) {
+    if (!filePath) {
       setError('Choose one model file from your computer before pinning.');
       return;
     }
@@ -186,7 +186,7 @@ const FileSelectionModal = ({
     setError('');
     try {
       const response = await addFileToIpfs(
-        file.path,
+        filePath,
         modelID.trim(),
         modelName.trim(),
         tags.trim()
@@ -302,9 +302,12 @@ const FileSelectionModal = ({
               if (selected && selected.length > 1) {
                 setError('Choose one model file at a time.');
                 setFile(null);
+                setFilePath('');
                 return;
               }
-              setFile(selected?.[0] ?? null);
+              const next = selected?.[0] ?? null;
+              setFile(next);
+              setFilePath(next ? window.getPathForFile(next) : '');
               setError('');
             }}
           />
@@ -319,8 +322,8 @@ const FileSelectionModal = ({
               <strong>{file.name}</strong>
               <span className="file-detail">{formatFileSize(file.size)}</span>
             </div>
-            {file.path && (
-              <div className="file-detail file-path">{file.path}</div>
+            {filePath && (
+              <div className="file-detail file-path">{filePath}</div>
             )}
           </FileSummary>
         )}

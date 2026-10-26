@@ -1,4 +1,4 @@
-import { ipcRenderer, contextBridge } from 'electron'
+import { ipcRenderer, contextBridge, webUtils } from 'electron'
 
 const coworkChannels = {
   getApprovalPolicy: 'cowork:get-approval-policy',
@@ -385,6 +385,12 @@ if (process.contextIsolated) {
       return ipcRenderer.invoke('open-external-url', url)
     }
 
+    // `File.path` was removed in Electron 32. Returns '' for a File that is
+    // not backed by a file on disk.
+    const getPathForFile = function (file: File): string {
+      return webUtils.getPathForFile(file)
+    }
+
     contextBridge.exposeInMainWorld('ipcRenderer', {
       send(eventName, payload) {
         if (!legacyIpcChannels.has(eventName)) throw new Error('Unsupported desktop IPC channel.')
@@ -414,6 +420,7 @@ if (process.contextIsolated) {
     })
 
     contextBridge.exposeInMainWorld('openLink', openLink)
+    contextBridge.exposeInMainWorld('getPathForFile', getPathForFile)
     contextBridge.exposeInMainWorld('getAppVersion', getAppVersion)
     contextBridge.exposeInMainWorld('copyToClipboard', copyToClipboard)
     contextBridge.exposeInMainWorld('cowork', cowork)

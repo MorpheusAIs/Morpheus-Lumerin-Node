@@ -100,6 +100,9 @@ const BINARY_ARTIFACT_EXTENSIONS = new Set(['.docx', '.xlsx', '.pptx', '.pdf'])
 let registered = false
 let recoveryBarrier: Promise<void> = Promise.resolve()
 let quitting = false
+// Electron 43 opens file dialogs in Downloads and the OS no longer restores the
+// last-used folder, so start next to the previously connected project instead.
+let lastProjectParent: string | undefined
 type ResolvedModelOption = CoworkModelOption & { boundaryFingerprint: string }
 const cachedModelOptions = new Map<string, { value: ResolvedModelOption[]; expiresAt: number }>()
 const modelOptionsInFlight = new Map<string, Promise<ResolvedModelOption[]>>()
@@ -522,15 +525,14 @@ export function registerCoworkIpc(): void {
     await requireActiveCoworkSession()
     const input = record(value)
     const owner = BrowserWindow.fromWebContents(event.sender) ?? undefined
+    const options: Electron.OpenDialogOptions = {
+      title: 'Connect a folder to Workspace',
+      defaultPath: lastProjectParent ?? app.getPath('home'),
+      properties: ['openDirectory', 'createDirectory']
+    }
     const selection = owner
-      ? await dialog.showOpenDialog(owner, {
-          title: 'Connect a folder to Workspace',
-          properties: ['openDirectory', 'createDirectory']
-        })
-      : await dialog.showOpenDialog({
-          title: 'Connect a folder to Workspace',
-          properties: ['openDirectory', 'createDirectory']
-        })
+      ? await dialog.showOpenDialog(owner, options)
+      : await dialog.showOpenDialog(options)
     if (selection.canceled || !selection.filePaths[0]) return null
     const selectedRoot = await fs.realpath(selection.filePaths[0])
     const userDataRoot = await fs
@@ -551,6 +553,7 @@ export function registerCoworkIpc(): void {
           ? ''
           : stringValue(input.instructions, 'Instructions', 20_000, true)
     })
+    lastProjectParent = path.dirname(selectedRoot)
     return publicProject(project)
   })
 
