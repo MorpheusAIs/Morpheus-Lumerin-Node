@@ -82,7 +82,7 @@ runs:
     - name: Set up Go environment
       uses: actions/setup-go@v6
       with:
-        go-version: 1.25
+        go-version-file: proxy-router/go.mod
 
     - name: Run Go API Tests
       shell: bash
