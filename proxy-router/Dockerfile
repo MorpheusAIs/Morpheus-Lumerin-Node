@@ -1,4 +1,5 @@
 # Stage 1: Build
+# Go 1.26.10. Keep it equal to the toolchain line in go.mod, which CI uses for the release binaries.
 FROM golang:1.26-bookworm@sha256:632dff7351799a5a9954a48dc06670ade72ee44e8c351cdc0e5a57af2fea21af AS builder
 
 # Refresh the CA bundle that is copied into the scratch image below.

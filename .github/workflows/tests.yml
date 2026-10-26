@@ -39,7 +39,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
+      # v6 reads the toolchain line in go.mod; v5 installs the go line version.
+      - uses: actions/setup-go@v6
         with:
           go-version-file: proxy-router/go.mod
           cache-dependency-path: proxy-router/go.sum
