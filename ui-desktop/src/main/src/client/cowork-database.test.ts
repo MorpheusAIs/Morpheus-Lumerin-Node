@@ -25,7 +25,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   for (const db of openedDatastores.splice(0)) {
-    db.persistence.stopAutocompaction()
+    db.stopAutocompaction()
   }
   await fs.rm(suiteDirectory, { recursive: true, force: true })
 })

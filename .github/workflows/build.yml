@@ -155,10 +155,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      # The go line in proxy-router/go.mod sets the Go version.
+      # Keep it equal to the Go version of the builder image in proxy-router/Dockerfile.
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.25.x"
+          go-version-file: proxy-router/go.mod
           cache-dependency-path: |
             proxy-router/go.sum
             cli/go.sum
@@ -1230,10 +1232,12 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
+      # The go line in proxy-router/go.mod sets the Go version.
+      # Keep it equal to the Go version of the builder image in proxy-router/Dockerfile.
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.25.x"
+          go-version-file: proxy-router/go.mod
           cache-dependency-path: |
             proxy-router/go.sum
             cli/go.sum
