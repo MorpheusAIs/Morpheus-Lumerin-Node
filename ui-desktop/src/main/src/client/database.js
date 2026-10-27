@@ -1,40 +1,30 @@
 'use strict'
 
 const { app } = require('electron')
-const { promisify } = require('util')
 const { sum, upperFirst } = require('lodash')
-const Datastore = require('nedb')
+// The original `nedb` calls util.isDate, which Node 23 removed (Electron 43
+// embeds Node 24). This fork reads the same data files and has native *Async
+// methods.
+const Datastore = require('@seald-io/nedb')
 const path = require('path')
 
 import logger from '../../logger'
 import config from '../../config'
-
-const promisifyMethods = (methods) =>
-  function (obj) {
-    methods.forEach(function (method) {
-      obj[`${method}Async`] = promisify(obj[method].bind(obj))
-    })
-    return obj
-  }
-
-const promisifyCollection = promisifyMethods(['find', 'insert', 'findOne', 'remove', 'update'])
 
 const collections = {}
 
 function addCollection(name) {
   logger.verbose(`Creating database collection ${name}`)
 
-  const newCollection = promisifyCollection(
-    new Datastore({
-      filename: path.join(app.getPath('userData'), `Database/${upperFirst(name)}`),
-      autoload: true
-    })
-  )
+  const newCollection = new Datastore({
+    filename: path.join(app.getPath('userData'), `Database/${upperFirst(name)}`),
+    autoload: true
+  })
 
   collections[name] = newCollection
 
   if (config.dbAutocompactionInterval) {
-    newCollection.persistence.setAutocompactionInterval(config.dbAutocompactionInterval)
+    newCollection.setAutocompactionInterval(config.dbAutocompactionInterval)
   }
 
   return newCollection

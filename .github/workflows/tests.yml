@@ -121,9 +121,8 @@ jobs:
       # release".
       # Node 22, not 20: @testing-library/jest-dom@6 declares `engines.node
       # >=22`, so yarn refuses to install on 20 ("Found incompatible module")
-      # and the job dies before a single test runs. The app's own floor is
-      # unchanged — package.json still says `engines.node >=20`; this is the
-      # test toolchain only.
+      # and the job dies before a single test runs. electron@43 needs
+      # >=22.12.0, which package.json `engines.node` now matches.
       - uses: actions/setup-node@v4
         with:
           node-version: 22

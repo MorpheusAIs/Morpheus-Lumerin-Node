@@ -2,7 +2,7 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ThemeProvider } from 'styled-components';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FileSelectionModal from './FileSelectionModal';
 import theme from '../../ui/theme';
 
@@ -14,11 +14,7 @@ vi.mock('../contracts/modals/Modal', () => ({
   ),
 }));
 
-const selectedFile = () => {
-  const file = new File(['model data'], 'model.gguf');
-  Object.defineProperty(file, 'path', { value: '/selected/model.gguf' });
-  return file;
-};
+const selectedFile = () => new File(['model data'], 'model.gguf');
 const response = { metadataCIDHash: 'metadata-hash', fileCIDHash: 'file-hash' };
 
 function mountModal(overrides = {}) {
@@ -40,6 +36,12 @@ function mountModal(overrides = {}) {
 }
 
 describe('pin one model file', () => {
+  beforeEach(() => {
+    window.getPathForFile = vi.fn((file) =>
+      file.name === 'model.gguf' ? '/selected/model.gguf' : '',
+    );
+  });
+
   it('keeps hooks stable across visibility changes and preserves draft fields', () => {
     const { update } = mountModal({ isActive: false });
     expect(screen.queryByRole('dialog')).toBeNull();
@@ -63,6 +65,18 @@ describe('pin one model file', () => {
     expect(
       fireEvent.submit(screen.getByRole('form', { name: 'Pin model file' })),
     ).toBe(false);
+    expect(props.addFileToIpfs).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Choose one model file',
+    );
+  });
+
+  it('refuses a file that has no path on disk', () => {
+    const { props } = mountModal();
+    fireEvent.change(screen.getByLabelText('Model file'), {
+      target: { files: [new File(['pasted'], 'pasted.bin')] },
+    });
+    fireEvent.submit(screen.getByRole('form', { name: 'Pin model file' }));
     expect(props.addFileToIpfs).not.toHaveBeenCalled();
     expect(screen.getByRole('alert')).toHaveTextContent(
       'Choose one model file',

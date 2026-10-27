@@ -57,6 +57,10 @@ type ActiveDownload = {
 }
 
 const folderGrants = new Map<string, FolderGrant>()
+// Electron 43 opens file dialogs in Downloads and the OS no longer restores the
+// last-used folder. Downloads is a fine first choice; after that, reopen the
+// folder the user picked last.
+let lastDownloadFolder: string | undefined
 const activeDownloads = new Map<string, ActiveDownload>()
 const requestIdPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/iu
 
@@ -283,9 +287,13 @@ export function registerIpfsDownloadIpc(): void {
       throw new Error('Too many unused download folders are selected.')
     }
     const owner = BrowserWindow.fromWebContents(event.sender)
+    const options: Electron.OpenDialogOptions = {
+      defaultPath: lastDownloadFolder,
+      properties: ['openDirectory']
+    }
     const result = owner
-      ? await dialog.showOpenDialog(owner, { properties: ['openDirectory'] })
-      : await dialog.showOpenDialog({ properties: ['openDirectory'] })
+      ? await dialog.showOpenDialog(owner, options)
+      : await dialog.showOpenDialog(options)
     if (result.canceled || result.filePaths.length !== 1) {
       return { canceled: true }
     }
@@ -295,6 +303,7 @@ export function registerIpfsDownloadIpc(): void {
     const folder = await fs.realpath(result.filePaths[0])
     const folderStat = await fs.stat(folder)
     if (!folderStat.isDirectory()) throw new Error('The selected download folder is invalid.')
+    lastDownloadFolder = folder
 
     const folderToken = randomUUID()
     const key = scopedKey(event.sender.id, folderToken)
