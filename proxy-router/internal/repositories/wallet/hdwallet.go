@@ -4,8 +4,8 @@ import (
 	"crypto/ecdsa"
 	"errors"
 
+	"github.com/btcsuite/btcd/btcutil/hdkeychain"
 	"github.com/btcsuite/btcd/chaincfg"
-	"github.com/btcsuite/btcutil/hdkeychain"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/tyler-smith/go-bip39"
@@ -74,11 +74,11 @@ func (w *Wallet) DerivePrivateKey(path accounts.DerivationPath) (*ecdsa.PrivateK
 		}
 	}
 
+	// btcec/v2 ToECDSA dereferences the key, so check err before calling it
 	privateKey, err := key.ECPrivKey()
-	privateKeyECDSA := privateKey.ToECDSA()
 	if err != nil {
 		return nil, err
 	}
 
-	return privateKeyECDSA, nil
+	return privateKey.ToECDSA(), nil
 }

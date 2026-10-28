@@ -64,6 +64,29 @@ function contentSecurityPolicyPlugin(isDevelopment: boolean, sentryDsn?: string)
   }
 }
 
+// Since Vite 6, a CommonJS `require('buffer')` (safe-buffer, readable-stream,
+// bn.js, ...) resolves the polyfill shim through its "require" export
+// (index.cjs), while the injected `Buffer` global and ESM imports use its
+// "import" export (index.js). That bundles two Buffer implementations, so
+// `instanceof Buffer` fails between dependencies. Send every request for the
+// shim to the ESM build, which is what Vite 5 produced.
+function singleBufferShimPlugin(): Plugin {
+  const shim = 'vite-plugin-node-polyfills/shims/buffer'
+  return {
+    name: 'morpheus-single-buffer-shim',
+    enforce: 'pre',
+    resolveId(source, importer, options) {
+      const nodeResolve = options.custom?.['node-resolve']
+      if (source !== shim || !nodeResolve?.isRequire) return null
+      return this.resolve(source, importer, {
+        ...options,
+        skipSelf: true,
+        custom: { ...options.custom, 'node-resolve': { ...nodeResolve, isRequire: false } }
+      })
+    }
+  }
+}
+
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
@@ -168,7 +191,8 @@ export default defineConfig(({ command, mode }) => {
         contentSecurityPolicyPlugin(command === 'serve', env.SENTRY_DSN),
         react({ babel: { plugins: ['styled-components'], babelrc: false, configFile: false } }),
         svgr(),
-        nodePolyfills()
+        nodePolyfills(),
+        singleBufferShimPlugin()
       ],
       define: processEnvDefineMap
     }
