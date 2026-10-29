@@ -28,6 +28,7 @@ The upgrade cut onto a diamond running the earlier SessionRouter:
 5. Init call: `ProviderPayouts.__ProviderPayouts_init()` (sets the
    `lifetimeClaimed` start time).
 
+The operator procedure is in [stage-1-upgrade-runbook.md](../stage-1-upgrade-runbook.md).
 `test/helpers/deployers/diamond/facets/diamond-upgrade.ts` builds exactly this cut; the
 upgrade tests check the final routing and facet sizes.
 

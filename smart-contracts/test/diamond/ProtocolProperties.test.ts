@@ -634,6 +634,36 @@ describe('Protocol properties', () => {
       console.log(`      gas: serve 32 withdrawals = ${serveGas}`);
       expect(serveGas).to.be.lessThan(GAS_BUDGET);
     });
+
+    it('should release a day lock and serve the maximum withdrawal batch within the gas budget', async function () {
+      this.timeout(300_000);
+      await setTime(openTime);
+      await delegateStakingFunding.setMinPrincipal(1);
+      const wallets = await createFunders(HOT_A, 33, wei(5), openTime + 60 * DAY);
+
+      // an early close on the same day leaves a lock; the close serves one queued withdrawal, the release 32
+      const { sessionId } = await openFromPool(HOT_A, wei(165), 0);
+      for (const wallet of wallets) {
+        await delegateStakingFunding.connect(wallet).requestStakingWithdrawal(HOT_A, wallet.address, wei(5));
+      }
+      await delegateStakingFunding.setMaxAutoService(1);
+      const session = await sessionRouter.getSession(sessionId);
+      await setTime(Number(session.openedAt) + 3600);
+      await closeFromPool(HOT_A, sessionId);
+      const [[bucket]] = await delegateStakingFunding.getPoolLockBuckets(HOT_A, 0, 1);
+      expect(bucket.amount).to.be.greaterThan(0);
+      expect((await delegateStakingFunding.getPoolWithdrawalQueue(HOT_A, ethers.ZeroAddress, 1))[2]).to.eq(32);
+
+      await delegateStakingFunding.setMaxAutoService(32);
+      await setTime(Number(bucket.releaseAt));
+      const releaseGas = await gasOf(delegateStakingFunding.connect(KEEPER).releasePoolLocks(HOT_A, 32));
+      const balances = await delegateStakingFunding.getPoolBalances(HOT_A);
+      expect(balances.locked).to.eq(0);
+      expect(balances.pendingTotal).to.eq(0);
+
+      console.log(`      gas: release lock + serve 32 withdrawals = ${releaseGas}`);
+      expect(releaseGas).to.be.lessThan(GAS_BUDGET);
+    });
   });
 
   describe('interleaved regular and pool sessions', () => {

@@ -122,3 +122,4 @@ ABI) before it builds against the new bindings. Solidity code that calls them th
   `DelegateStaking`, while pool state is live. A fix ships as a new facet.
 - Sessions opened before the cut are regular sessions (no pool record) and close, claim and
   withdraw as before; on a short funding account they now produce debt instead of reverting.
+- Cut procedure and checks: [stage-1-upgrade-runbook.md](stage-1-upgrade-runbook.md).

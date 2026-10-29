@@ -244,11 +244,13 @@ budget.
 
 | Case | Gas |
 |---|---|
-| Open with 129 draws | 5.24M |
-| Close that session | 1.79M |
-| Settle that session | 1.63M |
+| Open with 129 draws | 5.54M |
+| Close that session | 1.83M |
+| Settle that session | 4.47M |
+| Early close of 129 draws with a day lock on every funder | 4.84M |
 | Admit a funder after purging 128 expired grants | 1.77M |
 | Serve 32 queued withdrawals | 1.27M |
+| Release a day lock and serve 32 queued withdrawals | 1.31M |
 
 ## Events
 
