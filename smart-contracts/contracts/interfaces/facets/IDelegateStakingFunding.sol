@@ -41,6 +41,7 @@ interface IDelegateStakingFunding is IDelegateStakingStorage {
 
     /**
      * @notice Withdraws available principal and queues any unpaid remainder.
+     * A repeated request merges into the funder's queued entry and moves it to the queue tail.
      * @param hot_ The hot wallet whose pool holds the principal.
      * @param funder_ The funder whose principal is withdrawn.
      * @param amount_ The amount to withdraw.

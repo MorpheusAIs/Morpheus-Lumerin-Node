@@ -40,6 +40,7 @@ abstract contract SessionSettlement is
     using Math for uint256;
     using SafeERC20 for IERC20;
 
+    // caps gas forwarded to a contract provider's `owner()` lookup; failed or malformed responses do not match
     uint256 internal constant PROVIDER_OWNER_STATICCALL_GAS = 100_000;
 
     struct UserSettlement {
