@@ -7,10 +7,13 @@ import { DelegateRegistry } from '@/generated-types/ethers/contracts/mock/delega
 import { getHex, wei } from '@/scripts/utils/utils';
 import {
   deployDelegateRegistry,
+  deployFacetDelegateStaking,
+  deployFacetDelegateStakingFunding,
   deployFacetDelegation,
   deployFacetMarketplace,
   deployFacetModelRegistry,
   deployFacetProviderRegistry,
+  deployFacetProviderPayouts,
   deployFacetSessionRouter,
   deployLumerinDiamond,
   deployMORToken,
@@ -44,6 +47,9 @@ describe('Delegation', () => {
       deployFacetSessionRouter(diamond, OWNER),
       deployFacetMarketplace(diamond, token, wei(0.0001), wei(900)),
       deployFacetDelegation(diamond, delegateRegistry),
+      deployFacetProviderPayouts(diamond),
+      deployFacetDelegateStaking(diamond),
+      deployFacetDelegateStakingFunding(diamond),
     ]);
 
     await reverter.snapshot();
