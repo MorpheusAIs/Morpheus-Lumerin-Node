@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"math/big"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	chat "github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat"
@@ -18,6 +20,39 @@ import (
 )
 
 const httpErrorMessage string = "internal error: %v; http status: %v"
+
+// bidFetchWorkers bounds how many bid lookups are in flight at once while the
+// model picker loads.
+//
+// The marketplace carries 500+ models and each one costs a request, so running
+// them one at a time took minutes. Firing all of them at once instead would
+// overwhelm the shared public RPCs the router proxies to -- the same throttling
+// that makes those lookups slow in the first place. Eight cuts the wall time by
+// roughly an order of magnitude while staying polite to the endpoint.
+const bidFetchWorkers = 8
+
+// liveBids returns the bids from a /blockchain/models/{id}/bids response that
+// have not been deleted. A deleted bid carries a nonzero deletion timestamp.
+func liveBids(bids map[string]interface{}) []interface{} {
+	raw, ok := bids["bids"].([]interface{})
+	if !ok {
+		return nil
+	}
+	live := make([]interface{}, 0, len(raw))
+	for _, item := range raw {
+		bid, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		// Compared as text because the field has been seen as both a JSON
+		// string and a number, and an absent value must not count as live.
+		if fmt.Sprint(bid["DeletedAt"]) != "0" {
+			continue
+		}
+		live = append(live, bid)
+	}
+	return live
+}
 
 func main() {
 
@@ -345,39 +380,9 @@ func (a *actions) startRemoteChat(cCtx *cli.Context) error {
 
 	if sessionId == "" {
 		fmt.Println("Loading remote models...")
-		models, err := a.client.GetAllModels(cCtx.Context)
-
+		resultModels, err := a.loadModelsWithBids(cCtx.Context)
 		if err != nil {
 			return err
-		}
-
-		var resultModels []interface{}
-		for _, item := range models["models"].([]interface{}) {
-			model := item.(map[string]interface{})
-			if model["DeletedAt"] != nil {
-				continue
-			}
-
-			modelId := model["Id"].(string)
-			bids, err := a.client.GetBidsByModelAgent(cCtx.Context, modelId, "0", "100")
-			if err != nil {
-				return err
-			}
-
-			var resultBids []interface{}
-			for _, item := range bids["bids"].([]interface{}) {
-				bid := item.(map[string]interface{})
-				if bid["DeletedAt"] != "0" {
-					continue
-				}
-				resultBids = append(resultBids, bid)
-			}
-
-			if len(resultBids) == 0 {
-				continue
-			}
-			model["bids"] = resultBids
-			resultModels = append(resultModels, model)
 		}
 
 		options = &chatCommon.Options{
@@ -398,6 +403,102 @@ func (a *actions) startRemoteChat(cCtx *cli.Context) error {
 	chat.Run(options)
 
 	return nil
+}
+
+// loadModelsWithBids returns the marketplace models that currently have at
+// least one live bid, each carrying its bids under the "bids" key, in
+// catalogue order.
+//
+// It is separate from startRemoteChat so the loading can be tested: that
+// function ends by handing control to the full-screen chat program.
+func (a *actions) loadModelsWithBids(ctx context.Context) ([]interface{}, error) {
+	models, err := a.client.GetAllModels(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	rawModels, ok := models["models"].([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("unexpected /blockchain/models response: no models array")
+	}
+
+	// Collect the models worth asking about, keeping catalogue order so the
+	// picker list is stable between runs.
+	candidates := make([]map[string]interface{}, 0, len(rawModels))
+	for _, item := range rawModels {
+		model, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		// The router reports model deletion as IsDeleted. This filter
+		// previously read DeletedAt, a field the API no longer returns, so it
+		// matched nothing and deleted models were offered for sessions.
+		if deleted, _ := model["IsDeleted"].(bool); deleted {
+			continue
+		}
+		if _, ok := model["Id"].(string); !ok {
+			continue
+		}
+		candidates = append(candidates, model)
+	}
+
+	// Fetch each model's bids concurrently. One request per model, run
+	// serially, took minutes against mainnet's 500+ models, and a single
+	// failure aborted the whole command. Results are indexed by position so
+	// catalogue order survives the concurrency.
+	bidsFor := make([][]interface{}, len(candidates))
+	bidErrs := make([]error, len(candidates))
+	sem := make(chan struct{}, bidFetchWorkers)
+	var wg sync.WaitGroup
+
+	for i, model := range candidates {
+		wg.Add(1)
+		go func(i int, modelID string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			bids, err := a.client.GetBidsByModelAgent(ctx, modelID, "0", "100")
+			if err != nil {
+				bidErrs[i] = err
+				return
+			}
+			bidsFor[i] = liveBids(bids)
+		}(i, model["Id"].(string))
+	}
+	wg.Wait()
+
+	var resultModels []interface{}
+	failed := 0
+	for i, model := range candidates {
+		if bidErrs[i] != nil {
+			// Skip the model rather than failing the command: with a shared
+			// public RPC behind the router, one timeout should not cost the
+			// user the whole catalogue.
+			failed++
+			continue
+		}
+		if len(bidsFor[i]) == 0 {
+			continue
+		}
+		model["bids"] = bidsFor[i]
+		resultModels = append(resultModels, model)
+	}
+
+	if len(resultModels) == 0 {
+		if failed > 0 {
+			return nil, fmt.Errorf("no models with active bids: all %d of %d bid lookups failed", failed, len(candidates))
+		}
+		return nil, fmt.Errorf("no models with active bids are currently available")
+	}
+
+	fmt.Printf("Loaded %d of %d models with active bids", len(resultModels), len(candidates))
+	if failed > 0 {
+		fmt.Printf(" (%d bid lookup(s) failed and were skipped)", failed)
+	}
+	fmt.Println()
+
+	return resultModels, nil
 }
 
 func (a *actions) getAllowance(cCtx *cli.Context) error {
