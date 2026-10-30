@@ -8,6 +8,21 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
+// Content encoding markers and capability names for consumer -> provider
+// content encryption. Provider -> consumer content has always been ECIES to
+// the consumer's key; these mirror that scheme in the other direction.
+const (
+	// EncECIES marks a content field as hex(ECIES-secp256k1(plaintext)) under
+	// the receiving node's key: the same primitive and encoding that
+	// SessionPromptRes.Message has always used toward the consumer.
+	EncECIES = "ecies"
+
+	// CapPromptEncryptionECIES is advertised by a provider that accepts
+	// EncECIES content on session.prompt, session.prompt.stream.chunk/end and
+	// agent.call_tool.
+	CapPromptEncryptionECIES = "prompt-enc:ecies"
+)
+
 type SessionReq struct {
 	Signature lib.HexString  `json:"signature,omitempty" validate:"required,hexadecimal"`
 	User      common.Address `json:"user"      validate:"required,eth_addr"`
@@ -15,6 +30,9 @@ type SessionReq struct {
 	Spend     lib.BigInt     `json:"spend"     validate:"required"`
 	Timestamp uint64         `json:"timestamp" validate:"required,number"`
 	BidID     common.Hash    `json:"bidid"     validate:"required,hex32"`
+	// Enc declares the content encoding this consumer will use for the
+	// session's prompts (EncECIES). Omitted by consumers that send unencrypted.
+	Enc string `json:"enc,omitempty" validate:"omitempty,oneof=ecies"`
 }
 
 type SessionRes struct {
@@ -30,6 +48,7 @@ type CallAgentToolReq struct {
 	SessionID common.Hash   `json:"sessionid" validate:"required,hex32"`
 	ToolName  string        `json:"toolname" validate:"required"`
 	Message   string        `json:"message" validate:"required"`
+	Enc       string        `json:"enc,omitempty" validate:"omitempty,oneof=ecies"`
 	Signature lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
 	Timestamp uint64        `json:"timestamp" validate:"required,number"`
 }
@@ -56,7 +75,11 @@ type SessionPromptReq struct {
 	Signature lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
 	SessionID common.Hash   `json:"sessionid" validate:"required,hex32"`
 	Message   string        `json:"message"   validate:"required"`
-	Timestamp uint64        `json:"timestamp" validate:"required,number"`
+	// Enc is EncECIES when Message is ciphertext under the provider's key.
+	// Empty means legacy plaintext JSON. The field is inside the signed
+	// payload, so it cannot be stripped or added in transit.
+	Enc       string `json:"enc,omitempty" validate:"omitempty,oneof=ecies"`
+	Timestamp uint64 `json:"timestamp" validate:"required,number"`
 }
 
 type SessionReportReq struct {
@@ -129,6 +152,23 @@ type PingReq struct {
 	Signature lib.HexString `json:"signature" validate:"required,hexadecimal"`
 }
 
+// CapabilitiesReq asks a provider which optional MORRPC features it supports.
+// Same shape as PingReq. Legacy providers answer with an "unknown method"
+// error, which consumers treat as "no optional capabilities".
+type CapabilitiesReq struct {
+	Nonce     lib.HexString `json:"nonce"     validate:"required,hexadecimal"`
+	Signature lib.HexString `json:"signature" validate:"required,hexadecimal"`
+}
+
+// CapabilitiesRes is signed by the provider key over nonce + capabilities so a
+// path attacker cannot forge or alter the advertised feature set.
+type CapabilitiesRes struct {
+	Nonce        lib.HexString `json:"nonce"        validate:"required,hexadecimal"`
+	Capabilities []string      `json:"capabilities" validate:"required"`
+	Timestamp    uint64        `json:"timestamp"    validate:"required,number"`
+	Signature    lib.HexString `json:"signature"    validate:"required,hexadecimal"`
+}
+
 type PongRes struct {
 	Nonce   lib.HexString `json:"nonce"     validate:"required,hexadecimal"`
 	Version string        `json:"version,omitempty"   validate:"omitempty"`
@@ -158,10 +198,13 @@ type SessionPromptStreamStartRes struct {
 }
 
 type SessionPromptStreamChunkReq struct {
-	SessionID   common.Hash   `json:"sessionid" validate:"required,hex32"`
-	StreamID    string        `json:"streamid" validate:"required"`
-	ChunkIndex  uint32        `json:"chunkindex" validate:"number"`
+	SessionID  common.Hash `json:"sessionid" validate:"required,hex32"`
+	StreamID   string      `json:"streamid" validate:"required"`
+	ChunkIndex uint32      `json:"chunkindex" validate:"number"`
+	// ChunkData is base64(raw bytes) for legacy plaintext, or
+	// hex(ECIES(raw bytes)) when Enc is EncECIES.
 	ChunkData   string        `json:"chunkdata" validate:"required"`
+	Enc         string        `json:"enc,omitempty" validate:"omitempty,oneof=ecies"`
 	IsLastChunk bool          `json:"islastchunk"`
 	Signature   lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
 	Timestamp   uint64        `json:"timestamp" validate:"required,number"`
@@ -179,6 +222,7 @@ type SessionPromptStreamEndReq struct {
 	SessionID         common.Hash   `json:"sessionid" validate:"required,hex32"`
 	StreamID          string        `json:"streamid" validate:"required"`
 	AudioRequestParam string        `json:"audiorequestparam" validate:"required"`
+	Enc               string        `json:"enc,omitempty" validate:"omitempty,oneof=ecies"`
 	Signature         lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
 	Timestamp         uint64        `json:"timestamp" validate:"required,number"`
 }

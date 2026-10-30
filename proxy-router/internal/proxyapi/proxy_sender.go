@@ -2,6 +2,7 @@ package proxyapi
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/json"
@@ -45,7 +46,14 @@ var (
 	ErrEmpty            = fmt.Errorf("empty result and no error")
 	ErrConnectProvider  = fmt.Errorf("failed to connect to provider")
 	ErrWriteProvider    = fmt.Errorf("failed to write to provider")
+	ErrCapabilities     = fmt.Errorf("failed to query provider capabilities")
 )
+
+// capabilitiesTTL bounds how long a consumer trusts a cached provider
+// capability set before asking again. Capabilities are also refreshed on every
+// session open, so this only matters for long-lived sessions across a provider
+// upgrade.
+const capabilitiesTTL = 10 * time.Minute
 
 const (
 	TimeoutPingDefault = 5 * time.Second
@@ -96,6 +104,130 @@ func (p *ProxyServiceSender) SetAttestationVerifier(v *attestation.Verifier) {
 
 func (p *ProxyServiceSender) SetProviderAuthResolver(r ProviderAuthResolver) {
 	p.authResolver = r
+}
+
+// fetchCapabilities asks a provider for its signed optional-feature list.
+// A legacy provider answers "unknown method"; that is reported as an empty
+// list with no error, because it is a valid answer, not a failure.
+func (p *ProxyServiceSender) fetchCapabilities(ctx context.Context, providerURL string, providerAddr common.Address) ([]string, error) {
+	prKey, err := p.privateKey.GetPrivateKey()
+	if err != nil {
+		return nil, ErrMissingPrKey
+	}
+
+	nonce := make([]byte, 8)
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, lib.WrapError(ErrCreateReq, err)
+	}
+	req, err := p.morRPC.CapabilitiesRequest("0", prKey, nonce)
+	if err != nil {
+		return nil, lib.WrapError(ErrCreateReq, err)
+	}
+
+	res, code, err := p.rpcRequest(providerURL, req)
+	if err != nil {
+		return nil, lib.WrapError(ErrProvider, fmt.Errorf("code: %d, error: %s", code, err))
+	}
+	if res.Error != nil {
+		// Pre-capabilities provider: the method is unknown to it. Anything it
+		// says here is unsigned, so the only thing we conclude is "legacy".
+		p.log.Debugf("provider %s has no network.capabilities (%s)", providerAddr.Hex(), res.Error.Message)
+		return []string{}, nil
+	}
+	if res.Result == nil {
+		return nil, lib.WrapError(ErrInvalidResponse, ErrEmpty)
+	}
+
+	var typedMsg *msgs.CapabilitiesRes
+	if err := json.Unmarshal(*res.Result, &typedMsg); err != nil {
+		return nil, lib.WrapError(ErrInvalidResponse, fmt.Errorf("expected CapabilitiesRes, got %s", res.Result))
+	}
+	if err := binding.Validator.ValidateStruct(typedMsg); err != nil {
+		return nil, lib.WrapError(ErrInvalidResponse, err)
+	}
+
+	signature := typedMsg.Signature
+	typedMsg.Signature = lib.HexString{}
+	signer, err := p.authorizedSigner(ctx, providerAddr)
+	if err != nil {
+		return nil, lib.WrapError(ErrInvalidSig, err)
+	}
+	if !p.morRPC.VerifySignatureAddr(typedMsg, signature, signer, p.log) {
+		return nil, ErrInvalidSig
+	}
+	if !bytes.Equal(typedMsg.Nonce, nonce) {
+		return nil, lib.WrapError(ErrInvalidResponse, fmt.Errorf("capabilities nonce mismatch"))
+	}
+	return typedMsg.Capabilities, nil
+}
+
+// refreshProviderCapabilities fetches and caches a provider's capabilities on
+// its stored record when the cache is missing or older than capabilitiesTTL.
+// The record is updated in place and persisted.
+func (p *ProxyServiceSender) refreshProviderCapabilities(ctx context.Context, provider *storages.User, force bool) error {
+	fresh := provider.CapabilitiesAt > 0 && time.Since(time.Unix(provider.CapabilitiesAt, 0)) < capabilitiesTTL
+	if fresh && !force {
+		return nil
+	}
+	caps, err := p.fetchCapabilities(ctx, provider.Url, common.HexToAddress(provider.Addr))
+	if err != nil {
+		return lib.WrapError(ErrCapabilities, err)
+	}
+	provider.Capabilities = caps
+	provider.CapabilitiesAt = time.Now().Unix()
+	if err := p.sessionStorage.AddUser(provider); err != nil {
+		return lib.WrapError(ErrFailedStore, err)
+	}
+	return nil
+}
+
+// hasCapability reports whether a provider capability list contains cap.
+func hasCapability(caps []string, cap string) bool {
+	for _, c := range caps {
+		if c == cap {
+			return true
+		}
+	}
+	return false
+}
+
+// decidePromptEncryption reports whether content to a provider is encrypted,
+// given its capability list (or a failed lookup, capsErr != nil). Consumer ->
+// provider content is ECIES-encrypted to the provider's key when the provider
+// advertises CapPromptEncryptionECIES, mirroring the scheme already used for
+// provider -> consumer content; otherwise it is sent as before.
+func (p *ProxyServiceSender) decidePromptEncryption(providerAddr string, caps []string, capsErr error) bool {
+	if capsErr != nil {
+		p.log.Debugf("provider %s: %s; sending content unencrypted", providerAddr, capsErr)
+		return false
+	}
+	if hasCapability(caps, msgs.CapPromptEncryptionECIES) {
+		return true
+	}
+	p.log.Debugf("provider %s does not support prompt encryption; sending content unencrypted", providerAddr)
+	return false
+}
+
+// promptEncryptionFor decides whether content to a known provider is
+// encrypted, refreshing its cached capabilities when stale.
+func (p *ProxyServiceSender) promptEncryptionFor(ctx context.Context, provider *storages.User) bool {
+	err := p.refreshProviderCapabilities(ctx, provider, false)
+	return p.decidePromptEncryption(provider.Addr, provider.Capabilities, err)
+}
+
+// negotiatePromptEncryption is the first-contact variant used before a
+// provider record exists (session open, re-registration): it fetches the
+// capabilities and returns them for the caller to persist alongside the
+// provider key. capsAt is zero when the lookup failed so the next use retries.
+func (p *ProxyServiceSender) negotiatePromptEncryption(ctx context.Context, providerURL string, providerAddr common.Address) (caps []string, capsAt int64, encrypt bool) {
+	caps, ferr := p.fetchCapabilities(ctx, providerURL, providerAddr)
+	if ferr != nil {
+		ferr = lib.WrapError(ErrCapabilities, ferr)
+	} else {
+		capsAt = time.Now().Unix()
+	}
+	encrypt = p.decidePromptEncryption(providerAddr.Hex(), caps, ferr)
+	return caps, capsAt, encrypt
 }
 
 // authorizedSigner returns the address whose signature authenticates morrpc
@@ -233,10 +365,16 @@ func (p *ProxyServiceSender) EnsureProviderRegistered(ctx context.Context, provi
 		return lib.WrapError(ErrInvalidResponse, fmt.Errorf("recover provider pubkey: %w", err))
 	}
 
+	// A failed capabilities lookup leaves capsAt zero so the prompt path
+	// re-asks.
+	caps, capsAt, _ := p.negotiatePromptEncryption(ctx, providerURL, providerAddr)
+
 	return p.sessionStorage.AddUser(&storages.User{
-		Addr:   providerAddr.Hex(),
-		PubKey: pubHex,
-		Url:    providerURL,
+		Addr:           providerAddr.Hex(),
+		PubKey:         pubHex,
+		Url:            providerURL,
+		Capabilities:   caps,
+		CapabilitiesAt: capsAt,
 	})
 }
 
@@ -251,7 +389,10 @@ func (p *ProxyServiceSender) InitiateSession(ctx context.Context, user common.Ad
 		return nil, ErrMissingPrKey
 	}
 
-	initiateSessionRequest, err := p.morRPC.InitiateSessionRequest(user, provider, spend, bidID, prKey, requestID)
+	// Learn what the provider supports before asking it for a session.
+	caps, capsAt, encryptPrompts := p.negotiatePromptEncryption(ctx, providerURL, provider)
+
+	initiateSessionRequest, err := p.morRPC.InitiateSessionRequest(user, provider, spend, bidID, prKey, requestID, encryptPrompts)
 	if err != nil {
 		return nil, lib.WrapError(ErrCreateReq, err)
 	}
@@ -289,9 +430,11 @@ func (p *ProxyServiceSender) InitiateSession(ctx context.Context, user common.Ad
 	}
 
 	err = p.sessionStorage.AddUser(&storages.User{
-		Addr:   provider.Hex(),
-		PubKey: providerPubKey.String(),
-		Url:    providerURL,
+		Addr:           provider.Hex(),
+		PubKey:         providerPubKey.String(),
+		Url:            providerURL,
+		Capabilities:   caps,
+		CapabilitiesAt: capsAt,
 	})
 	if err != nil {
 		return nil, lib.WrapError(ErrFailedStore, err)
@@ -454,7 +597,13 @@ func (p *ProxyServiceSender) CallAgentTool(ctx context.Context, sessionID common
 		return "", ErrMissingPrKey
 	}
 
-	callAgentToolRequest, err := p.morRPC.CallAgentToolRequest(sessionID, toolName, input, prKey, requestID)
+	providerPubKey, err := lib.StringToHexString(provider.PubKey)
+	if err != nil {
+		return "", lib.WrapError(ErrCreateReq, err)
+	}
+	encrypt := p.promptEncryptionFor(ctx, provider)
+
+	callAgentToolRequest, err := p.morRPC.CallAgentToolRequest(sessionID, toolName, input, providerPubKey, prKey, requestID, encrypt)
 	if err != nil {
 		return "", lib.WrapError(ErrCreateReq, err)
 	}
@@ -685,8 +834,11 @@ func (p *ProxyServiceSender) verifyTEEAttestation(ctx context.Context, providerU
 	return p.attestationVerifier.VerifyProviderQuick(ctx, providerURL, providerAddr, isTee)
 }
 
-// prepareRequest creates and prepares an RPC request for the provider
-func (p *ProxyServiceSender) prepareRequest(ctx context.Context, sessionID common.Hash, payload interface{}, providerPubKey string) (*msgs.RPCMessage, lib.HexString, error) {
+// prepareRequest builds a session.prompt for any modality payload, encrypting
+// it to the provider key according to the node's prompt-encryption policy.
+// It returns the provider public key as well, which the caller needs to verify
+// the response signatures.
+func (p *ProxyServiceSender) prepareRequest(ctx context.Context, sessionID common.Hash, payload interface{}, provider *storages.User) (*msgs.RPCMessage, lib.HexString, error) {
 	requestID := lib.RequestIDFromContext(ctx)
 	if requestID == "" {
 		requestID = lib.GenerateRequestID()
@@ -697,12 +849,14 @@ func (p *ProxyServiceSender) prepareRequest(ctx context.Context, sessionID commo
 		return nil, nil, ErrMissingPrKey
 	}
 
-	pubKey, err := lib.StringToHexString(providerPubKey)
+	pubKey, err := lib.StringToHexString(provider.PubKey)
 	if err != nil {
 		return nil, nil, lib.WrapError(ErrCreateReq, err)
 	}
 
-	promptRequest, err := p.morRPC.SessionPromptRequest(sessionID, payload, pubKey, prKey, requestID)
+	encrypt := p.promptEncryptionFor(ctx, provider)
+
+	promptRequest, err := p.morRPC.SessionPromptRequest(sessionID, payload, pubKey, prKey, requestID, encrypt)
 	if err != nil {
 		return nil, nil, lib.WrapError(ErrCreateReq, err)
 	}
@@ -791,7 +945,7 @@ func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.
 	log.Infof("acquired session semaphore for session %s", sessionID.Hex())
 
 	// Prepare request
-	promptRequest, pubKey, err := p.prepareRequest(ctx, sessionID, prompt, provider.PubKey)
+	promptRequest, pubKey, err := p.prepareRequest(ctx, sessionID, prompt, provider)
 	if err != nil {
 		return nil, err
 	}
@@ -1361,6 +1515,10 @@ func (p *ProxyServiceSender) SendAudioTranscriptionV2(ctx context.Context, sessi
 		// Record start time for session stats
 		startTime = time.Now().Unix()
 
+		// Decide once for the whole stream so every chunk and the end
+		// message use the same encoding.
+		encrypt := p.promptEncryptionFor(ctx, provider)
+
 		// Step 1: Start streaming session. Continue with whatever stream ID the
 		// provider acknowledged (today providers echo ours; this keeps us
 		// compatible if a provider ever issues its own).
@@ -1370,24 +1528,19 @@ func (p *ProxyServiceSender) SendAudioTranscriptionV2(ctx context.Context, sessi
 		}
 
 		// Step 2: Send chunks
-		err = p.sendStreamChunks(ctx, provider, sessionID, streamID, file, totalChunks, prKey)
+		err = p.sendStreamChunks(ctx, provider, sessionID, streamID, file, totalChunks, prKey, encrypt)
 		if err != nil {
 			return nil, fmt.Errorf("failed to send streaming chunks: %w", err)
 		}
 
 		// Step 3: End streaming and get results
-		result, ttftMs, inputTokens, outputTokens, err = p.sendStreamEnd(ctx, provider, sessionID, streamID, audioRequest, prKey, cb)
+		result, ttftMs, inputTokens, outputTokens, err = p.sendStreamEnd(ctx, provider, sessionID, streamID, audioRequest, prKey, encrypt, cb)
 		if err != nil {
 			return nil, fmt.Errorf("failed to end streaming session: %w", err)
 		}
 	} else {
-		pubKey, err := lib.StringToHexString(provider.PubKey)
-		if err != nil {
-			return nil, lib.WrapError(ErrCreateReq, err)
-		}
-
 		audioRequest.Extra["type"] = json.RawMessage(`"audio_transcription"`)
-		message, err := p.morRPC.SessionPromptRequest(sessionID, audioRequest, pubKey, prKey, requestID)
+		message, pubKey, err := p.prepareRequest(ctx, sessionID, audioRequest, provider)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create audio transcription request: %w", err)
 		}
@@ -1462,7 +1615,12 @@ func (p *ProxyServiceSender) sendStreamStart(ctx context.Context, provider *stor
 }
 
 // sendStreamChunks sends the audio file in chunks
-func (p *ProxyServiceSender) sendStreamChunks(ctx context.Context, provider *storages.User, sessionID common.Hash, streamID string, file *os.File, totalChunks uint32, prKey lib.HexString) error {
+func (p *ProxyServiceSender) sendStreamChunks(ctx context.Context, provider *storages.User, sessionID common.Hash, streamID string, file *os.File, totalChunks uint32, prKey lib.HexString, encrypt bool) error {
+	providerPubKey, err := lib.StringToHexString(provider.PubKey)
+	if err != nil {
+		return lib.WrapError(ErrCreateReq, err)
+	}
+
 	buffer := make([]byte, SENDER_AUDIO_STREAM_CHUNK_SIZE)
 	var chunkIndex uint32 = 0
 
@@ -1488,7 +1646,7 @@ func (p *ProxyServiceSender) sendStreamChunks(ctx context.Context, provider *sto
 			chunkRequestID = lib.GenerateRequestID()
 		}
 
-		message, err := p.morRPC.SessionPromptStreamChunkRequest(sessionID, streamID, chunkIndex, chunkData, prKey, chunkRequestID)
+		message, err := p.morRPC.SessionPromptStreamChunkRequest(sessionID, streamID, chunkIndex, chunkData, providerPubKey, prKey, chunkRequestID, encrypt)
 		if err != nil {
 			return fmt.Errorf("failed to create chunk request for chunk %d: %w", chunkIndex, err)
 		}
@@ -1529,7 +1687,7 @@ func (p *ProxyServiceSender) sendStreamChunks(ctx context.Context, provider *sto
 }
 
 // sendStreamEnd finalizes the streaming session and gets the transcription result with session statistics
-func (p *ProxyServiceSender) sendStreamEnd(ctx context.Context, provider *storages.User, sessionID common.Hash, streamID string, audioRequest *gcs.AudioTranscriptionRequest, prKey lib.HexString, cb gcs.CompletionCallback) (interface{}, int, int, int, error) {
+func (p *ProxyServiceSender) sendStreamEnd(ctx context.Context, provider *storages.User, sessionID common.Hash, streamID string, audioRequest *gcs.AudioTranscriptionRequest, prKey lib.HexString, encrypt bool, cb gcs.CompletionCallback) (interface{}, int, int, int, error) {
 	// Marshal audio parameters
 	audioRequest.Extra["type"] = json.RawMessage(`"audio_transcription"`)
 	audioParamsJSON, err := json.Marshal(audioRequest)
@@ -1546,7 +1704,7 @@ func (p *ProxyServiceSender) sendStreamEnd(ctx context.Context, provider *storag
 	if requestID == "" {
 		requestID = lib.GenerateRequestID()
 	}
-	message, err := p.morRPC.SessionPromptStreamEndRequest(sessionID, streamID, string(audioParamsJSON), prKey, requestID)
+	message, err := p.morRPC.SessionPromptStreamEndRequest(sessionID, streamID, string(audioParamsJSON), pubKey, prKey, requestID, encrypt)
 	if err != nil {
 		return nil, 0, 0, 0, fmt.Errorf("failed to create stream end request: %w", err)
 	}
@@ -1598,19 +1756,8 @@ func (p *ProxyServiceSender) SendAudioSpeech(ctx context.Context, sessionID comm
 	defer p.sessionSema.Release(sessionID)
 	log.Infof("acquired session semaphore for session %s (audio speech)", sessionID.Hex())
 
-	// Get private key for signing
-	prKey, err := p.privateKey.GetPrivateKey()
-	if err != nil {
-		return nil, ErrMissingPrKey
-	}
-
-	pubKey, err := lib.StringToHexString(provider.PubKey)
-	if err != nil {
-		return nil, lib.WrapError(ErrCreateReq, err)
-	}
-
 	audioRequest.Extra["type"] = json.RawMessage(`"audio_speech"`)
-	message, err := p.morRPC.SessionPromptRequest(sessionID, audioRequest, pubKey, prKey, requestID)
+	message, pubKey, err := p.prepareRequest(ctx, sessionID, audioRequest, provider)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create audio speech request: %w", err)
 	}
@@ -1673,24 +1820,13 @@ func (p *ProxyServiceSender) SendEmbeddings(ctx context.Context, sessionID commo
 	defer p.sessionSema.Release(sessionID)
 	log.Infof("acquired session semaphore for session %s (embeddings)", sessionID.Hex())
 
-	// Get private key for signing
-	prKey, err := p.privateKey.GetPrivateKey()
-	if err != nil {
-		return nil, ErrMissingPrKey
-	}
-
 	// Mark request type for provider side parsing
 	if embedRequest.Extra == nil {
 		embedRequest.Extra = make(map[string]json.RawMessage)
 	}
 	embedRequest.Extra["type"] = json.RawMessage(`"embeddings"`)
 
-	pubKey, err := lib.StringToHexString(provider.PubKey)
-	if err != nil {
-		return nil, lib.WrapError(ErrCreateReq, err)
-	}
-
-	message, err := p.morRPC.SessionPromptRequest(sessionID, embedRequest, pubKey, prKey, requestID)
+	message, pubKey, err := p.prepareRequest(ctx, sessionID, embedRequest, provider)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create embeddings request: %w", err)
 	}
@@ -1752,23 +1888,13 @@ func (p *ProxyServiceSender) SendDecisions(ctx context.Context, sessionID common
 	defer p.sessionSema.Release(sessionID)
 	log.Infof("acquired session semaphore for session %s (decisions)", sessionID.Hex())
 
-	prKey, err := p.privateKey.GetPrivateKey()
-	if err != nil {
-		return nil, ErrMissingPrKey
-	}
-
 	// J7: server-side overwrite of modality discriminant
 	if decisionsRequest.Extra == nil {
 		decisionsRequest.Extra = make(map[string]json.RawMessage)
 	}
 	decisionsRequest.Extra["type"] = json.RawMessage(`"decisions"`)
 
-	pubKey, err := lib.StringToHexString(provider.PubKey)
-	if err != nil {
-		return nil, lib.WrapError(ErrCreateReq, err)
-	}
-
-	message, err := p.morRPC.SessionPromptRequest(sessionID, decisionsRequest, pubKey, prKey, requestID)
+	message, pubKey, err := p.prepareRequest(ctx, sessionID, decisionsRequest, provider)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create decisions request: %w", err)
 	}
