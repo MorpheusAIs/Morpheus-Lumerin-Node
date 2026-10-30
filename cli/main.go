@@ -634,6 +634,26 @@ func (a *actions) openBlockchainSession(cCtx *cli.Context) error {
 	return nil
 }
 
+// formatSessionListItem renders one session for `listBlockchainSession`.
+//
+// The model id used to be printed under the label "provider", while the
+// provider address -- which the response carries and the struct already
+// decodes -- was never shown at all. Reading the output, you could not tell
+// which provider served a session, and the value labelled as the provider was
+// really the model.
+func formatSessionListItem(item client.SessionListItem, now time.Time) string {
+	var b strings.Builder
+
+	fmt.Fprintf(&b, "\n Session:  %s\n", item.Session)
+	fmt.Fprintf(&b, "\t- model:    %s\n", item.ModelORAgent)
+	fmt.Fprintf(&b, "\t- provider: %s\n", item.Provider)
+	fmt.Fprintf(&b, "\t- price per second: %d\n", item.PricePerSecond)
+	fmt.Fprintf(&b, "\t- closed: %t\n", item.CloseoutReceipt != "")
+	fmt.Fprintf(&b, "\t- expired: %t\n", item.EndsAt < uint64(now.Unix()))
+
+	return b.String()
+}
+
 func (a *actions) listBlockchainSessions(cCtx *cli.Context) error {
 	userAddress := cCtx.String("user")
 	providerAddress := cCtx.String("provider")
@@ -660,19 +680,7 @@ func (a *actions) listBlockchainSessions(cCtx *cli.Context) error {
 	}
 
 	for _, item := range sessions {
-		var isActive bool
-		if item.CloseoutReceipt != "" {
-			isActive = false
-		} else {
-			isActive = true
-		}
-
-		fmt.Println("\n", "Session: ", item.Session)
-		fmt.Println("\t- provider: ", item.ModelORAgent)
-		fmt.Println("\t- price per second: ", item.PricePerSecond)
-		fmt.Println("\t- closed: ", !isActive)
-		fmt.Println("\t- expired: ", item.EndsAt < uint64(time.Now().Unix()))
-
+		fmt.Print(formatSessionListItem(item, time.Now()))
 	}
 
 	return nil
