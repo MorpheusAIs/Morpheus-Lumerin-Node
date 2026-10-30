@@ -1,13 +1,10 @@
 package chat
 
 import (
-	"context"
-	"fmt"
-	"math/big"
 	"strings"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat/client"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat/common"
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -18,28 +15,54 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.String() == "ctrl+c" {
 				return m, tea.Quit
 			}
-			if msg.String() == "enter" {
-				i := m.list.SelectedItem().(item)
-				fmt.Println(i.title)
-
-				if m.isLocalChat {
-					m = m.SetLocalModel(i.desc)
-				} else {
-					session, err := m.client.OpenSession(context.Background(), &client.SessionRequest{
-						ModelId:         i.desc,
-						SessionDuration: big.NewInt(m.sessionDuration),
-					})
-					if err != nil {
-						m.err = err
-						return m, nil
-					}
-					m = m.SetRemoteSession(session.SessionId)
-				}
-
+			// An open is in flight. Swallow keys rather than start a second
+			// one, which would escrow MOR twice for one selection.
+			if m.opening {
 				return m, nil
 			}
+			// A failed open is showing in place of the list; any key
+			// dismisses it and returns to the picker.
+			if m.err != nil {
+				m.err = nil
+				return m, nil
+			}
+			if msg.String() == "enter" {
+				// The list is empty when no model has an active bid, and a
+				// filter can match nothing. Either way there is no selection
+				// to act on, and the bare type assertion panicked.
+				i, ok := m.list.SelectedItem().(item)
+				if !ok {
+					return m, nil
+				}
+
+				if m.isLocalChat {
+					return m.SetLocalModel(i.desc), nil
+				}
+
+				m.opening = true
+				m.openingModel = i.title
+				return m, tea.Batch(
+					openSession(m.client, i.desc, m.sessionDuration),
+					m.spinner.Tick,
+				)
+			}
+		case sessionOpened:
+			m.opening = false
+			if msg.err != nil {
+				m.err = msg.err
+				return m, nil
+			}
+			return m.SetRemoteSession(msg.sessionId), nil
+		case spinner.TickMsg:
+			if !m.opening {
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.spinner, cmd = m.spinner.Update(msg)
+			return m, cmd
 		case tea.WindowSizeMsg:
 			h, v := docStyle.GetFrameSize()
+			m.width = msg.Width
 			m.list.SetSize(msg.Width-h, msg.Height-v)
 		}
 	} else if m.mode == Chat {
