@@ -27,6 +27,13 @@ type User struct {
 	Addr   string
 	PubKey string
 	Url    string
+
+	// Capabilities and CapabilitiesAt cache a provider's signed
+	// network.capabilities answer on the consumer side (unix seconds). Zero
+	// CapabilitiesAt means never asked; records written by older builds load
+	// with that zero value and are refreshed on first use.
+	Capabilities   []string `json:",omitempty"`
+	CapabilitiesAt int64    `json:",omitempty"`
 }
 
 type PromptActivity struct {

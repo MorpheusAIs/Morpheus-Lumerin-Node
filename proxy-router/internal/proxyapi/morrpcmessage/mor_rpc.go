@@ -1,11 +1,12 @@
 package morrpcmesssage
 
 import (
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"time"
-
-	"encoding/base64"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
@@ -43,6 +44,35 @@ func (m *MORRPCMessage) PongResponce(requestId string, providerPrKey lib.HexStri
 
 	paramsJSON := json.RawMessage(paramsBytes)
 
+	return &RpcResponse{
+		ID:     requestId,
+		Result: &paramsJSON,
+	}, nil
+}
+
+// CapabilitiesResponse answers network.capabilities. Unlike PongRes.Models the
+// capability list is inside the signed payload: a consumer must be able to
+// trust that nothing was stripped in transit before it decides how to encode.
+func (m *MORRPCMessage) CapabilitiesResponse(requestId string, providerPrKey lib.HexString, nonce lib.HexString, capabilities []string) (*RpcResponse, error) {
+	if capabilities == nil {
+		capabilities = []string{}
+	}
+	params := CapabilitiesRes{
+		Nonce:        nonce,
+		Capabilities: capabilities,
+		Timestamp:    m.generateTimestamp(),
+	}
+	signature, err := m.generateSignature(params, providerPrKey)
+	if err != nil {
+		return &RpcResponse{}, err
+	}
+	params.Signature = signature
+
+	paramsBytes, err := json.Marshal(params)
+	if err != nil {
+		return &RpcResponse{}, err
+	}
+	paramsJSON := json.RawMessage(paramsBytes)
 	return &RpcResponse{
 		ID:     requestId,
 		Result: &paramsJSON,
@@ -378,17 +408,63 @@ func (m *MORRPCMessage) PingRequest(requestId string, userPrivateKeyHex lib.HexS
 	}, nil
 }
 
-func (m *MORRPCMessage) CallAgentToolRequest(sessionID common.Hash, toolName string, input map[string]interface{}, userPrivateKeyHex lib.HexString, requestId string) (*RPCMessage, error) {
+func (m *MORRPCMessage) CapabilitiesRequest(requestId string, userPrivateKeyHex lib.HexString, nonce lib.HexString) (*RPCMessage, error) {
+	params := CapabilitiesReq{
+		Nonce: nonce,
+	}
+	signature, err := m.generateSignature(params, userPrivateKeyHex)
+	if err != nil {
+		return &RPCMessage{}, err
+	}
+	params.Signature = signature
+
+	serializedParams, err := json.Marshal(params)
+	if err != nil {
+		return &RPCMessage{}, err
+	}
+
+	return &RPCMessage{
+		ID:     requestId,
+		Method: "network.capabilities",
+		Params: serializedParams,
+	}, nil
+}
+
+// encodeContent prepares a consumer -> provider content field. With encrypt
+// set it returns hex(ECIES(plain)) under providerPubKey and the EncECIES
+// marker, exactly mirroring how the provider encrypts responses to the
+// consumer key (lib.EncryptString). Otherwise it returns the legacy plaintext
+// and an empty marker.
+func encodeContent(plain []byte, providerPubKey lib.HexString, encrypt bool) (string, string, error) {
+	if !encrypt {
+		return string(plain), "", nil
+	}
+	if len(providerPubKey) == 0 {
+		return "", "", fmt.Errorf("provider public key required to encrypt content")
+	}
+	ciphertext, err := lib.EncryptString(string(plain), hex.EncodeToString(providerPubKey))
+	if err != nil {
+		return "", "", fmt.Errorf("encrypt content for provider: %w", err)
+	}
+	return ciphertext, EncECIES, nil
+}
+
+func (m *MORRPCMessage) CallAgentToolRequest(sessionID common.Hash, toolName string, input map[string]interface{}, providerPubKey lib.HexString, userPrivateKeyHex lib.HexString, requestId string, encrypt bool) (*RPCMessage, error) {
 	method := "agent.call_tool"
 
 	message, err := json.Marshal(input)
 	if err != nil {
 		return &RPCMessage{}, err
 	}
+	content, enc, err := encodeContent(message, providerPubKey, encrypt)
+	if err != nil {
+		return &RPCMessage{}, err
+	}
 
 	params := CallAgentToolReq{
 		SessionID: sessionID,
-		Message:   string(message),
+		Message:   content,
+		Enc:       enc,
 		ToolName:  toolName,
 		Timestamp: m.generateTimestamp(),
 	}
@@ -437,7 +513,11 @@ func (m *MORRPCMessage) CallGetAgentToolsRequest(sessionID common.Hash, userPriv
 	}, nil
 }
 
-func (m *MORRPCMessage) InitiateSessionRequest(user common.Address, provider common.Address, spend *big.Int, bidID common.Hash, userPrivateKeyHex lib.HexString, requestId string) (*RPCMessage, error) {
+// InitiateSessionRequest builds session.request. encryptPrompts declares that
+// this consumer will send EncECIES content for the session; only set it for a
+// provider that advertised CapPromptEncryptionECIES, because the field is in
+// the signed payload and a legacy provider would fail signature verification.
+func (m *MORRPCMessage) InitiateSessionRequest(user common.Address, provider common.Address, spend *big.Int, bidID common.Hash, userPrivateKeyHex lib.HexString, requestId string, encryptPrompts bool) (*RPCMessage, error) {
 	method := "session.request"
 	pbKey, err := lib.PubKeyFromPrivate(userPrivateKeyHex)
 	if err != nil {
@@ -450,6 +530,9 @@ func (m *MORRPCMessage) InitiateSessionRequest(user common.Address, provider com
 		Key:       pbKey,
 		Spend:     lib.BigInt{Int: *spend},
 		BidID:     bidID,
+	}
+	if encryptPrompts {
+		params2.Enc = EncECIES
 	}
 
 	signature, err := m.generateSignature(params2, userPrivateKeyHex)
@@ -468,14 +551,22 @@ func (m *MORRPCMessage) InitiateSessionRequest(user common.Address, provider com
 	}, nil
 }
 
-func (m *MORRPCMessage) SessionPromptRequest(sessionID common.Hash, prompt interface{}, providerPubKey lib.HexString, userPrivateKeyHex lib.HexString, requestId string) (*RPCMessage, error) {
+// SessionPromptRequest builds session.prompt. With encrypt set the prompt JSON
+// is ECIES-encrypted to providerPubKey before signing (encrypt-then-sign), so
+// the provider verifies the consumer signature first and only then decrypts.
+func (m *MORRPCMessage) SessionPromptRequest(sessionID common.Hash, prompt interface{}, providerPubKey lib.HexString, userPrivateKeyHex lib.HexString, requestId string, encrypt bool) (*RPCMessage, error) {
 	method := "session.prompt"
 	promptStr, err := json.Marshal(prompt)
 	if err != nil {
 		return &RPCMessage{}, err
 	}
+	content, enc, err := encodeContent(promptStr, providerPubKey, encrypt)
+	if err != nil {
+		return &RPCMessage{}, err
+	}
 	params2 := SessionPromptReq{
-		Message:   string(promptStr),
+		Message:   content,
+		Enc:       enc,
 		SessionID: sessionID,
 		Timestamp: uint64(time.Now().UnixMilli()),
 	}
@@ -550,17 +641,28 @@ func (m *MORRPCMessage) SessionPromptStreamStartRequest(sessionID common.Hash, s
 	}, nil
 }
 
-func (m *MORRPCMessage) SessionPromptStreamChunkRequest(sessionID common.Hash, streamID string, chunkIndex uint32, data []byte, userPrivateKeyHex lib.HexString, requestId string) (*RPCMessage, error) {
+func (m *MORRPCMessage) SessionPromptStreamChunkRequest(sessionID common.Hash, streamID string, chunkIndex uint32, data []byte, providerPubKey lib.HexString, userPrivateKeyHex lib.HexString, requestId string, encrypt bool) (*RPCMessage, error) {
 	method := "session.prompt.stream.chunk"
 
-	// Encode data as base64 string
-	chunkData := base64.StdEncoding.EncodeToString(data)
+	// Legacy: base64(raw). Encrypted: hex(ECIES(raw)) — the raw bytes go
+	// straight into the cipher; no base64 layer inside.
+	var chunkData, enc string
+	if encrypt {
+		var err error
+		chunkData, enc, err = encodeContent(data, providerPubKey, true)
+		if err != nil {
+			return &RPCMessage{}, err
+		}
+	} else {
+		chunkData = base64.StdEncoding.EncodeToString(data)
+	}
 
 	params := SessionPromptStreamChunkReq{
 		SessionID:  sessionID,
 		StreamID:   streamID,
 		ChunkIndex: chunkIndex,
 		ChunkData:  chunkData,
+		Enc:        enc,
 		Timestamp:  m.generateTimestamp(),
 	}
 
@@ -582,13 +684,19 @@ func (m *MORRPCMessage) SessionPromptStreamChunkRequest(sessionID common.Hash, s
 	}, nil
 }
 
-func (m *MORRPCMessage) SessionPromptStreamEndRequest(sessionID common.Hash, streamID string, audioRequestParam string, userPrivateKeyHex lib.HexString, requestId string) (*RPCMessage, error) {
+func (m *MORRPCMessage) SessionPromptStreamEndRequest(sessionID common.Hash, streamID string, audioRequestParam string, providerPubKey lib.HexString, userPrivateKeyHex lib.HexString, requestId string, encrypt bool) (*RPCMessage, error) {
 	method := "session.prompt.stream.end"
+
+	content, enc, err := encodeContent([]byte(audioRequestParam), providerPubKey, encrypt)
+	if err != nil {
+		return &RPCMessage{}, err
+	}
 
 	params := SessionPromptStreamEndReq{
 		SessionID:         sessionID,
 		StreamID:          streamID,
-		AudioRequestParam: audioRequestParam,
+		AudioRequestParam: content,
+		Enc:               enc,
 		Timestamp:         m.generateTimestamp(),
 	}
 
