@@ -3,7 +3,7 @@ title: "Env: proxy-router"
 description: "Every environment variable consumed by the proxy-router, with mainnet/testnet defaults and explicit precedence rules where two variables overlap."
 audience: ["provider-full", "provider-resale", "prosumer", "developer"]
 product: ["proxy-router"]
-last_verified: "2026-10-14"
+last_verified: "2026-11-02"
 source: "docs/proxy-router.all.env"
 ---
 
@@ -113,12 +113,24 @@ Storage and forwarding are independent. `PROXY_STORE_CHAT_CONTEXT` persists chat
 | `ETH_NODE_CHAIN_ID` | `8453` (mainnet) / `84532` (testnet) | BASE chain ID |
 | `ETH_NODE_ADDRESS` | (unset, falls back to built-in public RPC round-robin) | RPC endpoint URL (HTTPS or WSS — must match `ETH_NODE_USE_SUBSCRIPTIONS`). **Set explicitly for any real deployment** — the public round-robin fallback is rate-limited and unreliable; missed events break the node silently. The fallback rotates to the next endpoint on rate limits, `401`/`403` WAF pages, `404`/`405`/`410` (a retired service), and on read-only endpoints that answer `eth_sendRawTransaction` with `method is not allowed` — so opening a session works out of the box even when the first public URL refuses writes. |
 | `ETH_NODE_LEGACY_TX` | `false` | Set `true` to disable EIP-1559 |
+| `ETH_NODE_MAX_GAS_PRICE_GWEI` | `1` | Ceiling for gas-price escalation on the router's own txs (approve, open, close, claim). Fractions allowed; `-1` = unlimited. Applies when unset. See [Transaction escalation](#transaction-escalation-and-the-gas-cap). |
 | `BLOCKSCOUT_API_URL` | `https://base.blockscout.com/api/v2` | Block explorer API |
 | `EXPLORER_RETRY_DELAY` | `5` | Delay between explorer retries (seconds) |
 | `EXPLORER_MAX_RETRIES` | `5` | Max explorer retries |
 | `ETH_NODE_USE_SUBSCRIPTIONS` | `false` | `true` to use WSS subscriptions; `false` for HTTP polling |
 | `ETH_NODE_POLLING_INTERVAL` | `10` | Polling interval (seconds, only when `ETH_NODE_USE_SUBSCRIPTIONS=false`) |
 | `ETH_NODE_MAX_RECONNECTS` | `30` | Max WSS resubscribe attempts (`-1` = unlimited). Retries back off exponentially from 0.5 s to a 30 s cap, and each attempt resubscribes from the block after the last event seen. |
+
+### Transaction escalation and the gas cap
+
+Every transaction the router sends for you (MOR approve, session open, session close, claim) goes through a gas escalator. It submits at the network estimate, waits 20 s, and if the tx is not mined it resubmits the same nonce 15% higher, up to 5 times. Only one of those submissions can ever mine, so you pay one tx fee, not five.
+
+Two limits bound a stuck transaction:
+
+- **Time.** The call waits at most 3 minutes in total. If the attempts run out but a submission is still in the mempool, the router keeps watching it until the window closes and reports success if it lands. If it does not, the error lists the pending tx hashes and says the action may still be mined — check your sessions before retrying.
+- **Price.** `ETH_NODE_MAX_GAS_PRICE_GWEI` (default `1`). When the next bid would exceed it, the router stops escalating and returns a "cap exceeded" error instead of chasing a chain that is not including transactions. A later call on the same nonce prices itself above the still-pending tx so it is not rejected as an underpriced replacement, but never above the cap.
+
+Base normally runs at 0.001–0.05 gwei, so 1 gwei is deep-congestion headroom while still refusing to burn ETH on a stalled chain. Raise it only if you are on a chain or during a period where that is a normal price; set `-1` to remove the cap entirely.
 
 ## Environment
 
