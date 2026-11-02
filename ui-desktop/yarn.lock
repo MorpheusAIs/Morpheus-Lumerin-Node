@@ -7668,10 +7668,10 @@ react-hint@^3.2.1:
   resolved "https://registry.yarnpkg.com/react-hint/-/react-hint-3.2.1.tgz#ab8da2f94a56ab4bf8ba5ed5d189dea0a0b1069d"
   integrity sha512-kQgH64w8xil47NdMvh87QADj91xeKhO5ZmzQJJ9iT9PqL4K1/ggGrdeIiUnCLpZH3RP0nAWtFWPe4VQG9bzCtg==
 
-react-hook-form@^7.51.0:
-  version "7.75.0"
-  resolved "https://registry.yarnpkg.com/react-hook-form/-/react-hook-form-7.75.0.tgz#4364affb4af39e45eeb7e3c6e10f6579cdcca7a2"
-  integrity sha512-Ovv94H+0p3sJ7B9B5QxPuCP1u8V/cHuVGyH55cSwodYDtoJwK+fqk3vjfIgSX59I2U/bU4z0nRJ9HMLpNiWEmw==
+react-hook-form@^7.91.0:
+  version "7.91.0"
+  resolved "https://registry.yarnpkg.com/react-hook-form/-/react-hook-form-7.91.0.tgz#751ffa4eef441562b7417727e247446ce7d2a002"
+  integrity sha512-5BEBUnCBwa28AFXYTYmOaB/+CSpJ/+CWVASHEvIGUzFdHyUiPHeRhG7r5hOZ8nZi0yP7pbHdFNXO/p31EKTJFQ==
 
 react-is@^16.13.1, react-is@^16.3.2, react-is@^16.6.0, react-is@^16.7.0:
   version "16.13.1"
