@@ -44,6 +44,8 @@ Triage → Needs Info → Backlog → Ready → In Progress → On Dev → On Te
 
 Shipped means the commit is on `main`. The workflow comments on the linked issue at each hop and closes it on `main`.
 
+`Refs #` on the **pull request body** are authoritative. Commit messages may also carry `Refs #` for a single-commit fix, but promote/Release commit messages are ignored so a retargeted Dependabot PR (branch cut from `main`, base changed to `dev`) cannot re-process historical Refs. Landing on `dev` or `test` never reopens a closed issue.
+
 ## Setup checklist
 
 In the repository:

@@ -3,7 +3,9 @@ package chat
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"strings"
+	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat/client"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat/style"
@@ -17,6 +19,43 @@ const (
 	SelectMode ChatMode = iota
 	Chat
 )
+
+// openSessionTimeout bounds a session open started from the model picker.
+//
+// The API client is built with a zero-value http.Client, which carries no
+// timeout of its own, so without this the request can wait indefinitely on a
+// router that has stopped answering. The value is deliberately generous:
+// opening a session settles an on-chain transaction, which on a busy network
+// takes tens of seconds.
+const openSessionTimeout = 3 * time.Minute
+
+// sessionOpened carries the outcome of a session open back to Update.
+type sessionOpened struct {
+	sessionId string
+	err       error
+}
+
+// openSession opens a session for the given model off the Update loop.
+//
+// Opening a session is an HTTP round trip plus an on-chain transaction, so it
+// routinely takes tens of seconds. Doing that inside Update blocks bubbletea's
+// event loop for the whole duration: no repaint, no keypresses, not even
+// ctrl+c, and no way for the user to tell a slow open from a dead one.
+func openSession(c *client.ApiGatewayClient, modelId string, duration int64) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), openSessionTimeout)
+		defer cancel()
+
+		session, err := c.OpenSession(ctx, &client.SessionRequest{
+			ModelId:         modelId,
+			SessionDuration: big.NewInt(duration),
+		})
+		if err != nil {
+			return sessionOpened{err: err}
+		}
+		return sessionOpened{sessionId: session.SessionId}
+	}
+}
 
 // streamEvent is one update from an in-flight completion: more text, a
 // failure, or the end of the stream.

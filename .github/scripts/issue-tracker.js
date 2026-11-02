@@ -17,6 +17,10 @@ module.exports.main = async function main({ github, context, core }) {
   }
 
   if (context.payload.action === 'closed' && pr.merged) {
+    // Body Refs are authoritative. Commit messages may also carry Refs for a
+    // single-commit fix, but retargeted PRs (Dependabot cut from main → base
+    // dev) expose every promote/Release commit between the branches — those
+    // messages contain historical Refs and must not be treated as new work.
     const refs = new Set(refsIn(body))
     const commits = await github.paginate(github.rest.pulls.listCommits, {
       owner,
@@ -25,7 +29,9 @@ module.exports.main = async function main({ github, context, core }) {
       per_page: 100,
     })
     for (const commit of commits) {
-      for (const n of refsIn(commit.commit.message || '')) refs.add(n)
+      const message = commit.commit.message || ''
+      if (isPromoteOrReleaseMessage(message)) continue
+      for (const n of refsIn(message)) refs.add(n)
     }
     const status = base === 'main' ? 'Shipped' : base === 'test' ? 'On Test' : base === 'dev' ? 'On Dev' : null
     for (const n of refs) {
@@ -39,19 +45,15 @@ module.exports.main = async function main({ github, context, core }) {
           state_reason: 'completed',
         }))
       } else {
+        // Never reopen. Closed usually means already shipped on main; reopening
+        // when old Refs ride along in a retargeted PR's commit list was a bug.
+        const issue = await quietly(core, n, () => github.rest.issues.get({
+          owner,
+          repo,
+          issue_number: Number(n),
+        }))
+        if (!issue || issue.data.state === 'closed') continue
         await note(github, core, owner, repo, n, `Landed on \`${base}\` in #${pr.number}. The issue stays open until \`main\` deploys.`)
-        await quietly(core, n, async () => {
-          const issue = await github.rest.issues.get({ owner, repo, issue_number: Number(n) })
-          if (issue.data.state === 'closed') {
-            await github.rest.issues.update({
-              owner,
-              repo,
-              issue_number: Number(n),
-              state: 'open',
-              state_reason: 'reopened',
-            })
-          }
-        })
       }
       if (status) await setProjectStatus({ github, core, owner, repo, issueNumber: n, status })
     }
@@ -64,6 +66,11 @@ function refsIn(text) {
   let match
   while ((match = re.exec(text || ''))) found.push(match[1])
   return found
+}
+
+function isPromoteOrReleaseMessage(message) {
+  const first = (message || '').split('\n', 1)[0]
+  return /^(promote:|Release\b)/i.test(first)
 }
 
 async function syncNeedsIssueLabel({ github, context, owner, repo, pr, base, body, promote }) {
@@ -105,10 +112,11 @@ async function note(github, core, owner, repo, issueNumber, body) {
 
 async function quietly(core, issueNumber, fn) {
   try {
-    await fn()
+    return await fn()
   } catch (err) {
     const message = `Issue #${issueNumber}: ${err.message}`
     if (core) core.warning(message)
+    return undefined
   }
 }
 

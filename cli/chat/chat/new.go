@@ -5,6 +5,7 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat/common"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat/style"
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -23,6 +24,18 @@ type model struct {
 	// sessionDuration is the length in seconds of a session opened from the
 	// model picker, from --duration or common.DefaultSessionDuration.
 	sessionDuration int64
+
+	// opening is set while a session open started from the picker is in
+	// flight. It drives the waiting message and stops a second Enter from
+	// opening another session on top of the first.
+	opening bool
+	// openingModel is the display name of the model being opened, for the
+	// waiting message.
+	openingModel string
+	spinner      spinner.Model
+	// width is the last known terminal width, used to wrap the messages that
+	// replace the list.
+	width int
 
 	textarea textarea.Model
 	viewport viewport.Model
@@ -87,9 +100,12 @@ func New(opt *common.Options) model {
 	vp.SetContent(common.ChatWelcomeMessage)
 	vp.Style = style.Viewport
 
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(style.Spinner))
+
 	m := model{
 		list:               list.New(items, list.NewDefaultDelegate(), 0, 0),
 		mode:               SelectMode,
+		spinner:            sp,
 		textarea:           ta,
 		viewport:           vp,
 		err:                nil,

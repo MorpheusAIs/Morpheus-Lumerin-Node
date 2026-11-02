@@ -1,7 +1,6 @@
 package aiengine
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -186,7 +185,7 @@ func (a *ClaudeAI) readStream(ctx context.Context, body io.Reader, cb gcs.Comple
 	var role string
 	var messageID string
 
-	scanner := bufio.NewScanner(body)
+	scanner := newSSEScanner(body)
 	for scanner.Scan() {
 		line := scanner.Text()
 

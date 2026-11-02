@@ -1,7 +1,6 @@
 package aiengine
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -140,7 +139,7 @@ func (a *OpenAI) readError(ctx context.Context, statusCode int, body io.Reader, 
 }
 
 func (a *OpenAI) readStream(ctx context.Context, body io.Reader, cb gcs.CompletionCallback) error {
-	scanner := bufio.NewScanner(body)
+	scanner := newSSEScanner(body)
 	for scanner.Scan() {
 		line := scanner.Text()
 
@@ -178,7 +177,7 @@ func (a *OpenAI) readStream(ctx context.Context, body io.Reader, cb gcs.Completi
 
 // readTranscriptionStream handles streaming audio transcription responses
 func (a *OpenAI) readTranscriptionStream(ctx context.Context, body io.Reader, cb gcs.CompletionCallback) error {
-	scanner := bufio.NewScanner(body)
+	scanner := newSSEScanner(body)
 	for scanner.Scan() {
 		line := scanner.Text()
 
