@@ -85,7 +85,7 @@
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^4.9.155",
     "pptxgenjs": "^4.0.1",
-    "qrcode.react": "^3.1.0",
+    "qrcode.react": "^4.2.0",
     "raven-js": "^3.27.2",
     "react-bootstrap": "^2.10.2",
     "react-hint": "^3.2.1",
