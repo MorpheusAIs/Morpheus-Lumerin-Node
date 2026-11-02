@@ -142,7 +142,7 @@
     "react-dom": "^18.2.0",
     "typescript": "^5.3.3",
     "vite": "^6.4.5",
-    "vite-plugin-node-polyfills": "^0.24.0",
+    "vite-plugin-node-polyfills": "^0.28.0",
     "vite-plugin-svgr": "^4.2.0",
     "vitest": "^4.1.12"
   }
