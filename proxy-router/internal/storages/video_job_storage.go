@@ -36,10 +36,6 @@ func (s *SessionStorage) GetVideoTasks(sessionID string) ([][]byte, error) {
 	return values, nil
 }
 
-func (s *SessionStorage) GetVideoJob(jobID string) ([]byte, error) {
-	return s.getOptional(formatKey("video_job", jobID))
-}
-
 func (s *SessionStorage) PutVideoJob(jobID string, record []byte) error {
 	return s.db.SetWithTTL(formatKey("video_job", jobID), record, VideoJobTTL)
 }

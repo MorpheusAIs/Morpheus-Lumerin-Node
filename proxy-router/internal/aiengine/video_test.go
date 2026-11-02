@@ -111,9 +111,8 @@ func TestRenderfulCreateVideoJobTextToVideo(t *testing.T) {
 	task, err := engine.CreateVideoJob(context.Background(), &VideoJobInput{Resolved: videoTestResolved(), Audio: engine.BaseVideoSpec().Audio})
 	require.NoError(t, err)
 	require.Equal(t, &VideoTask{
-		Vendor:    videojob.VendorRenderful,
-		TaskID:    "gen/1 2",
-		StatusURL: vendor.URL + "/api/v1/generations/gen%2F1%202",
+		Vendor: videojob.VendorRenderful,
+		TaskID: "gen/1 2",
 	}, task)
 
 	calls := vendor.Calls()
@@ -368,9 +367,8 @@ func TestBytePlusCreateVideoJobTextOnly(t *testing.T) {
 	task, err := engine.CreateVideoJob(context.Background(), &VideoJobInput{Resolved: res, Audio: engine.BaseVideoSpec().Audio})
 	require.NoError(t, err)
 	require.Equal(t, &VideoTask{
-		Vendor:    videojob.VendorBytePlus,
-		TaskID:    "cgt-20261028-abc",
-		StatusURL: vendor.URL + "/api/v3/contents/generations/tasks/cgt-20261028-abc",
+		Vendor: videojob.VendorBytePlus,
+		TaskID: "cgt-20261028-abc",
 	}, task)
 
 	calls := vendor.Calls()
@@ -728,7 +726,9 @@ func TestNewVideoJobEngineBuildsTheAdapter(t *testing.T) {
 	require.Equal(t, "seedance-2.5-i2v", rf.imageModel)
 	require.Equal(t, "https://renderful.example/api/v1", rf.baseURL)
 	require.Equal(t, "rk", rf.apiKey)
-	require.Same(t, client, rf.client)
+	require.NotSame(t, client, rf.client, "an injected client is copied so the guard can be set on it")
+	require.Equal(t, client.Timeout, rf.client.Timeout)
+	require.NotNil(t, rf.client.CheckRedirect)
 
 	spec, err := VideoSpecFor(&cfg, engine)
 	require.NoError(t, err)
@@ -857,8 +857,9 @@ func TestVideoAdaptersDoNotFollowCrossHostRedirects(t *testing.T) {
 	require.Empty(t, elsewhere.Calls(), "no request, with or without the key, may reach another host")
 }
 
-// Control: an unguarded client does carry the key to another port of the same
-// IP, which is what the guard prevents.
+// An injected client gets the guard too. Control: a client that brings its
+// own redirect policy keeps it, and that policy is what carries the key to
+// another port of the same IP.
 func TestVideoRedirectGuardIsWhatStopsTheKey(t *testing.T) {
 	elsewhere := newVideoVendor(t, videoJSONReply(http.StatusOK, `{"id":"g1","status":"queued"}`))
 	vendor := newVideoVendor(t, func(w http.ResponseWriter, r *http.Request) {
@@ -867,6 +868,12 @@ func TestVideoRedirectGuardIsWhatStopsTheKey(t *testing.T) {
 
 	engine := NewRenderfulEngine("seedance-2.5-t2v", vendor.URL, "rk-secret", &lib.LoggerMock{}, &http.Client{})
 	_, err := engine.FetchVideoStatus(context.Background(), "g1")
+	require.Error(t, err)
+	require.Empty(t, elsewhere.Calls(), "the injected client is guarded")
+
+	follow := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return nil }}
+	engine = NewRenderfulEngine("seedance-2.5-t2v", vendor.URL, "rk-secret", &lib.LoggerMock{}, follow)
+	_, err = engine.FetchVideoStatus(context.Background(), "g1")
 	require.NoError(t, err)
 	calls := elsewhere.Calls()
 	require.Len(t, calls, 1)
@@ -931,9 +938,18 @@ func TestRefuseCrossHostRedirect(t *testing.T) {
 	require.Error(t, err)
 	require.NotErrorIs(t, err, http.ErrUseLastResponse)
 
-	injected := &http.Client{}
-	require.Same(t, injected, videoHTTPClient(injected))
 	def := videoHTTPClient(nil)
 	require.NotNil(t, def)
 	require.NotNil(t, def.CheckRedirect)
+
+	// An injected client without a policy is copied and guarded; one with
+	// its own policy is used as it is.
+	injected := &http.Client{Timeout: 3 * time.Second}
+	guarded := videoHTTPClient(injected)
+	require.NotSame(t, injected, guarded)
+	require.NotNil(t, guarded.CheckRedirect)
+	require.Equal(t, 3*time.Second, guarded.Timeout)
+	require.Nil(t, injected.CheckRedirect, "the caller's client is not modified")
+	own := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return nil }}
+	require.Same(t, own, videoHTTPClient(own))
 }

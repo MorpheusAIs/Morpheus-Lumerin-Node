@@ -500,8 +500,15 @@ func (m *MORRPCMessage) CallAgentToolRequest(sessionID common.Hash, toolName str
 	}, nil
 }
 
-func (m *MORRPCMessage) SessionVideoCreateRequest(sessionID common.Hash, jobID string, job interface{}, userPrivateKeyHex lib.HexString, requestId string) (*RPCMessage, error) {
+// SessionVideoCreateRequest builds session.video.create. The job JSON is
+// encoded like a session.prompt body: ECIES-encrypted to providerPubKey when
+// encrypt is set, then signed.
+func (m *MORRPCMessage) SessionVideoCreateRequest(sessionID common.Hash, jobID string, job interface{}, providerPubKey lib.HexString, userPrivateKeyHex lib.HexString, requestId string, encrypt bool) (*RPCMessage, error) {
 	message, err := json.Marshal(job)
+	if err != nil {
+		return &RPCMessage{}, err
+	}
+	content, enc, err := encodeContent(message, providerPubKey, encrypt)
 	if err != nil {
 		return &RPCMessage{}, err
 	}
@@ -509,7 +516,8 @@ func (m *MORRPCMessage) SessionVideoCreateRequest(sessionID common.Hash, jobID s
 	params := SessionVideoCreateReq{
 		SessionID: sessionID,
 		JobID:     jobID,
-		Message:   string(message),
+		Message:   content,
+		Enc:       enc,
 		Timestamp: m.generateTimestamp(),
 	}
 
@@ -553,33 +561,6 @@ func (m *MORRPCMessage) SessionVideoStatusRequest(sessionID common.Hash, jobID s
 		ID:     requestId,
 		Method: "session.video.status",
 		Params: serializedParams,
-	}, nil
-}
-
-// SessionVideoResponse signs a receipt or status the caller already
-// encrypted to the user.
-func (m *MORRPCMessage) SessionVideoResponse(message string, providerPrivateKeyHex lib.HexString, requestId string) (*RpcResponse, error) {
-	params := SessionVideoRes{
-		Message:   message,
-		Timestamp: m.generateTimestamp(),
-	}
-
-	signature, err := m.generateSignature(params, providerPrivateKeyHex)
-	if err != nil {
-		return &RpcResponse{}, err
-	}
-	params.Signature = signature
-
-	paramsBytes, err := json.Marshal(params)
-	if err != nil {
-		return &RpcResponse{}, err
-	}
-
-	paramsJSON := json.RawMessage(paramsBytes)
-
-	return &RpcResponse{
-		ID:     requestId,
-		Result: &paramsJSON,
 	}, nil
 }
 

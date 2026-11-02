@@ -271,6 +271,12 @@ func (p *ProxyServiceSender) Ping(ctx context.Context, providerURL string, provi
 		return 0, "", nil, lib.WrapError(ErrProvider, fmt.Errorf("code: %d, msg: %v, error: %s", code, res, err))
 	}
 	pingDuration := time.Since(reqStartTime)
+	if res.Error != nil {
+		return pingDuration, "", nil, lib.WrapError(ErrResponseErr, fmt.Errorf("error: %v", res.Error.Message))
+	}
+	if res.Result == nil {
+		return pingDuration, "", nil, lib.WrapError(ErrInvalidResponse, ErrEmpty)
+	}
 
 	var typedMsg *msgs.PongRes
 	err = json.Unmarshal(*res.Result, &typedMsg)
@@ -355,6 +361,12 @@ func (p *ProxyServiceSender) EnsureProviderRegistered(ctx context.Context, provi
 	res, code, err := p.rpcRequest(providerURL, msg)
 	if err != nil {
 		return lib.WrapError(ErrProvider, fmt.Errorf("code: %d, msg: %v, error: %s", code, res, err))
+	}
+	if res.Error != nil {
+		return lib.WrapError(ErrResponseErr, fmt.Errorf("error: %v", res.Error.Message))
+	}
+	if res.Result == nil {
+		return lib.WrapError(ErrInvalidResponse, ErrEmpty)
 	}
 
 	var typedMsg *msgs.PongRes
@@ -813,6 +825,12 @@ func (p *ProxyServiceSender) rpcRequestWithReadTimeout(url string, rpcMessage *m
 		p.log.Errorf("%s", err)
 		return nil, http.StatusBadRequest, err
 	}
+	if msg == nil {
+		// The literal null decodes without error into a nil response.
+		err = lib.WrapError(ErrDecode, ErrEmpty)
+		p.log.Errorf("%s", err)
+		return nil, http.StatusBadRequest, err
+	}
 	return msg, 0, nil
 }
 
@@ -1161,6 +1179,10 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 			}
 		}
 
+		if msg == nil {
+			log.Warnf("provider sent an empty (null) response")
+			return nil, ttftMs, inputTokens, outputTokens, lib.WrapError(ErrDecode, ErrEmpty)
+		}
 		if msg.Error != nil {
 			sig := msg.Error.Data.Signature
 
@@ -1691,6 +1713,12 @@ func (p *ProxyServiceSender) sendStreamChunks(ctx context.Context, provider *sto
 			return fmt.Errorf("failed to send chunk %d: %w", chunkIndex, err)
 		}
 
+		if response.Error != nil {
+			return fmt.Errorf("chunk %d failed: %s", chunkIndex, response.Error.Message)
+		}
+		if response.Result == nil {
+			return fmt.Errorf("failed to send chunk %d: %w", chunkIndex, lib.WrapError(ErrInvalidResponse, ErrEmpty))
+		}
 		var typedMsg *msgs.SessionPromptStreamChunkRes
 		err = json.Unmarshal(*response.Result, &typedMsg)
 		if err != nil {
@@ -1706,10 +1734,6 @@ func (p *ProxyServiceSender) sendStreamChunks(ctx context.Context, provider *sto
 		}
 		if !p.validateMsgSignature(typedMsg, signature, hexPubKey) {
 			return fmt.Errorf("invalid signature for stream chunk response")
-		}
-
-		if response.Error != nil {
-			return fmt.Errorf("chunk %d failed: %s", chunkIndex, response.Error.Message)
 		}
 
 		p.log.With("request_id", lib.RequestIDFromContext(ctx)).Infof("Successfully sent chunk %d/%d for stream %s", chunkIndex+1, totalChunks, streamID)

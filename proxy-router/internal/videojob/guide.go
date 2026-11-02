@@ -130,8 +130,6 @@ func (q Quote) Validate() error {
 // accepts and how the provider prices it. Guide renders it for the wire.
 type Spec struct {
 	ModelName    string
-	Summary      string
-	Instructions string
 	MinDuration  int
 	MaxDuration  int
 	AspectRatios []string
@@ -193,17 +191,11 @@ func (s Spec) Guide() *Guide {
 		fields = append(fields, Field{Name: FieldImageB64, Type: "string", Description: "Optional first frame as base64 or a data URI. JPEG, PNG or WebP."})
 	}
 
-	summary := s.Summary
-	if summary == "" {
-		summary = fmt.Sprintf("Text to video. Clip length %d-%d seconds.", s.MinDuration, s.MaxDuration)
-		if s.Image {
-			summary = fmt.Sprintf("Text to video, or text plus one image as the first frame. Clip length %d-%d seconds.", s.MinDuration, s.MaxDuration)
-		}
+	summary := fmt.Sprintf("Text to video. Clip length %d-%d seconds.", s.MinDuration, s.MaxDuration)
+	if s.Image {
+		summary = fmt.Sprintf("Text to video, or text plus one image as the first frame. Clip length %d-%d seconds.", s.MinDuration, s.MaxDuration)
 	}
-	instructions := s.Instructions
-	if instructions == "" {
-		instructions = "Ask for the scene in a sentence. Offer length, widescreen or vertical, and sound only if the user cares. Otherwise use defaults. Show the session quote before opening."
-	}
+	instructions := "Ask for the scene in a sentence. Offer length, widescreen or vertical, and sound only if the user cares. Otherwise use defaults. Show the session quote before opening."
 
 	weights := make(map[string]float64, len(s.Quote.ResolutionWeights))
 	for k, v := range s.Quote.ResolutionWeights {

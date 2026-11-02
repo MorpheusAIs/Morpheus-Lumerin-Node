@@ -63,9 +63,12 @@ type CallAgentToolRes struct {
 // consumer's id for the job: a retry with the same id gets the same receipt
 // instead of a second vendor task. Message is the videojob.CreateRequest JSON.
 type SessionVideoCreateReq struct {
-	SessionID common.Hash   `json:"sessionid" validate:"required,hex32"`
-	JobID     string        `json:"jobid" validate:"required,max=64"`
-	Message   string        `json:"message" validate:"required"`
+	SessionID common.Hash `json:"sessionid" validate:"required,hex32"`
+	JobID     string      `json:"jobid" validate:"required,max=64"`
+	Message   string      `json:"message" validate:"required"`
+	// Enc is EncECIES when Message is ciphertext under the provider's key,
+	// as for session.prompt. Inside the signed payload.
+	Enc       string        `json:"enc,omitempty" validate:"omitempty,oneof=ecies"`
 	Signature lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
 	Timestamp uint64        `json:"timestamp" validate:"required,number"`
 }
@@ -75,13 +78,6 @@ type SessionVideoCreateReq struct {
 type SessionVideoStatusReq struct {
 	SessionID common.Hash   `json:"sessionid" validate:"required,hex32"`
 	JobID     string        `json:"jobid" validate:"required,max=64"`
-	Signature lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
-	Timestamp uint64        `json:"timestamp" validate:"required,number"`
-}
-
-// SessionVideoRes carries a receipt or a status, encrypted to the user.
-type SessionVideoRes struct {
-	Message   string        `json:"message" validate:"required"`
 	Signature lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
 	Timestamp uint64        `json:"timestamp" validate:"required,number"`
 }

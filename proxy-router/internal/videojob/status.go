@@ -22,6 +22,9 @@ type Update struct {
 	VideoURL  string     `json:"video_url,omitempty"`
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 	Error     *JobError  `json:"error,omitempty"`
+	// Receipt is the job's receipt, repeated by a provider relaying the
+	// status, for a consumer whose copy of it was lost.
+	Receipt *Receipt `json:"receipt,omitempty"`
 }
 
 // ParseStatus reads a vendor status body. vendor is the receipt's Vendor.

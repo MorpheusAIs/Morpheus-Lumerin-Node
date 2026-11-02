@@ -84,11 +84,8 @@ type Receipt struct {
 	Object string `json:"object"`
 	Status string `json:"status"`
 	// Vendor names the status body format (VendorRenderful, VendorBytePlus).
-	Vendor       string `json:"vendor"`
-	VendorTaskID string `json:"vendor_task_id"`
-	// StatusURL is the vendor's own status GET for this task, for reference:
-	// it needs the provider's key.
-	StatusURL    string   `json:"status_url"`
+	Vendor       string   `json:"vendor"`
+	VendorTaskID string   `json:"vendor_task_id"`
 	QuoteSeconds int64    `json:"quote_seconds"`
 	ClientJobID  string   `json:"client_job_id"`
 	Resolved     Resolved `json:"resolved"`
@@ -103,15 +100,15 @@ type JobError struct {
 // Job is the consumer's local record of a video job, as the local API
 // returns it.
 type Job struct {
-	Object       string   `json:"object"`
-	ID           string   `json:"id"`
-	Model        string   `json:"model"`
-	Status       string   `json:"status"`
-	SessionID    string   `json:"session_id"`
-	QuoteSeconds int64    `json:"quote_seconds"`
-	Vendor       string   `json:"vendor"`
+	Object       string `json:"object"`
+	ID           string `json:"id"`
+	Model        string `json:"model"`
+	Status       string `json:"status"`
+	SessionID    string `json:"session_id"`
+	QuoteSeconds int64  `json:"quote_seconds"`
+	Vendor       string `json:"vendor"`
+	// VendorTaskID is empty until the provider confirmed the job.
 	VendorTaskID string   `json:"vendor_task_id"`
-	StatusURL    string   `json:"status_url"`
 	Resolved     Resolved `json:"resolved"`
 	// VideoURL is the vendor's MP4 link, present once the job succeeded. It
 	// is a bearer link: anyone holding it can download until it expires.

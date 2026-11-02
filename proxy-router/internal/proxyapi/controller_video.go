@@ -57,7 +57,7 @@ func videoErrorStatus(err error) int {
 // CreateVideoJob godoc
 //
 //	@Summary		Submit a video job
-//	@Description	Sends the job on a session already opened for it and returns the job once the vendor accepted it. Open the session first with POST /blockchain/bids/{id}/session, for the bid and session_seconds from POST /v1/video/quote. A session takes several jobs while their quotes add up to no more than its length. Poll GET /v1/video/jobs/{id} for the video. Only prompt is required; other fields take the provider guide's defaults. A failed submit or render leaves the session open. Close it with POST /blockchain/sessions/{id}/close when done: a clip not delivered by then is not handed over.
+//	@Description	Sends the job on a session already opened for it and returns the job once the vendor accepted it. Open the session first with POST /blockchain/bids/{id}/session, for the bid and session_seconds from POST /v1/video/quote. A session takes several jobs while their quotes add up to no more than its length. When the provider cannot be reached the job is still created and sent again by this node, with vendor_task_id empty until the provider confirms it. Poll GET /v1/video/jobs/{id} for the video. Only prompt is required; other fields take the provider guide's defaults. A failed submit or render leaves the session open. Close it with POST /blockchain/sessions/{id}/close when done: a clip not delivered by then is not handed over.
 //	@Tags			video
 //	@Accept			json
 //	@Produce		json

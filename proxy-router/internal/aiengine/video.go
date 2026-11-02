@@ -41,15 +41,15 @@ type VideoJobInput struct {
 
 // VideoTask is the vendor's handle on a render.
 type VideoTask struct {
-	Vendor    string
-	TaskID    string
-	StatusURL string
+	Vendor string
+	TaskID string
 	// AspectRatio is the ratio the vendor was asked for when the adapter
 	// changed the job's (a first frame keeps its own ratio).
 	AspectRatio string
 }
 
-// VideoVendorError is a vendor's refusal of a request (a 4xx answer).
+// VideoVendorError is a non-2xx answer from the vendor, with what its body
+// said.
 type VideoVendorError struct {
 	StatusCode int
 	Code       string
@@ -102,7 +102,7 @@ func NewVideoJobEngine(cfg *config.ModelConfig, log lib.ILogger, httpClient *htt
 	case API_TYPE_BYTEPLUS_VIDEO:
 		return NewBytePlusVideoEngine(cfg.ModelName, cfg.ApiURL, cfg.ApiKey, log, httpClient), nil
 	}
-	return nil, fmt.Errorf("model apiType %q does not serve video jobs", cfg.ApiType)
+	return nil, fmt.Errorf("this model does not serve video jobs")
 }
 
 // VideoSpecFor is the spec a video model is served and advertised with: the
@@ -146,12 +146,18 @@ func defaultVideoQuote() videojob.Quote {
 }
 
 // videoHTTPClient keeps the vendor key on the vendor's host: a redirect to
-// another host is not followed.
+// another host is not followed. An injected client (the factory's, or a
+// test's) keeps its transport but gets the same guard unless it set its own.
 func videoHTTPClient(httpClient *http.Client) *http.Client {
-	if httpClient != nil {
+	if httpClient == nil {
+		return &http.Client{CheckRedirect: refuseCrossHostRedirect}
+	}
+	if httpClient.CheckRedirect != nil {
 		return httpClient
 	}
-	return &http.Client{CheckRedirect: refuseCrossHostRedirect}
+	guarded := *httpClient
+	guarded.CheckRedirect = refuseCrossHostRedirect
+	return &guarded
 }
 
 func refuseCrossHostRedirect(req *http.Request, via []*http.Request) error {

@@ -55,6 +55,7 @@ type fakeVideoVendor struct {
 	createBody     string
 	createDelay    time.Duration
 	statusBody     string
+	statusCode     int // 0 means 200
 	statusDelay    time.Duration
 	creates        int
 	statusReads    int
@@ -101,10 +102,13 @@ func (v *fakeVideoVendor) serve(w http.ResponseWriter, r *http.Request) {
 		v.statusReads++
 		v.lastStatusPath = r.URL.Path
 		v.lastStatusAuth = r.Header.Get("Authorization")
-		resp, delay := v.statusBody, v.statusDelay
+		resp, delay, code := v.statusBody, v.statusDelay, v.statusCode
 		v.mu.Unlock()
 		if delay > 0 {
 			time.Sleep(delay)
+		}
+		if code != 0 {
+			w.WriteHeader(code)
 		}
 		_, _ = w.Write([]byte(resp))
 	default:
@@ -251,11 +255,12 @@ func newVideoHarness(t *testing.T, o videoHarnessOpts) *videoHarness {
 	require.NoError(t, loader.Init())
 
 	repo := sessionrepo.NewSessionRepositoryCached(ss, nil, nil, log)
-	// a nil *videoTestChainSessions must stay a nil interface
-	var chain BidGetter
-	if o.chain != nil {
-		chain = o.chain
+	// Every create reads the session from chain: the default chain session
+	// is open and runs from now to endsAt.
+	if o.chain == nil {
+		o.chain = &videoTestChainSessions{session: chainSession(time.Now(), o.endsAt, 0)}
 	}
+	chain := BidGetter(o.chain)
 	receiver := NewProxyReceiver(providerPrKey, providerPub, ss, nil, big.NewInt(1), loader, chain, repo)
 	if o.health != nil {
 		receiver.SetModelHealthTracker(o.health)
@@ -307,7 +312,7 @@ func (h *videoHarness) open(t *testing.T, resp *morrpc.RpcResponse, reqID string
 	require.Nil(t, resp.Error)
 	require.NotNil(t, resp.Result)
 
-	var res morrpc.SessionVideoRes
+	var res morrpc.SessionPromptRes
 	require.NoError(t, json.Unmarshal(*resp.Result, &res))
 	sig := res.Signature
 	res.Signature = lib.HexString{}
@@ -322,7 +327,7 @@ func (h *videoHarness) open(t *testing.T, resp *morrpc.RpcResponse, reqID string
 
 func (h *videoHarness) createWith(t *testing.T, key *ecdsa.PrivateKey, jobID string, req videojob.CreateRequest) (*videojob.Receipt, []byte, error) {
 	t.Helper()
-	m, err := h.rpc.SessionVideoCreateRequest(h.sessionID, jobID, &req, lib.HexString(crypto.FromECDSA(key)), "req-create")
+	m, err := h.rpc.SessionVideoCreateRequest(h.sessionID, jobID, &req, h.providerPub, lib.HexString(crypto.FromECDSA(key)), "req-create", true)
 	require.NoError(t, err)
 	resp, err := h.handle(t, m)
 	if err != nil {
@@ -449,7 +454,6 @@ func TestVideoProviderCreateReceiptProviderPoll(t *testing.T) {
 	require.Equal(t, videojob.StatusQueued, receipt.Status)
 	require.Equal(t, videojob.VendorBytePlus, receipt.Vendor)
 	require.Equal(t, videoTestBytePlusID, receipt.VendorTaskID)
-	require.Equal(t, h.vendor.srv.URL+"/contents/generations/tasks/"+videoTestBytePlusID, receipt.StatusURL)
 	require.Equal(t, wantQuote, receipt.QuoteSeconds)
 	require.Equal(t, "job-1", receipt.ClientJobID)
 	require.Equal(t, wantResolved, receipt.Resolved)
@@ -460,9 +464,9 @@ func TestVideoProviderCreateReceiptProviderPoll(t *testing.T) {
 		Resolution:      "720p",
 	}, receipt.Resolved)
 
-	// the provider's own vendor key never reaches the consumer
+	// the provider's own vendor key and vendor host never reach the consumer
 	require.NotContains(t, string(plain), videoTestVendorKey)
-	require.NotContains(t, string(plain), "poll_auth")
+	require.NotContains(t, string(plain), h.vendor.srv.URL)
 
 	// what the vendor received
 	h.vendor.mu.Lock()
@@ -503,7 +507,6 @@ func TestVideoProviderCreateRenderfulReceiptAndStatus(t *testing.T) {
 
 	require.Equal(t, videojob.VendorRenderful, receipt.Vendor)
 	require.Equal(t, videoTestRenderID, receipt.VendorTaskID)
-	require.Equal(t, h.vendor.srv.URL+"/generations/"+videoTestRenderID, receipt.StatusURL)
 	require.Equal(t, wantQuote, receipt.QuoteSeconds)
 	require.EqualValues(t, 600, wantQuote) // 8 s × 480p weight 1 × 75
 	require.Equal(t, wantResolved, receipt.Resolved)
@@ -529,6 +532,83 @@ func TestVideoProviderCreateRenderfulReceiptAndStatus(t *testing.T) {
 	require.Equal(t, "/generations/"+videoTestRenderID, h.vendor.lastStatusPath)
 	require.Equal(t, "Bearer "+videoTestVendorKey, h.vendor.lastStatusAuth)
 	h.vendor.mu.Unlock()
+}
+
+// A consumer that does not encrypt (no enc marker) is still served, as for
+// session.prompt.
+func TestVideoProviderCreateAcceptsPlaintextJob(t *testing.T) {
+	h := newVideoHarness(t, videoHarnessOpts{})
+	req := videojob.CreateRequest{Prompt: "a red balloon"}
+	m, err := h.rpc.SessionVideoCreateRequest(h.sessionID, "job-1", &req, h.providerPub, h.userPrKey, "req-create", false)
+	require.NoError(t, err)
+	var params morrpc.SessionVideoCreateReq
+	require.NoError(t, json.Unmarshal(m.Params, &params))
+	require.Empty(t, params.Enc)
+	require.Contains(t, params.Message, "a red balloon")
+
+	resp, err := h.handle(t, m)
+	require.NoError(t, err)
+	var receipt videojob.Receipt
+	require.NoError(t, json.Unmarshal(h.open(t, resp, "req-create"), &receipt))
+	require.Equal(t, "job-1", receipt.ClientJobID)
+
+	// The default harness path encrypts: the wire carries no prompt.
+	m, err = h.rpc.SessionVideoCreateRequest(h.sessionID, "job-2", &req, h.providerPub, h.userPrKey, "req-create-2", true)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(m.Params, &params))
+	require.Equal(t, morrpc.EncECIES, params.Enc)
+	require.NotContains(t, params.Message, "balloon")
+	_, err = h.handle(t, m)
+	require.NoError(t, err)
+
+	// The enc marker is inside the signed payload: stripped after signing,
+	// the request fails the signature check before anything is decrypted.
+	params.Enc = ""
+	stripped, err := json.Marshal(params)
+	require.NoError(t, err)
+	m.Params = stripped
+	_, err = h.handle(t, m)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid signature")
+}
+
+// What the vendor says about the provider's account (an inactive model, a
+// revoked key, no balance) stays in the provider's log: the consumer gets
+// the status code only. A refusal of the request itself keeps its text.
+func TestVideoProviderCreateVendorAccountErrorHidden(t *testing.T) {
+	health := &fakeHealthTracker{}
+	h := newVideoHarness(t, videoHarnessOpts{health: health})
+	h.vendor.set(func(v *fakeVideoVendor) {
+		v.createCode = http.StatusNotFound
+		v.createBody = `{"error":{"code":"ModelNotOpen","message":"Your account 1234567890 has not activated the model. Request id: 0217936114"}}`
+	})
+
+	_, _, err := h.create(t, "job-1", videojob.CreateRequest{Prompt: "a valid prompt"})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "(404)")
+	require.NotContains(t, err.Error(), "1234567890")
+	require.NotContains(t, err.Error(), "ModelNotOpen")
+	require.NotContains(t, err.Error(), "Request id")
+	require.Nil(t, h.storedTask(t, "job-1"))
+	require.Equal(t, 1, health.failures, "an account error is the provider's fault")
+}
+
+// The same on the status path: a vendor answer about the provider's account
+// reaches the consumer as a status code only.
+func TestVideoProviderStatusVendorAccountErrorHidden(t *testing.T) {
+	h := newVideoHarness(t, videoHarnessOpts{})
+	_, _, err := h.create(t, "job-1", videojob.CreateRequest{Prompt: "a valid prompt"})
+	require.NoError(t, err)
+	h.vendor.set(func(v *fakeVideoVendor) {
+		v.statusCode = http.StatusUnauthorized
+		v.statusBody = `{"error":{"code":"AuthenticationError","message":"the key of account 1234567890 was revoked"}}`
+	})
+
+	_, err = h.status(t, "job-1")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "(401)")
+	require.NotContains(t, err.Error(), "1234567890")
+	require.NotContains(t, err.Error(), "AuthenticationError")
 }
 
 func TestVideoProviderCreateIdempotentByJobID(t *testing.T) {
@@ -592,7 +672,7 @@ func TestVideoProviderCreateConcurrentRetryStartsOneTask(t *testing.T) {
 	req := videojob.CreateRequest{Prompt: "rain on a window"}
 	msgs := make([]*morrpc.RPCMessage, 2)
 	for i := range msgs {
-		m, err := h.rpc.SessionVideoCreateRequest(h.sessionID, "job-1", &req, h.userPrKey, "req-create")
+		m, err := h.rpc.SessionVideoCreateRequest(h.sessionID, "job-1", &req, h.providerPub, h.userPrKey, "req-create", true)
 		require.NoError(t, err)
 		msgs[i] = m
 	}
@@ -623,7 +703,7 @@ func TestVideoProviderCreateConcurrentRetryStartsOneTask(t *testing.T) {
 }
 
 func TestVideoProviderCreateQuoteLongerThanSessionRefused(t *testing.T) {
-	// default job quotes 844 s; 700 s left + 120 s grace is not enough
+	// default job quotes 844 s; a 700 s session is not enough
 	h := newVideoHarness(t, videoHarnessOpts{endsAt: time.Now().Add(700 * time.Second)})
 
 	_, _, err := h.create(t, "job-1", videojob.CreateRequest{Prompt: "a slow sunrise"})
@@ -632,15 +712,6 @@ func TestVideoProviderCreateQuoteLongerThanSessionRefused(t *testing.T) {
 	creates, _ := h.vendor.counts()
 	require.Zero(t, creates, "a job the session cannot pay for must not reach the vendor")
 	require.Nil(t, h.storedTask(t, "job-1"))
-}
-
-func TestVideoProviderCreateQuoteWithinGraceAccepted(t *testing.T) {
-	// 730 s left is less than the 844 s quote, but within the 120 s grace
-	h := newVideoHarness(t, videoHarnessOpts{endsAt: time.Now().Add(730 * time.Second)})
-
-	receipt, _, err := h.create(t, "job-1", videojob.CreateRequest{Prompt: "a slow sunrise"})
-	require.NoError(t, err)
-	require.EqualValues(t, 844, receipt.QuoteSeconds)
 }
 
 func TestVideoProviderCreateInvalidRequestRefused(t *testing.T) {
@@ -1020,7 +1091,7 @@ func TestVideoProviderUnknownMethod(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// session length: on-chain length first, time left as the fallback
+// session length: the on-chain length pays for the jobs
 // ---------------------------------------------------------------------------
 
 // A session whose on-chain length covers the quote is accepted even when
@@ -1068,10 +1139,9 @@ func TestVideoProviderCreateChainLengthTooShortRefused(t *testing.T) {
 	}
 }
 
-// When the chain cannot be read the time left (+120 s grace) decides.
 // A failed chain read refuses the job: the cached session cannot show a
 // close, so a refunded session would otherwise pass. A chain answer without
-// timestamps falls back to the time left.
+// timestamps is refused too.
 func TestVideoProviderCreateChainReadErrorRefuses(t *testing.T) {
 	chain := &videoTestChainSessions{err: errors.New("rpc down")}
 	h := newVideoHarness(t, videoHarnessOpts{endsAt: time.Now().Add(3600 * time.Second), chain: chain})
@@ -1082,10 +1152,12 @@ func TestVideoProviderCreateChainReadErrorRefuses(t *testing.T) {
 	require.Zero(t, creates, "no vendor call")
 
 	chain = &videoTestChainSessions{session: &structs.Session{}}
-	h = newVideoHarness(t, videoHarnessOpts{endsAt: time.Now().Add(700 * time.Second), chain: chain})
+	h = newVideoHarness(t, videoHarnessOpts{endsAt: time.Now().Add(3600 * time.Second), chain: chain})
 	_, _, err = h.create(t, "job-1", videojob.CreateRequest{Prompt: "a valid prompt"})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "seconds left")
+	require.Contains(t, err.Error(), "no timestamps")
+	creates, _ = h.vendor.counts()
+	require.Zero(t, creates)
 }
 
 // A session the user already closed on chain has paid only for the seconds
@@ -1107,10 +1179,8 @@ func TestVideoProviderCreateRefusesSessionClosedOnChain(t *testing.T) {
 	require.Zero(t, creates)
 }
 
-// The status cache is meant to stop a consumer polling hard from spending
-// the vendor's read budget, but concurrent polls all miss it: the cache is
-// filled only after the vendor answers and nothing collapses in-flight
-// reads (no singleflight / per-session lock in SessionVideoStatus).
+// Concurrent polls of one session queue on the session semaphore: the first
+// reaches the vendor and the rest read the status it cached.
 func TestVideoProviderStatusConcurrentPollsReadVendorOnce(t *testing.T) {
 
 	h := newVideoHarness(t, videoHarnessOpts{})

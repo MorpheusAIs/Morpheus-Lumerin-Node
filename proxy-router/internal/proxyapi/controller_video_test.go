@@ -89,7 +89,6 @@ func TestCreateVideoJobHandler(t *testing.T) {
 	require.Equal(t, videojob.StatusQueued, job.Status)
 	require.Equal(t, vjModelID.Hex(), job.Model)
 	require.Equal(t, vjSessionID.Hex(), job.SessionID)
-	require.NotContains(t, w.Body.String(), "poll_auth")
 
 	creates := sender.createCalls()
 	require.Len(t, creates, 1)
@@ -132,6 +131,24 @@ func TestCreateVideoJobHandlerSessionHeader(t *testing.T) {
 
 var vjSessionHeader = map[string]string{"session_id": vjSessionID.Hex()}
 
+// A provider that cannot be reached does not fail the submit: the job is
+// created unconfirmed and sent again by the watcher.
+func TestCreateVideoJobHandlerProviderUnreachableKeepsJob(t *testing.T) {
+	sender := &vjSender{createFn: func(int, common.Hash, string) (*videojob.Receipt, error) {
+		return nil, lib.WrapError(ErrProvider, errors.New("connection refused"))
+	}}
+	svc := newVJService(t, sender, newVJSessions(), nil, 0)
+	c := vjController(svc)
+
+	w := vjServe(t, c.CreateVideoJob, http.MethodPost, "/v1/video/jobs", `{"prompt":"x"}`, vjSessionHeader)
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	var job videojob.Job
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &job))
+	require.Equal(t, videojob.StatusQueued, job.Status)
+	require.Empty(t, job.VendorTaskID)
+	require.Len(t, svc.List(), 1)
+}
+
 func TestCreateVideoJobHandlerErrors(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -153,15 +170,6 @@ func TestCreateVideoJobHandlerErrors(t *testing.T) {
 				}
 			},
 			wantCode: http.StatusUnprocessableEntity, wantErr: "content policy",
-		},
-		{
-			name: "provider unreachable", body: `{"prompt":"x"}`, header: vjSessionHeader,
-			setup: func(_ *vjSessions, s *vjSender) {
-				s.createFn = func(int, common.Hash, string) (*videojob.Receipt, error) {
-					return nil, lib.WrapError(ErrProvider, errors.New("connection refused"))
-				}
-			},
-			wantCode: http.StatusBadGateway, wantErr: "connection refused",
 		},
 	}
 	for _, tc := range cases {

@@ -60,6 +60,11 @@ type CreateVideoJobParams struct {
 // videoJobState is a job as this node tracks it.
 type videoJobState struct {
 	job videojob.Job
+	// request is kept while the provider has not confirmed the job
+	// (VendorTaskID empty), so the watcher can send it again. It is not
+	// persisted: after a restart the watcher asks for the status instead,
+	// which tells whether the provider ever accepted the job.
+	request *videojob.CreateRequest
 }
 
 // VideoJobService runs the consumer half of video jobs: it sends each job on
@@ -108,7 +113,7 @@ func NewVideoJobService(ctx context.Context, sender videoJobSender, sessions Vid
 }
 
 // Resume reloads stored jobs and restarts a watcher for each one that has
-// not ended. A restarted node has no vendor key, so it asks the provider.
+// not ended.
 func (s *VideoJobService) Resume() {
 	records, err := s.store.GetVideoJobs()
 	if err != nil {
@@ -149,8 +154,11 @@ func newVideoJobID() (string, error) {
 }
 
 // Create sends the job on the caller's session and starts watching it. A
-// failed submit leaves the session open: the caller can retry on it or close
-// it.
+// provider refusal, or a failure before anything was sent, leaves no job and
+// the session open: the caller can retry on it or close it. Once an attempt
+// may have reached the provider, the job is kept: the watcher sends it again
+// with the same id, or asks for its status, so an answer lost on the way
+// back cannot leave a render running that nobody follows.
 func (s *VideoJobService) Create(ctx context.Context, p CreateVideoJobParams) (*videojob.Job, error) {
 	if strings.TrimSpace(p.Request.Prompt) == "" {
 		return nil, fmt.Errorf("%w: prompt is required", videojob.ErrInvalidRequest)
@@ -171,35 +179,47 @@ func (s *VideoJobService) Create(ctx context.Context, p CreateVideoJobParams) (*
 	}
 
 	var receipt *videojob.Receipt
+	sent := false // an attempt may have reached the provider
 	for attempt := 1; ; attempt++ {
 		receipt, err = s.sender.SendVideoJobCreate(ctx, sessionID, jobID, &p.Request)
-		if err == nil || errors.Is(err, ErrProviderRefused) || attempt >= videoCreateAttempts {
+		if err == nil || !unconfirmedSend(err) || attempt >= videoCreateAttempts {
 			break
 		}
+		sent = true
 		// The same job id: a provider that already accepted it answers with
 		// the same receipt instead of starting a second render.
 		log.Warnf("video job create attempt %d failed, retrying: %s", attempt, err)
 	}
-	if err != nil {
+	if err != nil && !sent && !unconfirmedSend(err) {
+		// Nothing reached the provider: a refusal, or a failure before the
+		// request went out.
 		return nil, err
 	}
 
 	now := time.Now().UTC()
 	state := &videoJobState{
 		job: videojob.Job{
-			Object:       videojob.ObjectJob,
-			ID:           jobID,
-			Model:        modelID.Hex(),
-			Status:       videojob.StatusQueued,
-			SessionID:    sessionID.Hex(),
-			QuoteSeconds: receipt.QuoteSeconds,
-			Vendor:       receipt.Vendor,
-			VendorTaskID: receipt.VendorTaskID,
-			StatusURL:    receipt.StatusURL,
-			Resolved:     receipt.Resolved,
-			CreatedAt:    now,
-			UpdatedAt:    now,
+			Object:    videojob.ObjectJob,
+			ID:        jobID,
+			Model:     modelID.Hex(),
+			Status:    videojob.StatusQueued,
+			SessionID: sessionID.Hex(),
+			CreatedAt: now,
+			UpdatedAt: now,
 		},
+	}
+	switch {
+	case err == nil:
+		state.confirm(receipt)
+		log.Infof("video job accepted: vendor %s task %s", receipt.Vendor, receipt.VendorTaskID)
+	case unconfirmedSend(err):
+		request := p.Request
+		state.request = &request
+		log.Warnf("the provider did not confirm the job, the watcher will send it again: %s", err)
+	default:
+		// Refused after an attempt that may have been accepted: the status,
+		// which has no session gate, will say whether it was.
+		log.Warnf("the provider refused the resend of an unconfirmed job, the watcher will ask for its status: %s", err)
 	}
 
 	s.mu.Lock()
@@ -208,9 +228,48 @@ func (s *VideoJobService) Create(ctx context.Context, p CreateVideoJobParams) (*
 	job := state.job
 	s.mu.Unlock()
 
-	log.Infof("video job accepted: vendor %s task %s", receipt.Vendor, receipt.VendorTaskID)
 	s.startWatcher(state)
 	return &job, nil
+}
+
+// unconfirmedSend reports whether a create may have reached the provider
+// although no receipt came back: the transport failed after the request
+// went out, or an answer came back unusable. A failure before sending (no
+// session, no provider, no key, attestation) and a refusal are not.
+func unconfirmedSend(err error) bool {
+	return errors.Is(err, ErrProvider) || errors.Is(err, ErrInvalidResponse) || errors.Is(err, ErrInvalidSig) || errors.Is(err, ErrDecrFailed)
+}
+
+// confirm records the provider's receipt. Callers hold s.mu, or own the
+// state exclusively.
+func (st *videoJobState) confirm(receipt *videojob.Receipt) {
+	st.job.QuoteSeconds = receipt.QuoteSeconds
+	st.job.Vendor = receipt.Vendor
+	st.job.VendorTaskID = receipt.VendorTaskID
+	st.job.Resolved = receipt.Resolved
+	st.job.UpdatedAt = time.Now().UTC()
+	st.request = nil
+}
+
+// resend sends a job the provider has not confirmed yet, with its original
+// id. A receipt confirms it; a refusal means the provider never accepted it.
+func (s *VideoJobService) resend(ctx context.Context, state *videoJobState, request *videojob.CreateRequest, log lib.ILogger) error {
+	s.mu.Lock()
+	sessionID, jobID := common.HexToHash(state.job.SessionID), state.job.ID
+	s.mu.Unlock()
+
+	receipt, err := s.sender.SendVideoJobCreate(ctx, sessionID, jobID, request)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	if state.job.VendorTaskID == "" {
+		state.confirm(receipt)
+		s.persistLocked(state)
+	}
+	s.mu.Unlock()
+	log.Infof("video job confirmed: vendor %s task %s", receipt.Vendor, receipt.VendorTaskID)
+	return nil
 }
 
 // Get returns a job by id.
@@ -315,7 +374,7 @@ func (s *VideoJobService) watch(ctx context.Context, jobID string) {
 			s.mu.Unlock()
 			return
 		}
-		job := state.job
+		job, request := state.job, state.request
 		s.mu.Unlock()
 
 		if time.Since(job.CreatedAt) > s.maxWatch {
@@ -325,6 +384,28 @@ func (s *VideoJobService) watch(ctx context.Context, jobID string) {
 				Error:  &videojob.JobError{Code: "watch_timeout", Message: fmt.Sprintf("no final status from the vendor after %s", s.maxWatch)},
 			}, log)
 			return
+		}
+
+		if job.VendorTaskID == "" && request != nil {
+			if err := s.resend(ctx, state, request, log); err != nil {
+				if ctx.Err() != nil {
+					return
+				}
+				if !errors.Is(err, ErrProviderRefused) {
+					interval = min(interval*2, videoPollMaxBackoff)
+					log.Warnf("video job resend failed, next try in %s: %s", interval, err)
+					timer.Reset(interval)
+					continue
+				}
+				// A refusal of the resend is not proof the job was never
+				// accepted: the provider's session gates (expired, not bound,
+				// chain unreadable) answer before it looks the job up. The
+				// status has no such gate, so from here it decides.
+				log.Warnf("the provider refused the resend, asking for the status instead: %s", err)
+				s.mu.Lock()
+				state.request = nil
+				s.mu.Unlock()
+			}
 		}
 
 		update, err := s.sender.SendVideoJobStatus(ctx, common.HexToHash(job.SessionID), job.ID)
@@ -378,7 +459,13 @@ func (s *VideoJobService) apply(jobID string, update videojob.Update, log lib.IL
 		s.mu.Unlock()
 		return true
 	}
-	changed := state.job.Status != update.Status || state.job.VideoURL != update.VideoURL
+	confirmed := false
+	if update.Receipt != nil && state.job.VendorTaskID == "" {
+		// The answer to the create was lost; the status carries the receipt.
+		state.confirm(update.Receipt)
+		confirmed = true
+	}
+	changed := confirmed || state.job.Status != update.Status || state.job.VideoURL != update.VideoURL
 	state.job.Status = update.Status
 	if update.VideoURL != "" {
 		state.job.VideoURL = update.VideoURL

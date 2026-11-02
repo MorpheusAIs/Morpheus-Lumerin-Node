@@ -62,15 +62,16 @@ func TestVideoJobRoundTrip(t *testing.T) {
 	record := []byte(`{"id":"vj_1","status":"queued"}`)
 	require.NoError(t, ss.PutVideoJob("vj_1", record))
 
-	got, err := ss.GetVideoJob("vj_1")
+	got, err := ss.GetVideoJobs()
 	require.NoError(t, err)
-	require.Equal(t, record, got)
+	require.Equal(t, [][]byte{record}, got)
 
+	// Put overwrites: one record per job.
 	updated := []byte(`{"id":"vj_1","status":"succeeded"}`)
 	require.NoError(t, ss.PutVideoJob("vj_1", updated))
-	got, err = ss.GetVideoJob("vj_1")
+	got, err = ss.GetVideoJobs()
 	require.NoError(t, err)
-	require.Equal(t, updated, got)
+	require.Equal(t, [][]byte{updated}, got)
 }
 
 func TestVideoRecordsMissingKeyIsNilNil(t *testing.T) {
@@ -79,10 +80,6 @@ func TestVideoRecordsMissingKeyIsNilNil(t *testing.T) {
 	task, err := ss.GetVideoTask("0xdead", "vjob_1")
 	require.NoError(t, err)
 	require.Nil(t, task)
-
-	job, err := ss.GetVideoJob("vj_missing")
-	require.NoError(t, err)
-	require.Nil(t, job)
 
 	jobs, err := ss.GetVideoJobs()
 	require.NoError(t, err)

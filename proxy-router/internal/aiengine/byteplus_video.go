@@ -156,7 +156,7 @@ func (b *BytePlusVideo) CreateVideoJob(ctx context.Context, job *VideoJobInput) 
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, b.baseURL+"/contents/generations/tasks", bytes.NewReader(payload))
 	if err != nil {
-		return nil, err
+		return nil, vendorUnreachable(b.log, "build the vendor request", err)
 	}
 	setVideoAuth(req, b.apiKey)
 	req.Header.Set(c.HEADER_CONTENT_TYPE, c.CONTENT_TYPE_JSON)
@@ -183,9 +183,8 @@ func (b *BytePlusVideo) CreateVideoJob(ctx context.Context, job *VideoJobInput) 
 	}
 
 	task := &VideoTask{
-		Vendor:    videojob.VendorBytePlus,
-		TaskID:    created.ID,
-		StatusURL: b.statusURL(created.ID),
+		Vendor: videojob.VendorBytePlus,
+		TaskID: created.ID,
 	}
 	if body.Ratio != r.AspectRatio {
 		task.AspectRatio = body.Ratio
@@ -203,7 +202,7 @@ func (b *BytePlusVideo) FetchVideoStatus(ctx context.Context, taskID string) ([]
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, b.statusURL(taskID), nil)
 	if err != nil {
-		return nil, err
+		return nil, vendorUnreachable(b.log, "build the vendor request", err)
 	}
 	setVideoAuth(req, b.apiKey)
 

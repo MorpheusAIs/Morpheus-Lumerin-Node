@@ -180,6 +180,35 @@ func TestCheckModelVideoApiTypesAreSkippedWithGuide(t *testing.T) {
 	require.Zero(t, adapters.gets.Load(), "no adapter is even built for a video model")
 }
 
+// A video model is never probed, so nothing would clear a streak of vendor
+// failures: the sweep does it, as a healthy probe does for other models, and
+// a model flipped unhealthy is offered again.
+func TestCheckAllResetsVideoSessionFailures(t *testing.T) {
+	cfg := videoModelConfig(t, `{"modelName":"seedance-1-0-pro-250528","apiType":"byteplus-video","apiUrl":"`+videoTestApiURL+`","apiKey":"k"}`)
+	deps := &mockDeps{
+		bids:     []*structs.Bid{bidFor(modelVideoBytePlus)},
+		tags:     map[common.Hash][]string{modelVideoBytePlus: {"video"}},
+		modelIDs: []common.Hash{modelVideoBytePlus},
+		configs:  map[common.Hash]config.ModelConfig{modelVideoBytePlus: cfg},
+		adapter:  &countingAdapter{},
+	}
+	checker, _ := newVideoTestChecker(deps)
+	checker.checkAll(context.Background(), common.Address{})
+	require.Equal(t, system.ModelHealthStatusSkipped, reportByID(t, checker.GetReports(), modelVideoBytePlus).Status)
+
+	for i := 0; i < DefaultMaxConsecutiveErrors; i++ {
+		checker.ReportPromptFailure(modelVideoBytePlus, 402)
+	}
+	require.Equal(t, system.ModelHealthStatusUnhealthy, reportByID(t, checker.GetReports(), modelVideoBytePlus).Status)
+
+	checker.checkAll(context.Background(), common.Address{})
+	require.Equal(t, system.ModelHealthStatusSkipped, reportByID(t, checker.GetReports(), modelVideoBytePlus).Status)
+
+	checker.ReportPromptFailure(modelVideoBytePlus, 402)
+	require.Equal(t, system.ModelHealthStatusSkipped, reportByID(t, checker.GetReports(), modelVideoBytePlus).Status,
+		"one failure after a sweep is the start of a new streak")
+}
+
 // A model the chain tags video but that is served through a chat adapter
 // is skipped like any video model, and advertises no guide: there is no
 // video adapter to describe it.

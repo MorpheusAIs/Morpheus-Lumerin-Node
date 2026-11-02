@@ -203,7 +203,14 @@ func TestParseBytePlusStatus(t *testing.T) {
 }
 
 func TestValidateRemoteURL(t *testing.T) {
-	require.NoError(t, ValidateRemoteURL("https://api.renderful.ai/api/v1/generations/gen_1"))
+	for _, good := range []string{
+		"https://api.renderful.ai/api/v1/generations/gen_1",
+		"https://cdn.example.com./clip.mp4",
+		"https://1.2.3.example.com/clip.mp4",
+		"https://ark-acg-ap-southeast-1.tos-ap-southeast-1.volces.com/x.mp4?X-Tos-Expires=86400",
+	} {
+		require.NoError(t, ValidateRemoteURL(good), good)
+	}
 	for _, bad := range []string{
 		"http://api.renderful.ai/x",
 		"https://user:pw@api.renderful.ai/x",
@@ -213,6 +220,34 @@ func TestValidateRemoteURL(t *testing.T) {
 		"https://[::1]/x",
 		"file:///etc/passwd",
 		"/relative",
+		// names that are local by convention
+		"https://localhost/x",
+		"https://LOCALHOST:8082/x",
+		"https://node.localhost/x",
+		"https://cdn.internal/x",
+		"https://printer.local/x",
+		"https://intranet/x",
+		// IPv4 spellings a browser dials that net/netip does not parse
+		"https://127.1/x",
+		"https://2130706433/x",
+		"https://0x7f000001/x",
+		"https://0177.0.0.1/x",
+		"https://10.1/x",
+		"https://127.0.0.1./x",
+		"https://127.0x.0.1/x",
+		"https://0x.0x.0x.0x/x",
+		"https://0x7f.1/x",
+		"https://127.0.0.1../x",
+		"https://cdn..example.com/x",
+		"https://localhost.localdomain/x",
+		"https://\uff11\uff12\uff17.0.0.1/x",
+		"https://127.0.0.1\u3002/x",
+		// IPv6 forms that reach a private host
+		"https://[::7f00:1]/x",
+		"https://[::ffff:10.0.0.5]/x",
+		"https://[fec0::1]/x",
+		"https://[fec0::1%25eth0]/x",
+		"https://[2001:0:4136:e378:8000:63bf:3fff:fdd2]/x",
 	} {
 		require.ErrorIs(t, ValidateRemoteURL(bad), ErrRemoteURL, bad)
 	}
@@ -220,7 +255,7 @@ func TestValidateRemoteURL(t *testing.T) {
 
 func TestIsPublicAddr(t *testing.T) {
 	require.True(t, isPublicAddr(netip.MustParseAddr("8.8.8.8")))
-	for _, addr := range []string{"127.0.0.1", "::ffff:192.168.1.1", "100.64.1.1", "fd00::1", "64:ff9b::a00:1"} {
+	for _, addr := range []string{"127.0.0.1", "::ffff:192.168.1.1", "100.64.1.1", "fd00::1", "64:ff9b::a00:1", "2001::1", "::7f00:1", "fec0::1", "2606:4700::1%en0"} {
 		require.False(t, isPublicAddr(netip.MustParseAddr(addr)), addr)
 	}
 }

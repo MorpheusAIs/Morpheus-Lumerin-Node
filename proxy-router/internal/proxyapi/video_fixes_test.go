@@ -5,6 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	sessionrepo "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/session"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
+	"io"
+	"math/big"
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -47,7 +52,7 @@ func TestVideoGuideInPongWithoutHealthChecker(t *testing.T) {
 }
 
 // The pong guide is built from the current config, replacing whatever the
-// checker cached at its last sweep (a reload may have changed the block).
+// checker cached at its last sweep (a reload may have changed the config).
 func TestWithVideoGuidesKeepsAndFillsReports(t *testing.T) {
 	h := newVideoHarness(t, videoHarnessOpts{})
 	stale := &videojob.Guide{Object: videojob.ObjectGuide, Summary: "from an old sweep"}
@@ -239,4 +244,77 @@ func (c *flakyChain) GetSession(ctx context.Context, id common.Hash) (*structs.S
 		return nil, errors.New("429 too many requests")
 	}
 	return c.videoTestChainSessions.GetSession(ctx, id)
+}
+
+// --- provider answers nobody can use --------------------------------------
+
+// rawResponder answers one TCP request with body, whatever the request was.
+func rawResponder(t *testing.T, body string) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func(conn net.Conn) {
+				defer conn.Close()
+				_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+				_, _ = conn.Read(make([]byte, 64<<10))
+				_, _ = io.WriteString(conn, body)
+			}(conn)
+		}
+	}()
+	return ln.Addr().String()
+}
+
+func newRawSender(t *testing.T) *ProxyServiceSender {
+	t.Helper()
+	key, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	ss := storages.NewSessionStorage(storages.NewTestStorage())
+	repo := sessionrepo.NewSessionRepositoryCached(ss, nil, nil, lib.NewTestLogger())
+	return NewProxySender(big.NewInt(1), e2eKeyProvider{key: lib.HexString(crypto.FromECDSA(key))}, nil, ss, repo, 90*time.Second, 3, 20, lib.NewTestLogger())
+}
+
+// The JSON literal null decodes into a nil response without an error; it
+// must come back as an error, not as a nil pointer the caller dereferences.
+func TestRPCRequestNullResponseIsAnError(t *testing.T) {
+	p := newRawSender(t)
+	for _, body := range []string{"null", "null\n", "  null  \n"} {
+		addr := rawResponder(t, body)
+		req := &morrpc.RPCMessage{ID: "1", Method: "network.ping", Params: json.RawMessage(`{}`)}
+		var msg *morrpc.RpcResponse
+		require.NotPanics(t, func() {
+			var err error
+			msg, _, err = p.rpcRequestWithReadTimeout(addr, req, 2*time.Second, 1<<20)
+			require.ErrorIs(t, err, ErrDecode)
+			require.ErrorIs(t, err, ErrEmpty)
+		})
+		require.Nil(t, msg)
+	}
+}
+
+// An error-only answer to network.ping (what a provider sends when the ping
+// fails validation, or what any endpoint can send) is an error, not a
+// dereference of a missing result. Ping runs in bare goroutines on the
+// consumer, so a panic here would take the node down.
+func TestPingErrorOnlyResponseIsAnError(t *testing.T) {
+	p := newRawSender(t)
+	for _, tc := range []struct {
+		body string
+		want error
+	}{
+		{`{"id":"1","error":{"code":1,"message":"boom"}}` + "\n", ErrResponseErr},
+		{`{"id":"1"}` + "\n", ErrInvalidResponse},
+	} {
+		addr := rawResponder(t, tc.body)
+		require.NotPanics(t, func() {
+			_, _, _, err := p.Ping(context.Background(), addr, common.HexToAddress("0x01"))
+			require.ErrorIs(t, err, tc.want, tc.body)
+		})
+	}
 }

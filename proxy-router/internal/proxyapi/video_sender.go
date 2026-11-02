@@ -27,8 +27,8 @@ const (
 )
 
 // ErrProviderRefused is a plaintext refusal from the provider (bad request,
-// quote longer than the session, a second job on the session, a vendor
-// refusal). Retrying the same request does not help.
+// a quote the session no longer has room for, a vendor refusal). Retrying
+// the same request does not help.
 var ErrProviderRefused = errors.New("provider refused the video request")
 
 // videoProvider resolves the provider of a session without an expiry check:
@@ -69,7 +69,14 @@ func (p *ProxyServiceSender) SendVideoJobCreate(ctx context.Context, sessionID c
 	if err != nil {
 		return nil, ErrMissingPrKey
 	}
-	req, err := p.morRPC.SessionVideoCreateRequest(sessionID, jobID, job, prKey, requestID)
+	providerPubKey, err := lib.StringToHexString(provider.PubKey)
+	if err != nil {
+		return nil, lib.WrapError(ErrCreateReq, err)
+	}
+	// The job (prompt, first frame) is content like a prompt: encrypted to
+	// the provider when it advertises prompt encryption.
+	encrypt := p.promptEncryptionFor(ctx, provider)
+	req, err := p.morRPC.SessionVideoCreateRequest(sessionID, jobID, job, providerPubKey, prKey, requestID, encrypt)
 	if err != nil {
 		return nil, lib.WrapError(ErrCreateReq, err)
 	}
@@ -143,7 +150,7 @@ func (p *ProxyServiceSender) videoRPC(provider *storages.User, req *msgs.RPCMess
 		return nil, lib.WrapError(ErrInvalidResponse, ErrEmpty)
 	}
 
-	var res msgs.SessionVideoRes
+	var res msgs.SessionPromptRes
 	if err := json.Unmarshal(*msg.Result, &res); err != nil {
 		return nil, lib.WrapError(ErrInvalidResponse, err)
 	}

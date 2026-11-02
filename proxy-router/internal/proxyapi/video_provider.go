@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -22,10 +21,6 @@ import (
 )
 
 const (
-	// videoQuoteGraceSeconds covers the time between the consumer opening a
-	// session for exactly the quote and the job reaching this provider, when
-	// the session's on-chain length cannot be read.
-	videoQuoteGraceSeconds = 120
 	// videoLengthToleranceSeconds absorbs the rounding between the duration a
 	// consumer asks for and the endsAt the contract derives from the stake.
 	videoLengthToleranceSeconds = 10
@@ -60,7 +55,6 @@ type providerVideoTask struct {
 	ModelID      string            `json:"model_id"`
 	Vendor       string            `json:"vendor"`
 	VendorTaskID string            `json:"vendor_task_id"`
-	StatusURL    string            `json:"status_url"`
 	QuoteSeconds int64             `json:"quote_seconds"`
 	Resolved     videojob.Resolved `json:"resolved"`
 	CreatedAt    int64             `json:"created_at"`
@@ -83,7 +77,6 @@ func (c cachedVideoStatus) fresh(now time.Time) bool {
 type videoProviderState struct {
 	mu          sync.Mutex
 	statusCache map[string]cachedVideoStatus
-	httpClient  *http.Client
 }
 
 func videoRequestFresh(timestampMs uint64, now time.Time) bool {
@@ -121,6 +114,10 @@ func (s *MORRPCController) sessionVideoCreate(ctx context.Context, msg m.RPCMess
 	if !videoRequestFresh(req.Timestamp, time.Now()) {
 		return ErrVideoJobStale
 	}
+	job, err := s.openContent(msg.Method, req.Enc, req.Message, sourceLog)
+	if err != nil {
+		return err
+	}
 
 	// One request per session at a time: a retried accept waits for the
 	// first and then reads its record instead of creating a second task, and
@@ -130,7 +127,7 @@ func (s *MORRPCController) sessionVideoCreate(ctx context.Context, msg m.RPCMess
 	}
 	defer s.sessionSema.Release(req.SessionID)
 
-	res, err := s.service.SessionVideoCreate(ctx, msg.ID, user.PubKey, session, &req, sourceLog)
+	res, err := s.service.SessionVideoCreate(ctx, msg.ID, user.PubKey, session, req.JobID, job, sourceLog)
 	if err != nil {
 		sourceLog.Warnf("video job refused: %s", err)
 		return err
@@ -221,7 +218,7 @@ func (s *ProxyReceiver) sessionVideoSeconds(sessionID common.Hash) (int64, error
 
 func (s *ProxyReceiver) videoEngine(modelID string, log lib.ILogger) (*config.ModelConfig, aiengine.VideoJobEngine, error) {
 	cfg := s.modelConfigLoader.ModelConfigFromID(modelID)
-	engine, err := aiengine.NewVideoJobEngine(cfg, log, s.video.httpClient)
+	engine, err := aiengine.NewVideoJobEngine(cfg, log, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -236,28 +233,29 @@ func receiptFor(task *providerVideoTask) *videojob.Receipt {
 		Status:       videojob.StatusQueued,
 		Vendor:       task.Vendor,
 		VendorTaskID: task.VendorTaskID,
-		StatusURL:    task.StatusURL,
 		QuoteSeconds: task.QuoteSeconds,
 		ClientJobID:  task.JobID,
 		Resolved:     task.Resolved,
 	}
 }
 
-func (s *ProxyReceiver) SessionVideoCreate(ctx context.Context, reqID string, userPubKey string, session *sessionrepo.SessionModel, req *m.SessionVideoCreateReq, sourceLog lib.ILogger) (*m.RpcResponse, error) {
+// SessionVideoCreate accepts job (the VideoJobCreate JSON, already
+// decrypted) as jobID on the session.
+func (s *ProxyReceiver) SessionVideoCreate(ctx context.Context, reqID string, userPubKey string, session *sessionrepo.SessionModel, jobID string, job []byte, sourceLog lib.ILogger) (*m.RpcResponse, error) {
 	ctx = lib.ContextWithRequestID(ctx, reqID)
 	modelID := session.ModelID().Hex()
 
-	existing, err := s.loadVideoTask(session.ID(), req.JobID)
+	existing, err := s.loadVideoTask(session.ID(), jobID)
 	if err != nil {
 		return nil, err
 	}
 	if existing != nil {
-		sourceLog.Infof("video job %s already accepted, returning its receipt", req.JobID)
+		sourceLog.Infof("video job %s already accepted, returning its receipt", jobID)
 		return s.videoResponse(receiptFor(existing), userPubKey, reqID)
 	}
 
 	var create videojob.CreateRequest
-	if err := json.Unmarshal([]byte(req.Message), &create); err != nil {
+	if err := json.Unmarshal(job, &create); err != nil {
 		return nil, lib.WrapError(ErrUnmarshal, err)
 	}
 
@@ -302,26 +300,26 @@ func (s *ProxyReceiver) SessionVideoCreate(ctx context.Context, reqID string, us
 	task, err := engine.CreateVideoJob(ctx, input)
 	s.trackVideoResult(session.ModelID(), err)
 	if err != nil {
-		return nil, err
+		sourceLog.Warnf("vendor did not take the job: %s", err)
+		return nil, consumerVendorError(err)
 	}
-	sourceLog.Infof("video job %s accepted by %s as task %s, quote %ds", req.JobID, task.Vendor, task.TaskID, quote)
+	sourceLog.Infof("video job %s accepted by %s as task %s, quote %ds", jobID, task.Vendor, task.TaskID, quote)
 	if task.AspectRatio != "" {
 		resolved.AspectRatio = task.AspectRatio
 	}
 
 	record := &providerVideoTask{
 		SessionID:    session.ID().Hex(),
-		JobID:        req.JobID,
+		JobID:        jobID,
 		ModelID:      modelID,
 		Vendor:       task.Vendor,
 		VendorTaskID: task.TaskID,
-		StatusURL:    task.StatusURL,
 		QuoteSeconds: quote,
 		Resolved:     resolved,
 		CreatedAt:    time.Now().Unix(),
 	}
 	if raw, err := json.Marshal(record); err == nil {
-		if err := s.sessionStorage.PutVideoTask(session.ID().Hex(), req.JobID, raw); err != nil {
+		if err := s.sessionStorage.PutVideoTask(session.ID().Hex(), jobID, raw); err != nil {
 			// The vendor task exists: still hand out the receipt. Its quote is
 			// not counted against the session, and a retry of this accept
 			// could start a second task.
@@ -362,32 +360,26 @@ func readChainSession(ctx context.Context, reader videoSessionReader, sessionID 
 // (endsAt - openedAt) must cover the quotes of the jobs already on it (used)
 // plus this one, and a session closed on chain (refunded) pays for nothing.
 // The cached session cannot show a close, so a failed chain read refuses the
-// job. Without a chain reader at all the time left is used, with grace for
-// the time it took the consumer to open the session and send the job.
+// job.
 func (s *ProxyReceiver) checkVideoSessionLength(ctx context.Context, session *sessionrepo.SessionModel, used, quote int64, log lib.ILogger) error {
-	need := used + quote
-	if reader, ok := s.service.(videoSessionReader); ok {
-		onchain, err := readChainSession(ctx, reader, session.ID())
-		if err != nil {
-			log.Warnf("cannot read session from chain: %s", err)
-			return fmt.Errorf("cannot read the session from chain, try again")
-		}
-		if onchain.ClosedAt != nil && onchain.ClosedAt.Sign() > 0 {
-			return fmt.Errorf("the session is closed")
-		}
-		if onchain.OpenedAt != nil && onchain.EndsAt != nil {
-			length := onchain.EndsAt.Int64() - onchain.OpenedAt.Int64()
-			if length+videoLengthToleranceSeconds < need {
-				return videoSessionTooShort(quote, used, fmt.Sprintf("the session is %d seconds long", length))
-			}
-			return nil
-		}
-		log.Warnf("chain session %s has no timestamps, checking the time left instead", session.ID().Hex())
+	reader, ok := s.service.(videoSessionReader)
+	if !ok {
+		return fmt.Errorf("cannot read the session from chain")
 	}
-
-	remaining := session.EndsAt().Int64() - time.Now().Unix()
-	if remaining+videoQuoteGraceSeconds < need {
-		return videoSessionTooShort(quote, used, fmt.Sprintf("the session has %d seconds left", remaining))
+	onchain, err := readChainSession(ctx, reader, session.ID())
+	if err != nil {
+		log.Warnf("cannot read session from chain: %s", err)
+		return fmt.Errorf("cannot read the session from chain, try again")
+	}
+	if onchain.ClosedAt != nil && onchain.ClosedAt.Sign() > 0 {
+		return fmt.Errorf("the session is closed")
+	}
+	if onchain.OpenedAt == nil || onchain.EndsAt == nil {
+		return fmt.Errorf("the chain session carries no timestamps")
+	}
+	length := onchain.EndsAt.Int64() - onchain.OpenedAt.Int64()
+	if length+videoLengthToleranceSeconds < used+quote {
+		return videoSessionTooShort(quote, used, fmt.Sprintf("the session is %d seconds long", length))
 	}
 	return nil
 }
@@ -397,6 +389,24 @@ func videoSessionTooShort(quote, used int64, session string) error {
 		return fmt.Errorf("this job needs a %d-second session, %s", quote, session)
 	}
 	return fmt.Errorf("this job needs %d seconds of session on top of the %d seconds earlier jobs on it took, %s", quote, used, session)
+}
+
+// consumerVendorError is what a consumer may read of a vendor error. A
+// refusal of the request itself (400, 413, 422: bad parameters, content
+// policy) is the consumer's to read. Anything else is the provider's vendor
+// account or the vendor's own trouble, and its text can name the account;
+// the consumer gets the status code only. The full text is in the
+// provider's log.
+func consumerVendorError(err error) error {
+	var vendorErr *aiengine.VideoVendorError
+	if !errors.As(err, &vendorErr) {
+		return err
+	}
+	switch vendorErr.StatusCode {
+	case 400, 413, 422:
+		return err
+	}
+	return fmt.Errorf("video vendor did not take the request (%d): the provider's vendor account cannot serve it now", vendorErr.StatusCode)
 }
 
 // trackVideoResult feeds a vendor create into the model health tracker. Only
@@ -445,7 +455,8 @@ func (s *ProxyReceiver) SessionVideoStatus(ctx context.Context, reqID string, us
 	}
 	body, err := engine.FetchVideoStatus(ctx, task.VendorTaskID)
 	if err != nil {
-		return nil, err
+		sourceLog.Warnf("vendor did not answer the status: %s", err)
+		return nil, consumerVendorError(err)
 	}
 	update, err := videojob.ParseStatus(task.Vendor, body)
 	if err != nil {
@@ -457,8 +468,10 @@ func (s *ProxyReceiver) SessionVideoStatus(ctx context.Context, reqID string, us
 		}
 	}
 	// Bound to the job asked about, so an old signed answer cannot stand in
-	// for another job's status.
+	// for another job's status. The receipt rides along: a consumer that lost
+	// the answer to its create learns the vendor task from here.
 	update.JobID = task.JobID
+	update.Receipt = receiptFor(task)
 
 	now := time.Now()
 	s.video.mu.Lock()
@@ -510,7 +523,7 @@ func (s *ProxyReceiver) videoResponse(payload interface{}, userPubKey string, re
 	if err != nil {
 		return nil, err
 	}
-	return s.morRpc.SessionVideoResponse(encrypted, s.privateKeyHex, reqID)
+	return s.morRpc.SessionPromptResponse(encrypted, s.privateKeyHex, reqID)
 }
 
 // withVideoGuides puts the current guide of every video model in models-config
@@ -539,7 +552,7 @@ func (s *ProxyReceiver) withVideoGuides(reports []system.ModelHealthReport, log 
 		id := ids[i].Hex()
 		j, reported := index[strings.ToLower(id)]
 		// Built from the current config, not taken from the last sweep: after
-		// a models-config reload the provider prices jobs with the new block.
+		// a models-config reload the provider prices jobs with the new config.
 		guide, err := aiengine.VideoGuideFor(&cfg, log)
 		if err != nil {
 			if reported {

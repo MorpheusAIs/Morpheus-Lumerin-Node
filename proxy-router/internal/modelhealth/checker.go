@@ -569,6 +569,10 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 	// The apiType decides even when the on-chain tags do not say video, so
 	// an untagged video model is never sent the guessed LLM prompt.
 	if isVideo || modelMeta.modelType == structs.ModelTypeVIDEO {
+		// No probe ever heals a video model, so the sweep does what a healthy
+		// probe does for the others: the session-failure streak starts over,
+		// and a model flipped unhealthy by vendor errors is offered again.
+		c.resetFailures(modelID)
 		report.Status = system.ModelHealthStatusSkipped
 		return
 	}

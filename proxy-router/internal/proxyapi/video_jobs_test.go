@@ -5,9 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
-	"net/http/httptest"
 	"slices"
 	"strings"
 	"sync"
@@ -191,7 +188,6 @@ func vjReceipt(jobID string) *videojob.Receipt {
 		Status:       videojob.StatusQueued,
 		Vendor:       videojob.VendorRenderful,
 		VendorTaskID: "gen-123",
-		StatusURL:    "https://api.renderful.example/api/v1/generations/gen-123",
 		QuoteSeconds: 120,
 		ClientJobID:  jobID,
 		Resolved: videojob.Resolved{
@@ -201,49 +197,6 @@ func vjReceipt(jobID string) *videojob.Receipt {
 			Resolution:      "720p",
 		},
 	}
-}
-
-// --- vendor test server -----------------------------------------------------
-
-type vjVendorHit struct {
-	path   string
-	auth   string
-	accept string
-}
-
-type vjVendor struct {
-	mu      sync.Mutex
-	hits    []vjVendorHit
-	respond func(n int, r *http.Request) (int, string, string)
-}
-
-func (v *vjVendor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	v.mu.Lock()
-	v.hits = append(v.hits, vjVendorHit{path: r.URL.Path, auth: r.Header.Get("Authorization"), accept: r.Header.Get("Accept")})
-	n := len(v.hits)
-	v.mu.Unlock()
-	code, contentType, body := v.respond(n, r)
-	if contentType != "" {
-		w.Header().Set("Content-Type", contentType)
-	}
-	w.WriteHeader(code)
-	_, _ = io.WriteString(w, body)
-}
-
-func (v *vjVendor) hitList() []vjVendorHit {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	return slices.Clone(v.hits)
-}
-
-// newVJVendor starts a TLS server. Call it before newVJService so that the
-// service's cleanup (cancel + wait) runs before the server closes.
-func newVJVendor(t *testing.T, respond func(n int, r *http.Request) (int, string, string)) (*vjVendor, *httptest.Server) {
-	t.Helper()
-	v := &vjVendor{respond: respond}
-	srv := httptest.NewTLSServer(v)
-	t.Cleanup(srv.Close)
-	return v, srv
 }
 
 // --- service helpers --------------------------------------------------------
@@ -264,7 +217,7 @@ func newVJService(t *testing.T, sender *vjSender, sessions *vjSessions, store *s
 	return svc
 }
 
-// vjWait waits for every watcher and async close of svc to return.
+// vjWait waits for every watcher of svc to return.
 func vjWait(t *testing.T, svc *VideoJobService) {
 	t.Helper()
 	done := make(chan struct{})
@@ -292,12 +245,17 @@ func vjEventuallyStatus(t *testing.T, svc *VideoJobService, id, status string) v
 
 func vjStored(t *testing.T, svc *VideoJobService, id string) (videojob.Job, string) {
 	t.Helper()
-	raw, err := svc.store.GetVideoJob(id)
+	records, err := svc.store.GetVideoJobs()
 	require.NoError(t, err)
-	require.NotNil(t, raw, "job %s was not stored", id)
-	var job videojob.Job
-	require.NoError(t, json.Unmarshal(raw, &job))
-	return job, string(raw)
+	for _, raw := range records {
+		var job videojob.Job
+		require.NoError(t, json.Unmarshal(raw, &job))
+		if job.ID == id {
+			return job, string(raw)
+		}
+	}
+	require.FailNow(t, "job was not stored", id)
+	return videojob.Job{}, ""
 }
 
 func vjCreateParams(prompt string) CreateVideoJobParams {
@@ -342,10 +300,9 @@ func TestVideoJobCreateSendsOnSessionAndPersists(t *testing.T) {
 	require.Equal(t, 5, job.Resolved.DurationSeconds)
 	require.False(t, job.CreatedAt.IsZero())
 
-	stored, raw := vjStored(t, svc, job.ID)
+	stored, _ := vjStored(t, svc, job.ID)
 	require.Equal(t, job.ID, stored.ID)
 	require.Equal(t, job.SessionID, stored.SessionID)
-	require.NotContains(t, raw, "poll_auth")
 
 	got, err := svc.Get(job.ID)
 	require.NoError(t, err)
@@ -437,21 +394,135 @@ func TestVideoJobCreateRetriesTransportErrorWithSameID(t *testing.T) {
 	require.Equal(t, creates[0].sessionID, creates[1].sessionID)
 }
 
-func TestVideoJobCreateGivesUpAfterSecondTransportError(t *testing.T) {
+// When the provider cannot be reached, the job is kept (the provider may
+// have accepted a first attempt whose answer was lost) and the watcher sends
+// it again with the same id until a receipt or a refusal comes back.
+func TestVideoJobCreateKeepsJobWhenProviderUnreachable(t *testing.T) {
 	sessions := newVJSessions()
 	sender := &vjSender{
-		createFn: func(int, common.Hash, string) (*videojob.Receipt, error) {
-			return nil, lib.WrapError(ErrProvider, errors.New("connection refused"))
+		createFn: func(n int, _ common.Hash, jobID string) (*videojob.Receipt, error) {
+			if n <= videoCreateAttempts {
+				return nil, lib.WrapError(ErrProvider, errors.New("connection refused"))
+			}
+			return vjReceipt(jobID), nil
 		},
+		statusFn: vjSequence(vjDone("https://cdn.renderful.example/out/gen-123.mp4")),
 	}
 	svc := newVJService(t, sender, sessions, nil, 0)
 
-	_, err := svc.Create(context.Background(), vjCreateParams("x"))
-	require.ErrorIs(t, err, ErrProvider)
+	job, err := svc.Create(context.Background(), vjCreateParams("x"))
+	require.NoError(t, err)
+	require.Equal(t, videojob.StatusQueued, job.Status)
+	require.Empty(t, job.VendorTaskID, "not confirmed yet")
 	require.Len(t, sender.createCalls(), videoCreateAttempts)
+	stored, _ := vjStored(t, svc, job.ID)
+	require.Empty(t, stored.VendorTaskID)
 
+	done := vjEventuallyStatus(t, svc, job.ID, videojob.StatusSucceeded)
+	require.Equal(t, "gen-123", done.VendorTaskID, "the watcher's resend brought the receipt")
+	require.EqualValues(t, 120, done.QuoteSeconds)
+	creates := sender.createCalls()
+	require.Len(t, creates, videoCreateAttempts+1)
+	for _, c := range creates {
+		require.Equal(t, job.ID, c.jobID, "every attempt carries the same job id")
+	}
+	require.NotEmpty(t, sender.statusCalls(), "status is asked once the receipt is in")
+	stored, _ = vjStored(t, svc, job.ID)
+	require.Equal(t, "gen-123", stored.VendorTaskID)
+}
+
+// A refusal of the resend is not proof the provider never accepted the job
+// (its session gates answer before it looks the job up), so the watcher
+// stops resending and asks for the status: a provider with no record of the
+// job refuses that, and the job ends.
+func TestVideoJobResendRefusedAsksStatus(t *testing.T) {
+	sessions := newVJSessions()
+	sender := &vjSender{
+		createFn: func(n int, _ common.Hash, _ string) (*videojob.Receipt, error) {
+			if n <= videoCreateAttempts {
+				return nil, lib.WrapError(ErrProvider, errors.New("connection reset"))
+			}
+			return nil, fmt.Errorf("%w: session expired", ErrProviderRefused)
+		},
+		statusFn: vjSequence(vjErr(fmt.Errorf("%w: %s", ErrProviderRefused, ErrNoVideoJob.Error()))),
+	}
+	svc := newVJService(t, sender, sessions, nil, 0)
+
+	job, err := svc.Create(context.Background(), vjCreateParams("x"))
+	require.NoError(t, err)
+	ended := vjEventuallyStatus(t, svc, job.ID, videojob.StatusFailed)
+	require.Equal(t, "provider_refused", ended.Error.Code)
+	require.Empty(t, ended.VendorTaskID)
 	vjWait(t, svc)
-	require.Empty(t, svc.List(), "the caller's session stays open for a retry")
+	require.Len(t, sender.createCalls(), videoCreateAttempts+1, "one resend, then no more")
+	require.Len(t, sender.statusCalls(), videoMaxRefusals)
+}
+
+// A failure before anything was sent (no session, no provider, no key) is
+// returned as before: nothing could have reached the provider.
+func TestVideoJobCreateFailureBeforeSendingLeavesNoJob(t *testing.T) {
+	for _, cause := range []error{ErrSessionNotFound, ErrProviderNotFound, ErrMissingPrKey, lib.WrapError(ErrTeeAttestation, errors.New("quote mismatch"))} {
+		t.Run(cause.Error(), func(t *testing.T) {
+			sender := &vjSender{createFn: func(int, common.Hash, string) (*videojob.Receipt, error) { return nil, cause }}
+			svc := newVJService(t, sender, newVJSessions(), nil, 0)
+
+			_, err := svc.Create(context.Background(), vjCreateParams("x"))
+			require.ErrorIs(t, err, cause)
+			require.Len(t, sender.createCalls(), 1, "not a transport error: no retry")
+			require.Empty(t, svc.List())
+		})
+	}
+}
+
+// Refused on the second attempt after a lost first answer: the job is kept
+// without a resend, and the status, which repeats the receipt, settles it.
+func TestVideoJobCreateRefusedAfterLostAnswerTakesReceiptFromStatus(t *testing.T) {
+	sender := &vjSender{
+		createFn: func(n int, _ common.Hash, _ string) (*videojob.Receipt, error) {
+			if n == 1 {
+				return nil, lib.WrapError(ErrProvider, errors.New("read timeout"))
+			}
+			return nil, fmt.Errorf("%w: session expired", ErrProviderRefused)
+		},
+		statusFn: func(_ context.Context, n int, _ common.Hash, jobID string) (*videojob.Update, error) {
+			if n == 1 {
+				return &videojob.Update{JobID: jobID, Status: videojob.StatusRunning, Receipt: vjReceipt(jobID)}, nil
+			}
+			return &videojob.Update{JobID: jobID, Status: videojob.StatusSucceeded, VideoURL: "https://cdn.renderful.example/out/gen-123.mp4"}, nil
+		},
+	}
+	svc := newVJService(t, sender, newVJSessions(), nil, 0)
+
+	job, err := svc.Create(context.Background(), vjCreateParams("x"))
+	require.NoError(t, err)
+	require.Empty(t, job.VendorTaskID)
+
+	done := vjEventuallyStatus(t, svc, job.ID, videojob.StatusSucceeded)
+	require.Equal(t, "gen-123", done.VendorTaskID, "the receipt came with the status")
+	require.EqualValues(t, 120, done.QuoteSeconds)
+	require.Equal(t, videojob.VendorRenderful, done.Vendor)
+	vjWait(t, svc)
+	require.Len(t, sender.createCalls(), 2, "no resend after a refusal")
+	stored, _ := vjStored(t, svc, job.ID)
+	require.Equal(t, "gen-123", stored.VendorTaskID)
+}
+
+// After a restart the request is gone, so an unconfirmed job is not sent
+// again: the status answers whether the provider ever accepted it.
+func TestVideoJobResumeUnconfirmedJobAsksStatus(t *testing.T) {
+	store := storages.NewSessionStorage(storages.NewTestStorage())
+	now := time.Now().UTC()
+	vjPutJob(t, store, videojob.Job{Object: videojob.ObjectJob, ID: "vjob_unconfirmed", Status: videojob.StatusQueued,
+		SessionID: vjSessionID.Hex(), CreatedAt: now, UpdatedAt: now})
+
+	sender := &vjSender{statusFn: vjSequence(vjErr(fmt.Errorf("%w: %s", ErrProviderRefused, ErrNoVideoJob.Error())))}
+	svc := newVJService(t, sender, newVJSessions(), store, 0)
+	svc.Resume()
+
+	ended := vjEventuallyStatus(t, svc, "vjob_unconfirmed", videojob.StatusFailed)
+	require.Equal(t, "provider_refused", ended.Error.Code)
+	require.Empty(t, sender.createCalls(), "nothing to resend without the request")
+	require.Len(t, sender.statusCalls(), videoMaxRefusals)
 }
 
 // --- watcher through the provider -------------------------------------------
@@ -573,7 +644,7 @@ func TestVideoJobResumeWatchesUnfinishedJobs(t *testing.T) {
 	pending := videojob.Job{
 		Object: videojob.ObjectJob, ID: "vjob_pending", Model: vjModelID.Hex(), Status: videojob.StatusRunning,
 		SessionID: vjSessionID.Hex(), Vendor: videojob.VendorBytePlus, VendorTaskID: "cgt-1",
-		StatusURL: "https://ark.example.com/tasks/cgt-1", CreatedAt: now, UpdatedAt: now,
+		CreatedAt: now, UpdatedAt: now,
 	}
 	finished := videojob.Job{
 		Object: videojob.ObjectJob, ID: "vjob_finished", Model: vjModelID.Hex(), Status: videojob.StatusSucceeded,

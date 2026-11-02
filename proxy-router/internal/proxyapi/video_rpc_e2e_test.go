@@ -139,7 +139,8 @@ func TestVideoJobRPCEndToEnd(t *testing.T) {
 	loader := config.NewModelConfigLoader(filepath.Join(t.TempDir(), "models-config.json"), modelsConfig, valid, e2eModelExists{}, e2eNoDial{}, log)
 	require.NoError(t, loader.Init())
 
-	receiver := NewProxyReceiver(providerPrKey, providerPub, providerSS, nil, big.NewInt(1), loader, nil, providerRepo)
+	chain := &videoTestChainSessions{session: chainSession(time.Now(), time.Unix(session.EndsAt.Int64(), 0), 0)}
+	receiver := NewProxyReceiver(providerPrKey, providerPub, providerSS, nil, big.NewInt(1), loader, chain, providerRepo)
 	controller := NewMORRPCController(receiver, valid, providerRepo, providerSS, providerPrKey, nil)
 	addr := e2eServe(t, controller)
 
@@ -159,7 +160,6 @@ func TestVideoJobRPCEndToEnd(t *testing.T) {
 	require.Equal(t, videojob.ObjectJob, receipt.Object)
 	require.Equal(t, videojob.VendorBytePlus, receipt.Vendor)
 	require.Equal(t, "cgt-e2e", receipt.VendorTaskID)
-	require.Equal(t, vendor.URL+"/contents/generations/tasks/cgt-e2e", receipt.StatusURL)
 	require.Equal(t, "vjob_e2e", receipt.ClientJobID)
 	require.Equal(t, "720p", receipt.Resolved.Resolution)
 	// 5 s × 2.25 (720p) × 75 = 843.75 → 844
