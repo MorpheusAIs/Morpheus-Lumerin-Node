@@ -67,6 +67,47 @@ func (s *MORRPCController) SetProviderAuthResolver(r ProviderAuthResolver) {
 	s.authResolver = r
 }
 
+// capabilities is what this provider advertises on network.capabilities.
+func (s *MORRPCController) capabilities() []string {
+	return []string{m.CapPromptEncryptionECIES}
+}
+
+// openContent recovers the plaintext of a content field of an authenticated
+// request. Call it only after VerifySignature: the Enc marker is part of the
+// signed payload, so by then it is known to be the consumer's own declaration.
+func (s *MORRPCController) openContent(method, enc, content string, sourceLog lib.ILogger) ([]byte, error) {
+	plain, encrypted, err := openContent(enc, content, s.prKey)
+	if err != nil {
+		sourceLog.Warnf("%s content rejected: %s", method, err)
+		return nil, err
+	}
+	if !encrypted {
+		sourceLog.Debugf("%s content received unencrypted", method)
+	}
+	return plain, nil
+}
+
+// openContent recovers the plaintext of a consumer -> provider content field
+// (session.prompt, session.prompt.stream.chunk/end, agent.call_tool) according
+// to its Enc marker. EncECIES content is ECIES-encrypted to this node's key,
+// mirroring lib.DecryptString on the consumer side for provider responses;
+// an empty marker is unencrypted content from a consumer that does not
+// encrypt. The second result reports whether the content arrived encrypted.
+func openContent(enc, content string, nodePrKey lib.HexString) ([]byte, bool, error) {
+	switch enc {
+	case m.EncECIES:
+		plain, err := lib.DecryptString(content, nodePrKey.Hex())
+		if err != nil {
+			return nil, false, lib.WrapError(ErrContentDecrypt, err)
+		}
+		return []byte(plain), true, nil
+	case "":
+		return []byte(content), false, nil
+	default:
+		return nil, false, lib.WrapError(ErrUnsupportedContentEncoding, fmt.Errorf("enc=%q", enc))
+	}
+}
+
 // servesProvider reports whether this node is the legitimate server for sessions
 // opened against providerAddr: either the address is this node's key, or the
 // provider is a contract whose authorized signer is this node's key. Fails
@@ -122,6 +163,8 @@ func (s *MORRPCController) Handle(ctx context.Context, msg m.RPCMessage, sourceL
 	switch msg.Method {
 	case "network.ping":
 		return s.networkPing(ctx, msg, sendResponse, sourceLog)
+	case "network.capabilities":
+		return s.networkCapabilities(ctx, msg, sendResponse, sourceLog)
 	case "session.request":
 		return s.sessionRequest(ctx, msg, sendResponse, sourceLog)
 	case "session.prompt":
@@ -144,9 +187,11 @@ func (s *MORRPCController) Handle(ctx context.Context, msg m.RPCMessage, sourceL
 }
 
 var (
-	ErrValidation     = fmt.Errorf("request validation failed")
-	ErrUnmarshal      = fmt.Errorf("failed to unmarshal request")
-	ErrGenerateReport = fmt.Errorf("failed to generate report")
+	ErrValidation                 = fmt.Errorf("request validation failed")
+	ErrUnmarshal                  = fmt.Errorf("failed to unmarshal request")
+	ErrGenerateReport             = fmt.Errorf("failed to generate report")
+	ErrContentDecrypt             = fmt.Errorf("failed to decrypt content")
+	ErrUnsupportedContentEncoding = fmt.Errorf("unsupported content encoding")
 )
 
 func (s *MORRPCController) networkPing(_ context.Context, msg m.RPCMessage, sendResponse SendResponse, sourceLog lib.ILogger) error {
@@ -166,6 +211,29 @@ func (s *MORRPCController) networkPing(_ context.Context, msg m.RPCMessage, send
 	}
 
 	res, err := s.morRpc.PongResponce(msg.ID, s.prKey, req.Nonce, config.BuildVersion, models)
+	if err != nil {
+		sourceLog.Error(err)
+		return err
+	}
+
+	return sendResponse(res)
+}
+
+// networkCapabilities answers with the signed list of optional features this
+// provider supports. It needs no session and no stored user: it is the first
+// thing a consumer asks before deciding how to talk to us.
+func (s *MORRPCController) networkCapabilities(_ context.Context, msg m.RPCMessage, sendResponse SendResponse, sourceLog lib.ILogger) error {
+	var req m.CapabilitiesReq
+	err := json.Unmarshal(msg.Params, &req)
+	if err != nil {
+		return lib.WrapError(ErrUnmarshal, err)
+	}
+
+	if err := s.validator.Struct(req); err != nil {
+		return lib.WrapError(ErrValidation, err)
+	}
+
+	res, err := s.morRpc.CapabilitiesResponse(msg.ID, s.prKey, req.Nonce, s.capabilities())
 	if err != nil {
 		sourceLog.Error(err)
 		return err
@@ -246,8 +314,13 @@ func (s *MORRPCController) sessionPrompt(ctx context.Context, msg m.RPCMessage, 
 	defer s.sessionSema.Release(req.SessionID)
 	sourceLog.Debugf("acquired session semaphore for session %s", req.SessionID.Hex())
 
+	payload, err := s.openContent(msg.Method, req.Enc, req.Message, sourceLog)
+	if err != nil {
+		return err
+	}
+
 	now := time.Now().Unix()
-	ttftMs, inputTokens, outputTokens, err := s.service.SessionPrompt(ctx, msg.ID, user.PubKey, []byte(req.Message), req.SessionID, sendResponse, sourceLog)
+	ttftMs, inputTokens, outputTokens, err := s.service.SessionPrompt(ctx, msg.ID, user.PubKey, payload, req.SessionID, sendResponse, sourceLog)
 	if err != nil {
 		sourceLog.Error(err)
 		return err
@@ -366,6 +439,13 @@ func (s *MORRPCController) callAgentTool(ctx context.Context, msg m.RPCMessage, 
 		sourceLog.Error(err)
 		return err
 	}
+
+	input, err := s.openContent(msg.Method, req.Enc, req.Message, sourceLog)
+	if err != nil {
+		return err
+	}
+	req.Message = string(input)
+	req.Enc = ""
 
 	res, err := s.service.CallAgentTool(ctx, msg.ID, msg.ID, user.PubKey, &req, sourceLog)
 	if err != nil {
@@ -506,10 +586,17 @@ func (s *MORRPCController) sessionPromptStreamChunk(ctx context.Context, msg m.R
 		return err
 	}
 
-	// Decode chunk data
-	chunkData, err := base64.StdEncoding.DecodeString(req.ChunkData)
+	// Recover the raw chunk: ECIES ciphertext carries the bytes directly;
+	// legacy plaintext carries them base64-encoded.
+	chunkData, err := s.openContent(msg.Method, req.Enc, req.ChunkData, sourceLog)
 	if err != nil {
-		return fmt.Errorf("failed to decode chunk data: %s", err)
+		return err
+	}
+	if req.Enc == "" {
+		chunkData, err = base64.StdEncoding.DecodeString(string(chunkData))
+		if err != nil {
+			return fmt.Errorf("failed to decode chunk data: %s", err)
+		}
 	}
 
 	// Lookup is scoped to the calling session; ordering and size bounds are
@@ -565,6 +652,11 @@ func (s *MORRPCController) sessionPromptStreamEnd(ctx context.Context, msg m.RPC
 		return err
 	}
 
+	audioRequestParam, err := s.openContent(msg.Method, req.Enc, req.AudioRequestParam, sourceLog)
+	if err != nil {
+		return err
+	}
+
 	// Get streaming session (lookup is scoped to the calling session)
 	streamSession, exists := s.streamManager.GetSession(req.StreamID, req.SessionID.Hex())
 	if !exists {
@@ -590,7 +682,7 @@ func (s *MORRPCController) sessionPromptStreamEnd(ctx context.Context, msg m.RPC
 	sourceLog.Debugf("acquired session semaphore for session %s (stream end)", req.SessionID.Hex())
 
 	// Process the complete audio file
-	err = s.processStreamedAudioFile(ctx, session, streamSession.TempFilePath, req.AudioRequestParam, msg.ID, user.PubKey, req.SessionID, sendResponse, sourceLog)
+	err = s.processStreamedAudioFile(ctx, session, streamSession.TempFilePath, string(audioRequestParam), msg.ID, user.PubKey, req.SessionID, sendResponse, sourceLog)
 	if err != nil {
 		// Clean up streaming session on error
 		s.streamManager.RemoveSession(req.StreamID, req.SessionID.Hex())

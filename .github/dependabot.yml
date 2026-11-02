@@ -1,0 +1,32 @@
+# Version updates open against `dev` (integration branch).
+# Security updates still target the repository default branch (`main`);
+# retarget or batch those into `dev` as today.
+# See: https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference#target-branch-
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /ui-desktop
+    schedule:
+      interval: weekly
+    target-branch: dev
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+
+  - package-ecosystem: npm
+    directory: /docs
+    schedule:
+      interval: weekly
+    target-branch: dev
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+
+  - package-ecosystem: npm
+    directory: /smart-contracts
+    schedule:
+      interval: weekly
+    target-branch: dev
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies

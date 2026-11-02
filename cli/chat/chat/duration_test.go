@@ -58,9 +58,18 @@ func TestSessionDurationReachesTheRequest(t *testing.T) {
 				t.Fatalf("model carries duration %d, want %d", m.sessionDuration, int64(tc.want))
 			}
 
-			// Selecting a model is what opens the session.
+			// Selecting a model is what opens the session. Update only
+			// starts it now -- the command it returns performs the call --
+			// so run that, then feed the result back as the loop would.
 			m.list.Select(0)
-			updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+			started, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+			opened := awaitSessionOpened(t, cmd)
+			if opened.err != nil {
+				t.Fatalf("opening the session failed: %v", opened.err)
+			}
+
+			updated, _ := started.(model).Update(opened)
 			got := updated.(model)
 
 			if !sawSessionCall {
