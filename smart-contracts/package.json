@@ -43,7 +43,7 @@
     "eslint": "^8.57.1",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.2.1",
-    "hardhat-contract-sizer": "^2.10.0",
+    "hardhat-contract-sizer": "^2.10.1",
     "hardhat-gas-reporter": "^2.2.1",
     "mocha": "^10.7.3",
     "morpheus-smart-contracts": "https://github.com/MorpheusAIs/SmartContracts.git#753accd",
