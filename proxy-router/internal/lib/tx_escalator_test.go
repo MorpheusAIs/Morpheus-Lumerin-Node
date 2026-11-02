@@ -208,6 +208,72 @@ func TestSendWithEscalation_LingersForLateInclusion(t *testing.T) {
 	require.Equal(t, c.sent[0].Hash(), receipt.TxHash)
 }
 
+// The cap stops the cross-call ratchet: repeated calls on a nonce the chain never
+// mines must stop bidding higher once the pending price reaches MaxGasPrice, and
+// must not send anything above it.
+func TestSendWithEscalation_CapStopsRatchetAcrossCalls(t *testing.T) {
+	c := newFakeClient()
+	cfg := fastConfig()
+	cfg.MaxTotalTime = 150 * time.Millisecond
+	cfg.MaxGasPrice = big.NewInt(40_000_000) // 0.04 gwei; estimate starts at 0.011
+	e := newTestEscalator(c, cfg)
+	opts := &bind.TransactOpts{From: testFrom}
+
+	var sawCap bool
+	for call := 0; call < 8; call++ {
+		_, err := e.SendWithEscalation(context.Background(), opts, testBuilder, false)
+		require.Error(t, err)
+		if errors.Is(err, ErrMaxGasExceeded) {
+			sawCap = true
+			require.Contains(t, err.Error(), "ETH_NODE_MAX_GAS_PRICE_GWEI")
+			// Once we are at the cap, no further txs are submitted.
+			before := len(c.sent)
+			_, err = e.SendWithEscalation(context.Background(), opts, testBuilder, false)
+			require.ErrorIs(t, err, ErrMaxGasExceeded)
+			require.NotErrorIs(t, err, ErrTxStillPending, "nothing was sent by this call")
+			require.Equal(t, before, len(c.sent))
+			break
+		}
+		require.ErrorIs(t, err, ErrEscalationFailed)
+		require.ErrorIs(t, err, ErrTxStillPending)
+	}
+	require.True(t, sawCap, "ratchet must hit the cap within a few calls")
+
+	for _, tx := range c.sent {
+		require.True(t, tx.GasFeeCap().Cmp(cfg.MaxGasPrice) <= 0,
+			"sent fee %s exceeds cap %s", tx.GasFeeCap(), cfg.MaxGasPrice)
+	}
+}
+
+// Hitting the cap mid-call (after some txs went out) reports both the cap and
+// the txs still in flight, so the caller keeps any hold it placed.
+func TestSendWithEscalation_CapMidCallReportsPending(t *testing.T) {
+	c := newFakeClient()
+	cfg := fastConfig()
+	cfg.MaxGasPrice = big.NewInt(12_000_000) // first send 0.011 ok, first bump 0.01265 over
+	e := newTestEscalator(c, cfg)
+	opts := &bind.TransactOpts{From: testFrom}
+
+	_, err := e.SendWithEscalation(context.Background(), opts, testBuilder, false)
+	require.ErrorIs(t, err, ErrMaxGasExceeded)
+	require.ErrorIs(t, err, ErrTxStillPending)
+	require.Len(t, c.sent, 1)
+	require.Contains(t, err.Error(), c.sent[0].Hash().Hex())
+}
+
+func TestDefaultEscalationConfig_HasOneGweiCap(t *testing.T) {
+	cfg := DefaultEscalationConfig()
+	require.NotNil(t, cfg.MaxGasPrice)
+	require.Equal(t, int64(1_000_000_000), cfg.MaxGasPrice.Int64())
+}
+
+func TestMaxGasPriceFromGwei(t *testing.T) {
+	require.Equal(t, int64(1_000_000_000), MaxGasPriceFromGwei(0).Int64(), "unset → default 1 gwei")
+	require.Equal(t, int64(500_000_000), MaxGasPriceFromGwei(0.5).Int64())
+	require.Equal(t, int64(25_000_000_000), MaxGasPriceFromGwei(25).Int64())
+	require.Nil(t, MaxGasPriceFromGwei(-1), "-1 → unlimited")
+}
+
 // A fresh nonce (nothing pending) must not be touched by the pending memory.
 func TestSendWithEscalation_FreshNonceUsesNetworkEstimate(t *testing.T) {
 	c := newFakeClient()

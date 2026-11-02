@@ -28,6 +28,8 @@ type Config struct {
 		ChainID        int    `env:"ETH_NODE_CHAIN_ID"  flag:"eth-node-chain-id"  validate:"number"`
 		EthNodeAddress string `env:"ETH_NODE_ADDRESS"   flag:"eth-node-address"   validate:"omitempty,url"`
 		EthLegacyTx    bool   `env:"ETH_NODE_LEGACY_TX" flag:"eth-node-legacy-tx" desc:"use it to disable EIP-1559 transactions"`
+		// Ceiling for gas-price escalation on our own transactions. Default 1 gwei; -1 disables the cap.
+		EthMaxGasPriceGwei float64 `env:"ETH_NODE_MAX_GAS_PRICE_GWEI" flag:"eth-node-max-gas-price-gwei" validate:"omitempty,gte=-1" desc:"max gas price (gwei) the tx escalator will bid before giving up; defaults to 1, -1 = unlimited"`
 		// ExplorerApiUrl     string          `env:"EXPLORER_API_URL"   flag:"explorer-api-url"   validate:"required,url"`
 		BlockscoutApiUrl   string          `env:"BLOCKSCOUT_API_URL" flag:"blockscout-api-url" validate:"required,url"`
 		ExplorerRetryDelay time.Duration   `env:"EXPLORER_RETRY_DELAY" flag:"explorer-retry-delay" validate:"omitempty,duration" desc:"delay between retries"`
@@ -125,6 +127,9 @@ func (cfg *Config) SetDefaults() {
 	}
 
 	// Blockchain
+	if cfg.Blockchain.EthMaxGasPriceGwei == 0 {
+		cfg.Blockchain.EthMaxGasPriceGwei = lib.DefaultMaxGasPriceGwei
+	}
 	if cfg.Blockchain.MaxReconnects == 0 {
 		cfg.Blockchain.MaxReconnects = 30
 	}
@@ -311,6 +316,7 @@ func (cfg *Config) GetSanitized() interface{} {
 	publicCfg := Config{}
 
 	publicCfg.Blockchain.EthLegacyTx = cfg.Blockchain.EthLegacyTx
+	publicCfg.Blockchain.EthMaxGasPriceGwei = cfg.Blockchain.EthMaxGasPriceGwei
 	publicCfg.Blockchain.ChainID = cfg.Blockchain.ChainID
 	publicCfg.Blockchain.MaxReconnects = cfg.Blockchain.MaxReconnects
 	publicCfg.Blockchain.PollingInterval = cfg.Blockchain.PollingInterval

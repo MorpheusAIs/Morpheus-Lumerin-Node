@@ -298,7 +298,13 @@ func start() error {
 		teeVerifier = attestation.NewVerifier(cfg.TEE.PortalURL, cfg.TEE.ImageRepo, appLog.Named("TEE"))
 	}
 
-	blockchainApi := blockchainapi.NewBlockchainService(ethClient, multicallBackend, *cfg.Marketplace.DiamondContractAddress, *cfg.Marketplace.MorTokenAddress, explorer, wallet, proxyRouterApi, sessionRepo, scorer, authCfg, appLog, rpcLog, cfg.Blockchain.EthLegacyTx, teeVerifier)
+	// -1 → unlimited (nil cap). MaxGasPriceFromGwei maps that to nil; a negative
+	// big.Int is never produced, so the service's Sign() check is belt and braces.
+	maxGasPriceWei := lib.MaxGasPriceFromGwei(cfg.Blockchain.EthMaxGasPriceGwei)
+	if maxGasPriceWei == nil {
+		maxGasPriceWei = big.NewInt(0) // explicit "no cap" for the constructor
+	}
+	blockchainApi := blockchainapi.NewBlockchainService(ethClient, multicallBackend, *cfg.Marketplace.DiamondContractAddress, *cfg.Marketplace.MorTokenAddress, explorer, wallet, proxyRouterApi, sessionRepo, scorer, authCfg, appLog, rpcLog, cfg.Blockchain.EthLegacyTx, maxGasPriceWei, teeVerifier)
 	blockchainApi.SetSessionHealthPolicy(cfg.Proxy.SessionHealthPolicy)
 	sessionRepo.SetModelTagsProvider(blockchainApi)
 	proxyRouterApi.SetSessionService(blockchainApi)

@@ -21,6 +21,11 @@ const (
 	DefaultBumpPercent   = 15               // Gas price bump percentage (min 10% for node acceptance)
 	DefaultMaxTotalTime  = 3 * time.Minute  // Max total time to wait for mining
 
+	// DefaultMaxGasPriceGwei caps how high escalation will bid. Base normally runs at
+	// 0.001–0.05 gwei, so 1 gwei is deep congestion headroom while still refusing to
+	// chase a chain that is not including transactions at a sane price (#1011).
+	DefaultMaxGasPriceGwei = 1.0
+
 	// lingerPollDivisor sets how often submitted-but-unmined txs are re-checked once
 	// escalation attempts are exhausted but MaxTotalTime budget remains: CheckInterval / divisor.
 	lingerPollDivisor = 4
@@ -31,7 +36,30 @@ var (
 	ErrEscalationFailed = errors.New("transaction not mined after all escalation attempts")
 	ErrTxNotMinedYet    = errors.New("transaction not mined yet")
 	ErrMaxGasExceeded   = errors.New("max gas price limit exceeded")
+	// ErrTxStillPending is wrapped into a failure when this call left at least one
+	// submitted tx in the pool: the action may still land, so callers must not treat
+	// the failure as "nothing happened".
+	ErrTxStillPending = errors.New("submitted transaction(s) still pending")
 )
+
+// GweiToWei converts a gwei amount (fractions allowed) to wei. Non-positive input
+// returns nil, which the escalator treats as "no cap".
+func GweiToWei(gwei float64) *big.Int {
+	if gwei <= 0 {
+		return nil
+	}
+	wei, _ := new(big.Float).Mul(big.NewFloat(gwei), big.NewFloat(1e9)).Int(nil)
+	return wei
+}
+
+// MaxGasPriceFromGwei maps the ETH_NODE_MAX_GAS_PRICE_GWEI setting to an escalator cap:
+// 0 (unset) → DefaultMaxGasPriceGwei, negative → nil (unlimited).
+func MaxGasPriceFromGwei(gwei float64) *big.Int {
+	if gwei == 0 {
+		gwei = DefaultMaxGasPriceGwei
+	}
+	return GweiToWei(gwei)
+}
 
 // EscalationConfig holds settings for transaction escalation
 type EscalationConfig struct {
@@ -49,7 +77,7 @@ func DefaultEscalationConfig() EscalationConfig {
 		MaxAttempts:   DefaultMaxAttempts,
 		BumpPercent:   DefaultBumpPercent,
 		MaxTotalTime:  DefaultMaxTotalTime,
-		MaxGasPrice:   nil, // No limit by default
+		MaxGasPrice:   GweiToWei(DefaultMaxGasPriceGwei),
 	}
 }
 
@@ -234,11 +262,13 @@ func (e *TransactionEscalator) SendWithEscalation(
 			log.Warnf("Nonce %d still has a pending tx from an earlier call, pricing above it: %v", nonce, gasPrices.MaxPrice())
 		}
 
-		// Check max gas limit
+		// Check max gas limit. If a tx is already pending at or above the cap, the
+		// chain is not including txs at a price we are willing to pay: stop here
+		// rather than bid higher, and tell the caller what is still in flight.
 		if e.config.MaxGasPrice != nil && gasPrices.MaxPrice().Cmp(e.config.MaxGasPrice) > 0 {
 			log.Warnf("Gas price %v exceeds max limit %v, stopping escalation",
 				gasPrices.MaxPrice(), e.config.MaxGasPrice)
-			return nil, WrapError(ErrMaxGasExceeded, lastErr)
+			return nil, e.maxGasError(submittedTxs, lastErr)
 		}
 
 		// Prepare opts for this attempt
@@ -338,14 +368,34 @@ func (e *TransactionEscalator) SendWithEscalation(
 			e.forgetPending(baseOpts.From)
 			return receipt, nil
 		}
-		hashes := make([]string, 0, len(submittedTxs))
-		for _, tx := range submittedTxs {
-			hashes = append(hashes, tx.Hash().Hex())
-		}
-		return nil, fmt.Errorf("%w: %d tx(s) still pending and may yet be mined: %s",
-			ErrEscalationFailed, len(submittedTxs), strings.Join(hashes, ", "))
+		return nil, fmt.Errorf("%w: %w: %d tx(s) may yet be mined: %s",
+			ErrEscalationFailed, ErrTxStillPending, len(submittedTxs), txHashList(submittedTxs))
 	}
 	return nil, ErrEscalationFailed
+}
+
+// maxGasError builds the ErrMaxGasExceeded result, naming the cap and any txs this
+// call left in the pool so the caller does not assume nothing was sent.
+func (e *TransactionEscalator) maxGasError(submitted []*types.Transaction, lastErr error) error {
+	capGwei := new(big.Float).Quo(new(big.Float).SetInt(e.config.MaxGasPrice), big.NewFloat(1e9))
+	msg := fmt.Sprintf("cap %s gwei (ETH_NODE_MAX_GAS_PRICE_GWEI); the network is not including transactions at a sane price",
+		capGwei.Text('g', 6))
+	if lastErr != nil {
+		msg += fmt.Sprintf(" (last: %v)", lastErr)
+	}
+	if len(submitted) > 0 {
+		return fmt.Errorf("%w: %s; %w: %d tx(s) from this call: %s",
+			ErrMaxGasExceeded, msg, ErrTxStillPending, len(submitted), txHashList(submitted))
+	}
+	return fmt.Errorf("%w: %s", ErrMaxGasExceeded, msg)
+}
+
+func txHashList(txs []*types.Transaction) string {
+	hashes := make([]string, 0, len(txs))
+	for _, tx := range txs {
+		hashes = append(hashes, tx.Hash().Hex())
+	}
+	return strings.Join(hashes, ", ")
 }
 
 // lingerForSubmitted polls the submitted txs for a receipt until ctx expires.
