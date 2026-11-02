@@ -2160,7 +2160,7 @@ func classifyOpenSessionError(stage string, err error) error {
 	case isInsufficientMOR(err):
 		return fmt.Errorf("%s: insufficient MOR balance — your wallet does not have enough MOR to stake for this session length. Original: %w", stage, err)
 	case isTxNotMined(err):
-		return fmt.Errorf("%s: transaction could not be confirmed on-chain — the network may be congested, try again shortly. Original: %w", stage, err)
+		return fmt.Errorf("%s: transaction was submitted but not confirmed within the wait window — it may still be mined. Check your sessions before retrying so a late confirmation does not open a second session. Original: %w", stage, err)
 	default:
 		return fmt.Errorf("%s: %w", stage, err)
 	}
@@ -2175,7 +2175,7 @@ func classifyCloseSessionError(err error) error {
 		return fmt.Errorf("close session failed: the protocol funding pool does not have enough MOR allowance to settle provider payment — "+
 			"this is a network-level issue, not a wallet issue. The auto-close will keep retrying. Original: %w", err)
 	case isTxNotMined(err):
-		return fmt.Errorf("close session failed: transaction could not be confirmed on-chain — the network may be congested, try again shortly. Original: %w", err)
+		return fmt.Errorf("close session failed: transaction was submitted but not confirmed within the wait window — it may still be mined. Check the session state before retrying. Original: %w", err)
 	default:
 		return fmt.Errorf("close session failed: %w", err)
 	}
