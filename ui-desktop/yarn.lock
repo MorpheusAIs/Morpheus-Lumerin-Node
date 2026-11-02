@@ -2820,10 +2820,10 @@ binary@~0.3.0:
     buffers "~0.1.1"
     chainsaw "~0.1.0"
 
-bip39@^3.1.0:
-  version "3.1.0"
-  resolved "https://registry.yarnpkg.com/bip39/-/bip39-3.1.0.tgz#c55a418deaf48826a6ceb34ac55b3ee1577e18a3"
-  integrity sha512-c9kiwdk45Do5GL0vJMe7tS95VjCii65mYAH7DfWl3uW8AVzXKQVUm64i3hzVybBDMp9r7j9iNxR85+ul8MdN/A==
+bip39@^3.1.2:
+  version "3.1.2"
+  resolved "https://registry.yarnpkg.com/bip39/-/bip39-3.1.2.tgz#17e31b77e80ded2e7388cb88a327cd640917baf7"
+  integrity sha512-inxKLEH+Weos8f5rBYNKuOrpOIcNWtKnrLur9x72s4Cb8w4Mm0jJktUPkev7+1pQuivxFqkiut9+AcrwunLHxA==
   dependencies:
     "@noble/hashes" "^1.2.0"
 
