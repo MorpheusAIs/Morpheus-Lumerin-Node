@@ -92,6 +92,11 @@ type Config struct {
 		// Single-bid opens always force permissive (healthPolicySingleBid is
 		// fixed to "permissive") so single-provider models remain usable.
 		SessionHealthPolicy string `env:"SESSION_HEALTH_POLICY" flag:"session-health-policy" validate:"omitempty,oneof=permissive preferred strict" desc:"model health strictness when opening a session by model: permissive (default; skip only providers self-reporting unhealthy/tee_unverified/no_model_configured), preferred (when any provider reports healthy or degraded, skip providers with unknown/missing reports; otherwise fall back to permissive), strict (only try providers reporting healthy); opens with a single candidate bid always use permissive"`
+
+		// Consumer side of video jobs: how often the status of a job is
+		// read, and for how long before the job is given up.
+		VideoJobPollInterval time.Duration `env:"VIDEO_JOB_POLL_INTERVAL" flag:"video-job-poll-interval" validate:"omitempty,duration" desc:"how often the consumer asks the provider for the status of a running video job; default 10s, minimum 2s"`
+		VideoJobMaxWatch     time.Duration `env:"VIDEO_JOB_MAX_WATCH" flag:"video-job-max-watch" validate:"omitempty,duration" desc:"how long the consumer keeps reading a video job's status before it marks the job failed; default 72h"`
 	}
 	System struct {
 		Enable           bool   `env:"SYS_ENABLE"              flag:"sys-enable" desc:"enable system level configuration adjustments"`
@@ -118,6 +123,10 @@ type Config struct {
 // Below one minute a many-model provider would re-probe every backend on
 // each manual re-check.
 const MinModelApiDetectTTL = time.Minute
+
+// MinVideoJobPollInterval keeps many running jobs from hammering a vendor's
+// status endpoint.
+const MinVideoJobPollInterval = 2 * time.Second
 
 func (cfg *Config) SetDefaults() {
 	if cfg.Environment == "" {
@@ -267,6 +276,15 @@ func (cfg *Config) SetDefaults() {
 	if cfg.Proxy.SessionHealthPolicy == "" {
 		cfg.Proxy.SessionHealthPolicy = "permissive"
 	}
+	if cfg.Proxy.VideoJobPollInterval == 0 {
+		cfg.Proxy.VideoJobPollInterval = 10 * time.Second
+	}
+	if cfg.Proxy.VideoJobPollInterval < MinVideoJobPollInterval {
+		cfg.Proxy.VideoJobPollInterval = MinVideoJobPollInterval
+	}
+	if cfg.Proxy.VideoJobMaxWatch == 0 {
+		cfg.Proxy.VideoJobMaxWatch = 72 * time.Hour
+	}
 
 	// IPFS: leave Address empty when unset. A host:port default is not a
 	// multiaddr and made NewIpfsManager log ERROR on every headless boot (#872).
@@ -350,6 +368,8 @@ func (cfg *Config) GetSanitized() interface{} {
 	publicCfg.Proxy.ModelApiVerifyBindings = cfg.Proxy.ModelApiVerifyBindings
 	publicCfg.Proxy.ModelApiProbeCapabilities = cfg.Proxy.ModelApiProbeCapabilities
 	publicCfg.Proxy.SessionHealthPolicy = cfg.Proxy.SessionHealthPolicy
+	publicCfg.Proxy.VideoJobPollInterval = cfg.Proxy.VideoJobPollInterval
+	publicCfg.Proxy.VideoJobMaxWatch = cfg.Proxy.VideoJobMaxWatch
 
 	publicCfg.System.Enable = cfg.System.Enable
 	publicCfg.System.LocalPortRange = cfg.System.LocalPortRange

@@ -313,7 +313,8 @@ func (c *Checker) checkAll(ctx context.Context, walletAddr common.Address) {
 		// backend are paced: the health probe of a model with an active bid,
 		// and an API detection the detector cannot answer from its cache.
 		// Both kinds share one pace, since they share that account.
-		willHit := hasBid || c.detectionWouldProbe(cfg)
+		// A video model sends nothing to its vendor during a sweep.
+		willHit := (hasBid && !aiengine.IsVideoApiType(cfg.ApiType)) || c.detectionWouldProbe(cfg)
 		if willHit && backendHit && !c.sleep(ctx, c.probeDelay) {
 			return
 		}
@@ -498,6 +499,18 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 		c.setReport(report)
 	}()
 
+	// A hosted video model advertises the guide consumers quote jobs by. It
+	// has no request worth probing: every vendor call that would prove
+	// anything starts a billed render.
+	isVideo := aiengine.IsVideoApiType(cfg.ApiType)
+	if isVideo {
+		if guide, err := aiengine.VideoGuideFor(&cfg, c.log); err != nil {
+			c.log.Warnf("model %s: no video guide: %s", lib.Short(modelID), err)
+		} else {
+			report.Video = guide
+		}
+	}
+
 	if !hasBid {
 		report.Status = system.ModelHealthStatusNoBid
 		return
@@ -551,6 +564,13 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 		var err error
 		meta, err = c.probeLLM(ctx, adapter, report)
 		return err
+	}
+
+	// The apiType decides even when the on-chain tags do not say video, so
+	// an untagged video model is never sent the guessed LLM prompt.
+	if isVideo || modelMeta.modelType == structs.ModelTypeVIDEO {
+		report.Status = system.ModelHealthStatusSkipped
+		return
 	}
 
 	var probe func(ctx context.Context, adapter aiengine.AIEngineStream, report *system.ModelHealthReport) error

@@ -1,5 +1,7 @@
 package system
 
+import "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/videojob"
+
 type FD struct {
 	ID   string
 	Path string
@@ -83,6 +85,10 @@ type ModelHealthReport struct {
 	// control and request-param bindings. Never carries the backend URL, key or
 	// hostname. Absent when nothing is known.
 	Api *ModelApiSpec `json:"api,omitempty"`
+	// Video is the job guide of a hosted video model: fields, limits,
+	// defaults and the quote weights a consumer needs before it opens a
+	// session. Absent for every other model.
+	Video *videojob.Guide `json:"video,omitempty"`
 }
 
 const (
