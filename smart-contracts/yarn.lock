@@ -1020,10 +1020,10 @@
     debug "^4.1.1"
     lodash.isequal "^4.5.0"
 
-"@nomicfoundation/hardhat-network-helpers@^1.0.11":
-  version "1.0.11"
-  resolved "https://registry.yarnpkg.com/@nomicfoundation/hardhat-network-helpers/-/hardhat-network-helpers-1.0.11.tgz#64096829661b960b88679bd5c4fbcb50654672d1"
-  integrity sha512-uGPL7QSKvxrHRU69dx8jzoBvuztlLCtyFsbgfXIwIjnO3dqZRz2GNMHJoO3C3dIiUNM6jdNF4AUnoQKDscdYrA==
+"@nomicfoundation/hardhat-network-helpers@^1.0.13":
+  version "1.0.13"
+  resolved "https://registry.yarnpkg.com/@nomicfoundation/hardhat-network-helpers/-/hardhat-network-helpers-1.0.13.tgz#8385f87464a4ca2f1b3cc38f2f72c56a3eaa79d2"
+  integrity sha512-ptg0+SH8jnfoYHlR3dKWTNTB43HZSxkuy3OeDk+AufEKQvQ7Ru9LQEbJtLuDTQ4HGRBkhl4oJ9RABsEIbn7Taw==
   dependencies:
     ethereumjs-util "^7.1.4"
 
@@ -1504,16 +1504,16 @@
   dependencies:
     lodash "4.17.21"
 
-"@solarity/hardhat-markup@^1.0.8":
-  version "1.0.8"
-  resolved "https://registry.yarnpkg.com/@solarity/hardhat-markup/-/hardhat-markup-1.0.8.tgz#880fb251d828bbd48df6c31665b659e4c271204d"
-  integrity sha512-FYgm/G6oJfE/zY4zDRqyhYzZzdf9Jolri94G7MxuiaHLAGWX82AhiVNhImyNGOHUE3hk1x454qJa7OaHYVkvvg==
+"@solarity/hardhat-markup@^1.0.10":
+  version "1.0.10"
+  resolved "https://registry.yarnpkg.com/@solarity/hardhat-markup/-/hardhat-markup-1.0.10.tgz#418a6d0d0dcf3937765d90be6120c96e7042dba3"
+  integrity sha512-MdikFHPh3iTtuWxNGJWfPTkVX4qHsWx7SM4RCz+GMw16T9fqxdekHkr+opXtrbWna+64MZc0hogEgyCfTPmwyg==
   dependencies:
-    json2md "2.0.1"
+    json2md "2.0.2"
     lodash "4.17.21"
-    prettier "3.2.5"
-    prettier-plugin-solidity "1.3.1"
-    solidity-ast "0.4.55"
+    prettier "3.5.1"
+    prettier-plugin-solidity "1.4.2"
+    solidity-ast "0.4.59"
 
 "@solarity/hardhat-migrate@2.1.7":
   version "2.1.7"
@@ -1563,6 +1563,11 @@
   version "0.18.0"
   resolved "https://registry.yarnpkg.com/@solidity-parser/parser/-/parser-0.18.0.tgz#8e77a02a09ecce957255a2f48c9a7178ec191908"
   integrity sha512-yfORGUIPgLck41qyN7nbwJRAx17/jAIXCTanHOJZhB6PJ1iAk/84b/xlsVKFSyNyLXIj0dhppoE0+CRws7wlzA==
+
+"@solidity-parser/parser@^0.20.1":
+  version "0.20.2"
+  resolved "https://registry.yarnpkg.com/@solidity-parser/parser/-/parser-0.20.2.tgz#e07053488ed60dae1b54f6fe37bb6d2c5fe146a7"
+  integrity sha512-rbu0bzwNvMcwAjH86hiEAcOeRI2EeK8zCkHDrFykh/Al8mvJeFmjy3UrE7GYQjNwOgbGUUtCn5/k8CB8zIu7QA==
 
 "@szmarczak/http-timer@^4.0.5":
   version "4.0.6"
@@ -4938,10 +4943,10 @@ har-validator@~5.1.3:
     ajv "^6.12.3"
     har-schema "^2.0.0"
 
-hardhat-contract-sizer@^2.1.1, hardhat-contract-sizer@^2.10.0:
-  version "2.10.0"
-  resolved "https://registry.yarnpkg.com/hardhat-contract-sizer/-/hardhat-contract-sizer-2.10.0.tgz#72646f43bfe50e9a5702c9720c9bc3e77d93a2c9"
-  integrity sha512-QiinUgBD5MqJZJh1hl1jc9dNnpJg7eE/w4/4GEnrcmZJJTDbVFNe3+/3Ep24XqISSkYxRz36czcPHKHd/a0dwA==
+hardhat-contract-sizer@^2.1.1, hardhat-contract-sizer@^2.10.1:
+  version "2.10.1"
+  resolved "https://registry.yarnpkg.com/hardhat-contract-sizer/-/hardhat-contract-sizer-2.10.1.tgz#125092f9398105d0d23001056aac61c936ad841a"
+  integrity sha512-/PPQQbUMgW6ERzk8M0/DA8/v2TEM9xRRAnF9qKPNMYF6FX5DFWcnxBsQvtp8uBz+vy7rmLyV9Elti2wmmhgkbg==
   dependencies:
     chalk "^4.0.0"
     cli-table3 "^0.6.0"
@@ -7708,13 +7713,13 @@ solidity-comments-extractor@^0.0.8:
   resolved "https://registry.yarnpkg.com/solidity-comments-extractor/-/solidity-comments-extractor-0.0.8.tgz#f6e148ab0c49f30c1abcbecb8b8df01ed8e879f8"
   integrity sha512-htM7Vn6LhHreR+EglVMd2s+sZhcXAirB1Zlyrv5zBuTxieCvjfnRpd7iZk75m/u6NOlEyQ94C6TWbBn2cY7w8g==
 
-solidity-coverage@^0.8.13:
-  version "0.8.13"
-  resolved "https://registry.yarnpkg.com/solidity-coverage/-/solidity-coverage-0.8.13.tgz#8eeada2e82ae19d25568368aa782a2baad0e0ce7"
-  integrity sha512-RiBoI+kF94V3Rv0+iwOj3HQVSqNzA9qm/qDP1ZDXK5IX0Cvho1qiz8hAXTsAo6KOIUeP73jfscq0KlLqVxzGWA==
+solidity-coverage@^0.8.17:
+  version "0.8.17"
+  resolved "https://registry.yarnpkg.com/solidity-coverage/-/solidity-coverage-0.8.17.tgz#e71df844ccf46a49b03c5ce92333a3b27597c4ae"
+  integrity sha512-5P8vnB6qVX9tt1MfuONtCTEaEGO/O4WuEidPHIAJjx4sktHHKhO3rFvnE0q8L30nWJPTrcqGQMT7jpE29B2qow==
   dependencies:
     "@ethersproject/abi" "^5.0.9"
-    "@solidity-parser/parser" "^0.18.0"
+    "@solidity-parser/parser" "^0.20.1"
     chalk "^2.4.2"
     death "^1.1.0"
     difflib "^0.2.4"
@@ -9402,3 +9407,33 @@ yocto-queue@^0.1.0:
   version "0.1.0"
   resolved "https://registry.yarnpkg.com/yocto-queue/-/yocto-queue-0.1.0.tgz#0294eb3dee05028d31ee1a5fa2c556a6aaf10a1b"
   integrity sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==
+
+json2md@2.0.2:
+  version "2.0.2"
+  resolved "https://registry.yarnpkg.com/json2md/-/json2md-2.0.2.tgz#3fe9b269644db6597ab1f601b881d4ba9cd0aa90"
+  integrity sha512-bPXMyPSZRsN2Xh5tNWA4RjREnYmDK2GFO8eYOTbHSfVPfrFaqzIqFWN3gdf1bya65cm9Mf2PBSwvM7sWGEeuVA==
+  dependencies:
+    indento "^1.1.13"
+
+prettier@3.5.1, prettier@^3.3.3:
+  version "3.5.1"
+  resolved "https://registry.yarnpkg.com/prettier/-/prettier-3.5.1.tgz#22fac9d0b18c0b92055ac8fb619ac1c7bef02fb7"
+  integrity sha512-hPpFQvHwL3Qv5AdRvBFMhnKo4tYxp0ReXiPn2bxkiohEX6mBeBwEpBSQTkD458RaaDKQMYSp4hX4UtfUTA5wDw==
+
+prettier-plugin-solidity@1.4.2, prettier-plugin-solidity@^1.4.1:
+  version "1.4.2"
+  resolved "https://registry.yarnpkg.com/prettier-plugin-solidity/-/prettier-plugin-solidity-1.4.2.tgz#d4f6173674e73a29731a8c79c45ab6f5246310df"
+  integrity sha512-VVD/4XlDjSzyPWWCPW8JEleFa8JNKFYac5kNlMjVXemQyQZKfpekPMhFZSePuXB6L+RixlFvWe20iacGjFYrLw==
+  dependencies:
+    "@solidity-parser/parser" "^0.19.0"
+    semver "^7.6.3"
+
+solidity-ast@0.4.59, solidity-ast@^0.4.51:
+  version "0.4.59"
+  resolved "https://registry.yarnpkg.com/solidity-ast/-/solidity-ast-0.4.59.tgz#290a2815aef70a61092591ab3e991da080ae5931"
+  integrity sha512-I+CX0wrYUN9jDfYtcgWSe+OAowaXy8/1YQy7NS4ni5IBDmIYBq7ZzaP/7QqouLjzZapmQtvGLqCaYgoUWqBo5g==
+
+"@solidity-parser/parser@^0.19.0":
+  version "0.19.0"
+  resolved "https://registry.yarnpkg.com/@solidity-parser/parser/-/parser-0.19.0.tgz#37a8983b2725af9b14ff8c4a475fa0e98d773c3f"
+  integrity sha512-RV16k/qIxW/wWc+mLzV3ARyKUaMUTBy9tOLMzFhtNSKYeTAanQ3a5MudJKf/8arIFnA2L27SNjarQKmFg0w/jA==

@@ -75,6 +75,16 @@ function isPromoteOrReleaseMessage(message) {
 
 async function syncNeedsIssueLabel({ github, context, owner, repo, pr, base, body, promote }) {
   if (promote || base !== 'dev') return
+  // Dependabot / dependency chore PRs are not expected to carry Refs #N.
+  if (isDependencyBotPr(pr)) {
+    await quietly(null, pr.number, () => github.rest.issues.removeLabel({
+      owner,
+      repo,
+      issue_number: pr.number,
+      name: 'needs-issue',
+    }))
+    return
+  }
   const linked = refsIn(body).length > 0 || /-\s*\[[xX]\]\s*No tracked issue/.test(body)
   if (linked) {
     await quietly(null, pr.number, () => github.rest.issues.removeLabel({
@@ -99,6 +109,13 @@ async function syncNeedsIssueLabel({ github, context, owner, repo, pr, base, bod
       body: 'Add `Refs #123` in the pull request body, or check **No tracked issue** and give a one-line reason.',
     })
   }
+}
+
+function isDependencyBotPr(pr) {
+  const login = (pr.user && pr.user.login) || ''
+  if (login === 'dependabot[bot]' || login === 'dependabot') return true
+  const labels = (pr.labels || []).map((l) => (typeof l === 'string' ? l : l.name))
+  return labels.includes('dependencies')
 }
 
 async function note(github, core, owner, repo, issueNumber, body) {
