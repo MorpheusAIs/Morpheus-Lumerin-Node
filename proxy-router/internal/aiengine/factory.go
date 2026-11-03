@@ -26,6 +26,12 @@ func ApiAdapterFactory(apiType string, modelName string, url string, apikey stri
 		return NewClaudeAIEngine(modelName, url, apikey, llmTimeout, log, httpClient), true
 	case API_TYPE_DECISIONS:
 		return NewDecisionsEngine(modelName, url, apikey, llmTimeout, log, httpClient), true
+	case API_TYPE_RENDERFUL:
+		// Video adapters answer the streaming methods with ErrVideoNotSupported;
+		// jobs go through NewVideoJobEngine.
+		return NewRenderfulEngine(modelName, url, apikey, log, httpClient), true
+	case API_TYPE_BYTEPLUS_VIDEO:
+		return NewBytePlusVideoEngine(modelName, url, apikey, log, httpClient), true
 	}
 	return nil, false
 }

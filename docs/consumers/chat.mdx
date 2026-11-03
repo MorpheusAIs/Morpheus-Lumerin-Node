@@ -76,9 +76,13 @@ curl -X POST 'http://localhost:8082/v1/embeddings' \
 
 Structured decision / System One models use a separate route — see [Decisions](/consumers/decisions) (`POST /v1/decisions`). Do not send Decisions bodies to `/v1/chat/completions`.
 
+## Video
+
+Video models (`ModelType` `VIDEO`) take jobs, not prompts: you quote a job, open a session on the quoted bid for the quoted length, submit the job on that session and poll for the clip. See [Video generation](/consumers/video) (`POST /v1/video/quote`, `POST /v1/video/jobs`). The provider refuses chat, audio, embeddings and Decisions requests on a video model.
+
 ## Closing a session early
 
-Always close manually if you are finished well before the session timer expires. Unused stake returns to your wallet on close; the used stipend day-locks until the next UTC day (`withdrawUserStakes`). See [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover).
+Always close manually if you are finished well before the session timer expires. Unused stake returns to your wallet on close; the used stipend day-locks until the next UTC day (`withdrawUserStakes`). See [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover). On a video session, wait until every job shows a final status: an early close withholds clips not delivered yet ([Video generation](/consumers/video#close-the-session)).
 
 ```bash
 curl -X POST 'http://localhost:8082/blockchain/sessions/<sessionId>/close' \

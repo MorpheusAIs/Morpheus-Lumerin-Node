@@ -59,6 +59,7 @@ type ProxyController struct {
 	ipfsAllowedDirs          []string
 	dockerManager            *DockerManager
 	backendAttestationStatus BackendAttestationStatusProvider
+	videoJobs                *VideoJobService
 }
 
 func NewProxyController(service *ProxyServiceSender, aiEngine AIEngine, chatStorage gsc.ChatStorageInterface, storeChatContext, forwardChatContext bool, authConfig system.HTTPAuthConfig, ipfsManager *IpfsManager, log lib.ILogger) *ProxyController {
@@ -101,6 +102,7 @@ func (s *ProxyController) RegisterRoutes(r interfaces.Router) {
 	r.POST("/v1/audio/speech", s.authConfig.CheckAuth("audio_speech"), s.AudioSpeech)
 	r.POST("/v1/embeddings", s.authConfig.CheckAuth("embeddings"), s.Embeddings)
 	r.POST("/v1/decisions", s.authConfig.CheckAuth("decisions"), s.Decisions)
+	s.registerVideoRoutes(r)
 
 	r.POST("/ipfs/pin", s.authConfig.CheckAuth("ipfs_pin"), s.Pin)
 	r.POST("/ipfs/unpin", s.authConfig.CheckAuth("ipfs_unpin"), s.Unpin)

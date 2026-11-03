@@ -1,5 +1,6 @@
 import { Core } from './core.types'
 import * as handlers from './handlers'
+import * as videoJobs from './video-jobs'
 import { ApplyFnWithFirstArg } from './parial-apply.types'
 import utils from './utils'
 
@@ -44,6 +45,13 @@ const listeners = {
   'claim-provider-funds': handlers.claimProviderFunds,
   'synthesize-speech': handlers.synthesizeSpeech,
   'transcribe-audio': handlers.transcribeAudio,
+  // Video jobs
+  'get-video-guide': videoJobs.getVideoGuide,
+  'quote-video-job': videoJobs.quoteVideoJob,
+  'create-video-job': videoJobs.createVideoJob,
+  'get-video-jobs': videoJobs.getVideoJobs,
+  'load-video-clip': videoJobs.loadVideoClip,
+  'save-video-clip': videoJobs.saveVideoClip,
   'get-transactions': handlers.getTransactions,
   'get-balances': handlers.getBalances,
   // Transfers. `send-mor` was implemented in handlers.ts but never registered

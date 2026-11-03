@@ -74,7 +74,7 @@ Step 1 is on-chain: the bid/model is not deleted. Steps 2–10 are mutually excl
 | 9 | `degraded` | ALL, ACTIVE, GATEWAY |
 | 10 | `healthy` | ALL, ACTIVE, GATEWAY |
 
-`skipped` is still **routable** under a C-Node's default `SESSION_HEALTH_POLICY=permissive`. GATEWAY drops it because the hosted API only wants tested chat/embedding-style completions. Untagged / unknown-type models are LLM-probed since v7.11; a failed **guess** reports `skipped` (with `errorKind` still set), not `unhealthy`. Media-tagged models (image / video / audio / music) stay `skipped` without a probe.
+`skipped` is still **routable** under a C-Node's default `SESSION_HEALTH_POLICY=permissive`. GATEWAY drops it because the hosted API only wants tested chat/embedding-style completions. Untagged / unknown-type models are LLM-probed since v7.11; a failed **guess** reports `skipped` (with `errorKind` still set), not `unhealthy`. Media-tagged models (image / video / audio / music) stay `skipped` without a probe, except hosted video models (`byteplus-video`, `renderful`), which get a free vendor probe and report `healthy` / `unhealthy` / `degraded` like any probed model. A `healthy` or `degraded` video model therefore reaches GATEWAY; there `healthy` means the vendor answers and accepts the provider's key, not a tested completion, so a GATEWAY reader that only serves chat should also filter on `ModelType`.
 
 ## Provider tip: join, don't duplicate
 

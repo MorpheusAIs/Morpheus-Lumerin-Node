@@ -29,6 +29,9 @@ LLM-friendly definitions — short, opinionated, and consistent across the rest 
 | **Natural expiration** | Session close where `closedAt >= endsAt` (often auto-submitted ~1 minute after `endsAt`). Unused stake returns in the close txn; the used stipend still day-locks if the close lands before `releaseAt`. |
 | **Early close** | User-initiated `closeSession` before `endsAt`. Unused stake returns immediately; used stipend may go to `userStakesOnHold`. |
 | **Used-stipend day-lock** | Hold of the stake equivalent of session time × `pricePerSecond` until the next UTC day after `sessionEnd`. Blocks same-day reuse of that capital. |
+| **Video job** | A text-to-video render, optionally from a first frame, that a consumer submits on a session it opened for the job (`POST /v1/video/jobs`). The provider sends it to its hosted vendor (BytePlus ModelArk or Renderful) and relays the status. The result is the vendor's download link (`video_url`). See [Video jobs](/consumers/video). |
+| **Video job guide** | What a provider advertises for each video model in its pong (`network.ping`) and `/healthcheck`: the job fields, their limits and defaults, and the quote weights. A consumer ignores a guide the provider did not sign (`modelsSignature`). |
+| **Video quote** | The session length, in seconds, that one provider sells for one video job (`session_seconds` from `POST /v1/video/quote`). The MOR the session locks is a different number: see the [session estimate](/reference/api-endpoints#estimate-a-session-before-opening). |
 | **Subnet provider** | A provider that has staked `10000` MOR (vs the standard `0.2`) and gets elevated marketplace standing. |
 | **Allowance** | Standard ERC-20 approval the consumer / provider grants to the Diamond contract so it can move MOR on their behalf. |
 | **proxy-router** | The Go service in this repo. Same binary serves consumer and provider roles; configuration differs. |

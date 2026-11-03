@@ -83,6 +83,10 @@ The Morpheus consumer node (proxy-router) does **not** custody tokens — it jus
   </Step>
 </Steps>
 
+<Note>
+**Video sessions.** For a hosted video model, you pay for clips with session time. Each job has a quote: the session seconds it needs (`session_seconds` from `POST /v1/video/quote`). One session takes several jobs while their quotes add up to no more than its length. Closing more than 60 seconds before `endsAt` returns the unused stake as for any session, but the provider then withholds every clip not yet delivered (status `cancelled`, error `session_closed_early`). A clip still rendering when the session ends on time is delivered as usual. See [Video jobs](/consumers/video).
+</Note>
+
 ## How much MOR does an open lock?
 
 The amount `openSession` pulls is **not** `pricePerSecond × duration`. The contract converts stake into a daily stipend in proportion to your share of total MOR supply against today's emissions budget, then prices the session out of that stipend. The proxy-router therefore computes:

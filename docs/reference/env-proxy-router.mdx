@@ -3,7 +3,7 @@ title: "Env: proxy-router"
 description: "Every environment variable consumed by the proxy-router, with mainnet/testnet defaults and explicit precedence rules where two variables overlap."
 audience: ["provider-full", "provider-resale", "prosumer", "developer"]
 product: ["proxy-router"]
-last_verified: "2026-10-14"
+last_verified: "2026-11-02"
 source: "docs/proxy-router.all.env"
 ---
 
@@ -113,12 +113,24 @@ Storage and forwarding are independent. `PROXY_STORE_CHAT_CONTEXT` persists chat
 | `ETH_NODE_CHAIN_ID` | `8453` (mainnet) / `84532` (testnet) | BASE chain ID |
 | `ETH_NODE_ADDRESS` | (unset, falls back to built-in public RPC round-robin) | RPC endpoint URL (HTTPS or WSS — must match `ETH_NODE_USE_SUBSCRIPTIONS`). **Set explicitly for any real deployment** — the public round-robin fallback is rate-limited and unreliable; missed events break the node silently. The fallback rotates to the next endpoint on rate limits, `401`/`403` WAF pages, `404`/`405`/`410` (a retired service), and on read-only endpoints that answer `eth_sendRawTransaction` with `method is not allowed` — so opening a session works out of the box even when the first public URL refuses writes. |
 | `ETH_NODE_LEGACY_TX` | `false` | Set `true` to disable EIP-1559 |
+| `ETH_NODE_MAX_GAS_PRICE_GWEI` | `1` | Ceiling for gas-price escalation on the router's own txs (approve, open, close, claim). Fractions allowed; `-1` = unlimited. Applies when unset. See [Transaction escalation](#transaction-escalation-and-the-gas-cap). |
 | `BLOCKSCOUT_API_URL` | `https://base.blockscout.com/api/v2` | Block explorer API |
 | `EXPLORER_RETRY_DELAY` | `5` | Delay between explorer retries (seconds) |
 | `EXPLORER_MAX_RETRIES` | `5` | Max explorer retries |
 | `ETH_NODE_USE_SUBSCRIPTIONS` | `false` | `true` to use WSS subscriptions; `false` for HTTP polling |
 | `ETH_NODE_POLLING_INTERVAL` | `10` | Polling interval (seconds, only when `ETH_NODE_USE_SUBSCRIPTIONS=false`) |
 | `ETH_NODE_MAX_RECONNECTS` | `30` | Max WSS resubscribe attempts (`-1` = unlimited). Retries back off exponentially from 0.5 s to a 30 s cap, and each attempt resubscribes from the block after the last event seen. |
+
+### Transaction escalation and the gas cap
+
+Every transaction the router sends for you (MOR approve, session open, session close, claim) goes through a gas escalator. It submits at the network estimate, waits 20 s, and if the tx is not mined it resubmits the same nonce 15% higher, up to 5 times. Only one of those submissions can ever mine, so you pay one tx fee, not five.
+
+Two limits bound a stuck transaction:
+
+- **Time.** The call waits at most 3 minutes in total. If the attempts run out but a submission is still in the mempool, the router keeps watching it until the window closes and reports success if it lands. If it does not, the error lists the pending tx hashes and says the action may still be mined — check your sessions before retrying.
+- **Price.** `ETH_NODE_MAX_GAS_PRICE_GWEI` (default `1`). When the next bid would exceed it, the router stops escalating and returns a "cap exceeded" error instead of chasing a chain that is not including transactions. A later call on the same nonce prices itself above the still-pending tx so it is not rejected as an underpriced replacement, but never above the cap.
+
+Base normally runs at 0.001–0.05 gwei, so 1 gwei is deep-congestion headroom while still refusing to burn ETH on a stalled chain. Raise it only if you are on a chain or during a period where that is a normal price; set `-1` to remove the cap entirely.
 
 ## Environment
 
@@ -181,6 +193,7 @@ For TEE images logging is **frozen** to production / JSON / minimal at build tim
 | `LLM_TIMEOUT` | `4m` | P-Node → backend LLM timeout (streaming + non-streaming). Go duration (`30s`, `10m`, `1h`). Empty or `0` **falls back to the default** — there is no "no deadline" setting; raise the value for a genuinely slow model. |
 | `CNODE_PNODE_TIMEOUT` | `90s` | Per-attempt timeout for C-Node waiting for the P-Node's first response on chat / embeddings / media / audio. Empty or `0` falls back to the default. Total budget ≈ `CNODE_PNODE_TIMEOUT × CNODE_PNODE_MAX_RETRIES`. |
 | *(fixed)* | `30s` | Read deadline on the C-Node → P-Node control calls that are not streamed: session handshake (`initiate_session`), provider ping, session reports, agent tool listing / calls, and audio upload chunks. Not configurable. A provider that accepts the TCP connection and then goes silent now fails with `504 provider did not respond within 30s` instead of hanging the request forever. |
+| *(fixed)* | `60s` / `30s` | Read deadline on the C-Node → P-Node [video job](/consumers/video) calls: a submit waits up to 60 s for the provider's receipt (the provider gives its vendor 50 s), a status read 30 s. Not configurable. |
 | `CNODE_PNODE_MAX_RETRIES` | `3` | Max retries for C-Node → P-Node read timeout (chat / embeddings) |
 | `CNODE_PNODE_AUDIO_MAX_RETRIES` | `20` | Max retries for audio transcription / speech routes |
 
@@ -188,7 +201,7 @@ For exact defaults check the source of truth ([`config.go`](https://github.com/M
 
 ## Model health self-checks (provider)
 
-On provider nodes the proxy-router periodically probes every model from `models-config.json` that has an **active bid from this provider**: LLM models get a small dynamically generated arithmetic prompt (correctness is graded), embedding models get an embeddings request. Untagged / unknown-type models are probed as LLM unless their tags name image/video/audio/music; a failed guessed probe reports `skipped` (with `errorKind`), not `unhealthy`. STT/TTS and media-tagged models are skipped without a probe. The report covers the whole ecosystem of bids and configured models — active bids whose model is missing from `models-config.json` are flagged as `no_model_configured` (capacity being sold with no backend to serve it). The cached per-model results (on-chain `modelId` and registered model name, `bidId`, status, `errorKind` plus upstream `httpStatus` on failure, `lastHealthy` epoch, latency, prompt correctness — never the private `models-config.json` `modelName`, `apiUrl`, or `apiKey`) are exposed in the `models` field of `GET /healthcheck`, in the `network.ping` (pong) response on the `:3333` MOR RPC port, and in `POST /proxy/provider/ping`, so consumers can see a provider's model health before opening a session. The [active.mor.org](/ecosystem/active-status) sweep copies these stamps into ALL / ACTIVE / GATEWAY. Full operational guide: [Model health self-report](/providers/full/model-health).
+On provider nodes the proxy-router periodically probes every model from `models-config.json` that has an **active bid from this provider**: LLM models get a small dynamically generated arithmetic prompt (correctness is graded), embedding models get an embeddings request. Untagged / unknown-type models are probed as LLM unless their tags name image/video/audio/music; a failed guessed probe reports `skipped` (with `errorKind`), not `unhealthy`. STT/TTS and media-tagged models are skipped without a probe, except hosted video models (`apiType` `byteplus-video` or `renderful`), which get a free vendor probe that starts no render. The report covers the whole ecosystem of bids and configured models — active bids whose model is missing from `models-config.json` are flagged as `no_model_configured` (capacity being sold with no backend to serve it). The cached per-model results (on-chain `modelId` and registered model name, `bidId`, status, `errorKind` plus upstream `httpStatus` on failure, `lastHealthy` epoch, latency, prompt correctness — never the private `models-config.json` `apiUrl` or `apiKey`, and `modelName` only inside a hosted video model's job guide, as `video.model_name`) are exposed in the `models` field of `GET /healthcheck`, in the `network.ping` (pong) response on the `:3333` MOR RPC port, and in `POST /proxy/provider/ping`, so consumers can see a provider's model health before opening a session. The [active.mor.org](/ecosystem/active-status) sweep copies these stamps into ALL / ACTIVE / GATEWAY. Full operational guide: [Model health self-report](/providers/full/model-health).
 
 | Variable | Default | Notes |
 |----------|---------|-------|
@@ -217,6 +230,15 @@ On consumer nodes, `SESSION_HEALTH_POLICY` controls how strictly the pre-open he
 | `strict` | Only providers that report the model `healthy` are tried. `degraded` and unknown reports are excluded. |
 
 **Single-bid caveat** (`healthPolicySingleBid: permissive`, fixed): when the hard filters (omitted provider, own bids) leave a single candidate provider for the model, `preferred`/`strict` are forced to `permissive` for that open so the sole provider can still be tried — single-provider models must remain usable.
+
+## Video jobs (consumer)
+
+On consumer nodes the proxy-router asks the session's provider for the status of each running [video job](/consumers/video) until the job ends. Values are Go durations (`10s`, `1m`, `72h`). Empty or `0` uses the default.
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `VIDEO_JOB_POLL_INTERVAL` | `10s` | How often the node asks for a running job's status. Values below `2s` are raised to `2s`. After a failed read the wait doubles, up to 2 minutes. |
+| `VIDEO_JOB_MAX_WATCH` | `72h` | How long after the job was created the node keeps asking. After that it marks the job `failed` with error code `watch_timeout`. |
 
 ## Gateway managed mode (optional)
 

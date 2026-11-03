@@ -106,6 +106,19 @@ The caller sent `rejectExisting: true` and this wallet already has a live sessio
 
 ---
 
+## Video job: quote or submit fails
+
+See [Video jobs](/consumers/video) for the flow. A failed submit leaves the session open. Submit again on it after the fix, or close it with `POST /blockchain/sessions/:id/close` (unused time is refunded) and open on another bid from the quote. Close only once no other job on it is still running: an early close withholds clips not delivered yet ([Close the session](/consumers/video#close-the-session)).
+
+| What you see | Cause | Fix |
+|--------------|-------|-----|
+| A quote entry reads `"error": "provider advertises no video guide for this model"` | That provider's proxy-router has no video jobs (an older release; a submit to it gets `unknown method`), or it does not serve the model with a video `apiType` | Pick another bid from the quote |
+| Submit returns `422` with `this job needs a 844-second session, the session is 600 seconds long`, or `… on top of the N seconds earlier jobs on it took` | The session is shorter than the job's quote plus the quotes of the jobs already on it | Open the session with `sessionDuration` at least the sum of the quotes (`session_seconds`) of the jobs you send on it |
+| Submit returns `422` with `video vendor did not take the request (404)`; the provider's log shows `404 ModelNotOpen` | `byteplus-video`: the model in `modelName` is not activated for the vendor account in the BytePlus ModelArk (Ark) console. The [health probe](/providers/full/model-health) cannot see this | Provider: activate the model in the Ark console for the account that owns `apiKey` |
+| Submit returns `422` with `video vendor did not take the request (401)`; the provider's `/healthcheck` shows the model `unhealthy` with `errorKind: bad_response`, `httpStatus: 401` | The vendor (`renderful` or `byteplus-video`) does not accept `apiKey` (wrong, missing or disabled) | Provider: put the right key in `models-config.json`, then call `POST /config/models/reload` |
+
+---
+
 ## "Where is my MOR?"
 
 Almost always: it's escrowed in the Diamond contract because of an open or recently-closed session. Walk through:

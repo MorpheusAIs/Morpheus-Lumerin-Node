@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -18,6 +20,15 @@ const (
 	DefaultMaxAttempts   = 5                // Max escalation attempts
 	DefaultBumpPercent   = 15               // Gas price bump percentage (min 10% for node acceptance)
 	DefaultMaxTotalTime  = 3 * time.Minute  // Max total time to wait for mining
+
+	// DefaultMaxGasPriceGwei caps how high escalation will bid. Base normally runs at
+	// 0.001–0.05 gwei, so 1 gwei is deep congestion headroom while still refusing to
+	// chase a chain that is not including transactions at a sane price (#1011).
+	DefaultMaxGasPriceGwei = 1.0
+
+	// lingerPollDivisor sets how often submitted-but-unmined txs are re-checked once
+	// escalation attempts are exhausted but MaxTotalTime budget remains: CheckInterval / divisor.
+	lingerPollDivisor = 4
 )
 
 // Errors
@@ -25,7 +36,30 @@ var (
 	ErrEscalationFailed = errors.New("transaction not mined after all escalation attempts")
 	ErrTxNotMinedYet    = errors.New("transaction not mined yet")
 	ErrMaxGasExceeded   = errors.New("max gas price limit exceeded")
+	// ErrTxStillPending is wrapped into a failure when this call left at least one
+	// submitted tx in the pool: the action may still land, so callers must not treat
+	// the failure as "nothing happened".
+	ErrTxStillPending = errors.New("submitted transaction(s) still pending")
 )
+
+// GweiToWei converts a gwei amount (fractions allowed) to wei. Non-positive input
+// returns nil, which the escalator treats as "no cap".
+func GweiToWei(gwei float64) *big.Int {
+	if gwei <= 0 {
+		return nil
+	}
+	wei, _ := new(big.Float).Mul(big.NewFloat(gwei), big.NewFloat(1e9)).Int(nil)
+	return wei
+}
+
+// MaxGasPriceFromGwei maps the ETH_NODE_MAX_GAS_PRICE_GWEI setting to an escalator cap:
+// 0 (unset) → DefaultMaxGasPriceGwei, negative → nil (unlimited).
+func MaxGasPriceFromGwei(gwei float64) *big.Int {
+	if gwei == 0 {
+		gwei = DefaultMaxGasPriceGwei
+	}
+	return GweiToWei(gwei)
+}
 
 // EscalationConfig holds settings for transaction escalation
 type EscalationConfig struct {
@@ -43,7 +77,7 @@ func DefaultEscalationConfig() EscalationConfig {
 		MaxAttempts:   DefaultMaxAttempts,
 		BumpPercent:   DefaultBumpPercent,
 		MaxTotalTime:  DefaultMaxTotalTime,
-		MaxGasPrice:   nil, // No limit by default
+		MaxGasPrice:   GweiToWei(DefaultMaxGasPriceGwei),
 	}
 }
 
@@ -103,11 +137,23 @@ func (g *GasPrices) MaxPrice() *big.Int {
 	return max
 }
 
+// pendingTx remembers the last transaction this escalator submitted for a sender
+// that it did not see mined. A later SendWithEscalation for the same sender that
+// lands on the same nonce is a replacement and must be priced above it, not from a
+// fresh network estimate (see #1011).
+type pendingTx struct {
+	nonce  uint64
+	prices *GasPrices
+}
+
 // TransactionEscalator handles resubmission of stuck transactions with higher gas
 type TransactionEscalator struct {
 	client EthClientForEscalation
 	log    ILogger
 	config EscalationConfig
+
+	mu      sync.Mutex
+	pending map[common.Address]pendingTx
 }
 
 // EthClientForEscalation is the interface needed for transaction escalation
@@ -128,10 +174,43 @@ func NewTransactionEscalator(client EthClientForEscalation, log ILogger, config 
 		config.BumpPercent = 10
 	}
 	return &TransactionEscalator{
-		client: client,
-		log:    log,
-		config: config,
+		client:  client,
+		log:     log,
+		config:  config,
+		pending: make(map[common.Address]pendingTx),
 	}
+}
+
+// rememberPending records the gas prices of the last submitted, unmined tx for a sender.
+func (e *TransactionEscalator) rememberPending(from common.Address, nonce uint64, prices *GasPrices) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.pending[from] = pendingTx{nonce: nonce, prices: prices.Clone()}
+}
+
+// forgetPending clears the remembered pending tx for a sender once its nonce is consumed.
+func (e *TransactionEscalator) forgetPending(from common.Address) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	delete(e.pending, from)
+}
+
+// priceAbovePending raises gasPrices so the tx out-prices a remembered pending tx
+// from an earlier call on the same nonce. Returns true if prices were raised.
+func (e *TransactionEscalator) priceAbovePending(from common.Address, nonce uint64, gasPrices *GasPrices) bool {
+	e.mu.Lock()
+	p, ok := e.pending[from]
+	e.mu.Unlock()
+	if !ok || p.nonce != nonce || p.prices == nil {
+		return false
+	}
+	if gasPrices.MaxPrice().Cmp(p.prices.MaxPrice()) > 0 {
+		return false
+	}
+	raised := p.prices.Clone()
+	raised.Bump(e.config.BumpPercent)
+	*gasPrices = *raised
+	return true
 }
 
 // TxBuilder is a function that builds a transaction with the given gas prices and nonce.
@@ -177,11 +256,19 @@ func (e *TransactionEscalator) SendWithEscalation(
 			return nil, fmt.Errorf("failed to get nonce: %w", err)
 		}
 
-		// Check max gas limit
+		// If an earlier call left a tx pending on this nonce, this tx is a replacement
+		// and must be priced above it; a fresh estimate would be rejected as underpriced.
+		if e.priceAbovePending(baseOpts.From, nonce, gasPrices) {
+			log.Warnf("Nonce %d still has a pending tx from an earlier call, pricing above it: %v", nonce, gasPrices.MaxPrice())
+		}
+
+		// Check max gas limit. If a tx is already pending at or above the cap, the
+		// chain is not including txs at a price we are willing to pay: stop here
+		// rather than bid higher, and tell the caller what is still in flight.
 		if e.config.MaxGasPrice != nil && gasPrices.MaxPrice().Cmp(e.config.MaxGasPrice) > 0 {
 			log.Warnf("Gas price %v exceeds max limit %v, stopping escalation",
 				gasPrices.MaxPrice(), e.config.MaxGasPrice)
-			return nil, WrapError(ErrMaxGasExceeded, lastErr)
+			return nil, e.maxGasError(submittedTxs, lastErr)
 		}
 
 		// Prepare opts for this attempt
@@ -204,6 +291,7 @@ func (e *TransactionEscalator) SendWithEscalation(
 					log.Infof("Nonce too low - checking if previous tx was mined")
 					if receipt := e.checkSubmittedTxs(ctx, submittedTxs); receipt != nil {
 						log.Infof("Previous tx was mined: %s", receipt.TxHash.Hex())
+						e.forgetPending(baseOpts.From)
 						return receipt, nil
 					}
 				}
@@ -231,6 +319,7 @@ func (e *TransactionEscalator) SendWithEscalation(
 		nonceRefreshCount = 0
 
 		submittedTxs = append(submittedTxs, tx)
+		e.rememberPending(baseOpts.From, nonce, gasPrices)
 		log.Infof("Tx submitted (attempt %d/%d): %s, gasPrice: %v",
 			attempt+1, e.config.MaxAttempts, tx.Hash().Hex(), gasPrices.MaxPrice())
 
@@ -238,6 +327,7 @@ func (e *TransactionEscalator) SendWithEscalation(
 		receipt, err := e.waitForMining(timeoutCtx, tx, e.config.CheckInterval)
 		if err == nil {
 			log.Infof("Tx mined successfully: %s (attempt %d)", tx.Hash().Hex(), attempt+1)
+			e.forgetPending(baseOpts.From)
 			return receipt, nil
 		}
 
@@ -251,6 +341,7 @@ func (e *TransactionEscalator) SendWithEscalation(
 		// Before escalating, check if any previous tx got mined in the meantime
 		if receipt := e.checkSubmittedTxs(ctx, submittedTxs); receipt != nil {
 			log.Infof("Previous tx was mined during escalation: %s", receipt.TxHash.Hex())
+			e.forgetPending(baseOpts.From)
 			return receipt, nil
 		}
 
@@ -265,13 +356,71 @@ func (e *TransactionEscalator) SendWithEscalation(
 	// Final check - maybe a tx got mined while we were processing
 	if receipt := e.checkSubmittedTxs(ctx, submittedTxs); receipt != nil {
 		log.Infof("Tx was mined on final check: %s", receipt.TxHash.Hex())
+		e.forgetPending(baseOpts.From)
 		return receipt, nil
 	}
 
+	// Attempts are exhausted but the submitted txs are still in the pool and the
+	// caller's MaxTotalTime budget may not be. Keep watching them until it is, so a
+	// slow-but-successful inclusion is reported as success rather than failure.
 	if len(submittedTxs) > 0 {
-		return nil, fmt.Errorf("%w: last tx %s", ErrEscalationFailed, submittedTxs[len(submittedTxs)-1].Hash().Hex())
+		if receipt := e.lingerForSubmitted(timeoutCtx, log, submittedTxs); receipt != nil {
+			e.forgetPending(baseOpts.From)
+			return receipt, nil
+		}
+		return nil, fmt.Errorf("%w: %w: %d tx(s) may yet be mined: %s",
+			ErrEscalationFailed, ErrTxStillPending, len(submittedTxs), txHashList(submittedTxs))
 	}
 	return nil, ErrEscalationFailed
+}
+
+// maxGasError builds the ErrMaxGasExceeded result, naming the cap and any txs this
+// call left in the pool so the caller does not assume nothing was sent.
+func (e *TransactionEscalator) maxGasError(submitted []*types.Transaction, lastErr error) error {
+	capGwei := new(big.Float).Quo(new(big.Float).SetInt(e.config.MaxGasPrice), big.NewFloat(1e9))
+	msg := fmt.Sprintf("cap %s gwei (ETH_NODE_MAX_GAS_PRICE_GWEI); the network is not including transactions at a sane price",
+		capGwei.Text('g', 6))
+	if lastErr != nil {
+		msg += fmt.Sprintf(" (last: %v)", lastErr)
+	}
+	if len(submitted) > 0 {
+		return fmt.Errorf("%w: %s; %w: %d tx(s) from this call: %s",
+			ErrMaxGasExceeded, msg, ErrTxStillPending, len(submitted), txHashList(submitted))
+	}
+	return fmt.Errorf("%w: %s", ErrMaxGasExceeded, msg)
+}
+
+func txHashList(txs []*types.Transaction) string {
+	hashes := make([]string, 0, len(txs))
+	for _, tx := range txs {
+		hashes = append(hashes, tx.Hash().Hex())
+	}
+	return strings.Join(hashes, ", ")
+}
+
+// lingerForSubmitted polls the submitted txs for a receipt until ctx expires.
+func (e *TransactionEscalator) lingerForSubmitted(ctx context.Context, log ILogger, txs []*types.Transaction) *types.Receipt {
+	if ctx.Err() != nil {
+		return nil
+	}
+	log.Warnf("Escalation attempts exhausted, %d tx(s) still pending; watching until the wait window closes", len(txs))
+	poll := e.config.CheckInterval / lingerPollDivisor
+	if poll <= 0 {
+		poll = time.Second
+	}
+	ticker := time.NewTicker(poll)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			if receipt := e.checkSubmittedTxs(ctx, txs); receipt != nil {
+				log.Infof("Pending tx mined after escalation attempts: %s", receipt.TxHash.Hex())
+				return receipt
+			}
+		}
+	}
 }
 
 // checkSubmittedTxs checks if any of the submitted transactions have been mined

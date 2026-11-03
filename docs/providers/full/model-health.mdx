@@ -3,7 +3,7 @@ title: "Model health self-report"
 description: "How the provider's built-in model health checker works: what it probes, what it costs your backend, how to tune the schedule, and how to read the report to diagnose failing models."
 audience: ["provider-full", "provider-resale"]
 product: ["proxy-router"]
-last_verified: "2026-09-22"
+last_verified: "2026-11-03"
 ---
 
 Since v7.4.0 every provider proxy-router continuously verifies that the models it sells actually work, and publishes the result as a `models` array on its `/healthcheck` endpoint. This page is the operational reference for that capability: what runs, what it costs, how to tune it, and how to read the report when something is unhealthy. For the one-time post-setup walkthrough, see [Verify your provider setup](/providers/full/verify-setup).
@@ -25,6 +25,7 @@ Probe policy for `UNKNOWN` and media:
 
 - **Untagged or unknown type, and tags do not name image / video / audio / music** — probe **as LLM** (`typeGuessed`). The report's `modelType` stays `UNKNOWN`.
 - **Tags that name image, video, audio, or music** — `skipped` without a probe (same as STT/TTS).
+- **Hosted video models (`apiType` `byteplus-video` or `renderful`)** — a free vendor probe, never a render: BytePlus lists one task of the account, Renderful looks up a generation that does not exist (a working key gets Renderful's 404). It proves the vendor answers and accepts your key: `healthy`; `degraded` on `429`; otherwise `unhealthy` with `errorKind: bad_response` and the vendor's `httpStatus`, or `connection` / `timeout` when it does not answer. An `apiUrl` that reaches something other than the vendor fails the probe. Renderful's probe also checks that the same URL refuses a request without the key. It cannot see an empty balance or a model your account has not activated: those fail real jobs with 402/403/404 and flip the model through the session-failure streak below. From then on a passing probe reports `degraded` (`session_errors`, with that `httpStatus`) instead of `healthy`, one more failed job flips it back to `unhealthy`, and only a successful job clears it. The report also carries the model's job guide under `video`.
 - **Guessed LLM probe fails** — status is **`skipped`**, not `unhealthy`. `errorKind` (and `httpStatus` when present) still explain the failure. Tagged LLM / embedding failures remain `unhealthy`. `429` is still `degraded`.
 
 `skipped` is still routable under the consumer default `SESSION_HEALTH_POLICY=permissive`. The hosted API's GATEWAY catalog drops `skipped`. See [Marketplace catalog](/ecosystem/active-status). Results are cached in memory between sweeps.
@@ -50,7 +51,7 @@ Full env reference: [env-proxy-router](/reference/env-proxy-router).
 
 The report is not only cron-driven — real traffic updates it immediately:
 
-- **Consecutive session errors.** When prompts from open sessions fail against your backend (connection error, upstream `5xx`, `401`/`402`/`404`, `429`) `MODEL_HEALTH_MAX_CONSECUTIVE_ERRORS` times in a row, the model is flipped on the spot with `errorKind: session_errors` — to `degraded` when **every** failure in the streak was a `429` (pure throttling, capacity risk), to `unhealthy` otherwise. Client-fault upstream responses (`400`, `403`, `413`, `422`) count neither way, so a consumer sending malformed requests cannot flip a healthy model. A later successful prompt — or a passing scheduled probe — heals the status and resets the streak.
+- **Consecutive session errors.** When prompts from open sessions fail against your backend (connection error, upstream `5xx`, `401`/`402`/`404`, `429`) `MODEL_HEALTH_MAX_CONSECUTIVE_ERRORS` times in a row, the model is flipped on the spot with `errorKind: session_errors` — to `degraded` when **every** failure in the streak was a `429` (pure throttling, capacity risk), to `unhealthy` otherwise. Client-fault upstream responses (`400`, `403`, `413`, `422`) count neither way, so a consumer sending malformed requests cannot flip a healthy model. A later successful prompt — or a passing scheduled probe — heals the status and resets the streak. For a hosted video model a vendor `403` counts (it refuses the provider's account, not the consumer's request), and a passing vendor probe does not heal a streak that had a `402`, `403` or `404`: the model stays `degraded` until a job succeeds.
 - **TEE self-verification.** For `tee`-tagged models the provider verifies its own backend attestation. If that verification fails (at startup, during a sweep, or on the per-session fast-verify), the model is reported with the dedicated status `tee_unverified` and `errorKind: tee_attestation` instead of being probed — session requests for it would be rejected anyway. The status heals once attestation passes again.
 
 Consumers use this report **before opening a session**: the pre-open healthcheck ping reads the pong's `models` array and skips providers that self-report the bid's model as `unhealthy`, `tee_unverified`, or `no_model_configured`, moving on to the next rated bid. How strictly the consumer treats the report is controlled by its `SESSION_HEALTH_POLICY` (`permissive` — the default behavior just described; `preferred` — prefer providers reporting `healthy`/`degraded` and skip unknown reports when such a peer exists; `strict` — only providers reporting `healthy`). When a model has a single candidate provider, the consumer always falls back to `permissive` so the model stays usable. See [env-proxy-router](/reference/env-proxy-router#session-health-policy-consumer).
@@ -90,11 +91,11 @@ curl -s http://localhost:8082/healthcheck | jq '.models'
 | Status | Meaning |
 |--------|---------|
 | `healthy` | Probe succeeded; for LLMs `promptCorrect` says whether the answer was right |
-| `degraded` | Upstream rate limited (`429`) — backend up and correctly configured, just throttled. Set by a probe (`errorKind: rate_limited`) or by a streak of real-session failures that were all `429` (`errorKind: session_errors`). Capacity risk, not failure: consumers still treat the model as serviceable unless they run the `strict` session health policy |
+| `degraded` | Upstream rate limited (`429`) — backend up and correctly configured, just throttled. Set by a probe (`errorKind: rate_limited`) or by a streak of real-session failures that were all `429` (`errorKind: session_errors`). Also a hosted video model whose vendor probe passes while its real jobs failed with `402`/`403`/`404` (`errorKind: session_errors`, that `httpStatus`), until a job succeeds. Consumers still treat the model as serviceable unless they run the `strict` session health policy |
 | `unhealthy` | Probe failed — `errorKind` and `httpStatus` say why (see below) |
 | `no_bid` | Configured but no active bid; **not probed** |
 | `no_model_configured` | Active bid but no `models-config.json` entry — consumers can open sessions against this bid and get errors |
-| `skipped` | Not probed: STT/TTS, or tags that name image/video/audio/music. Also: untagged/unknown type whose **guessed** LLM probe failed (`errorKind` still set). `skipped` stays on the [ACTIVE](/ecosystem/active-status) catalog; GATEWAY drops it. Default consumer policy still routes it. |
+| `skipped` | Not probed: STT/TTS, or tags that name image/video/audio/music (except hosted video models, which get the vendor probe above). Also: untagged/unknown type whose **guessed** LLM probe failed (`errorKind` still set). `skipped` stays on the [ACTIVE](/ecosystem/active-status) catalog; GATEWAY drops it. Default consumer policy still routes it. |
 | `tee_unverified` | `tee`-tagged model whose backend TEE attestation failed or never succeeded; **not probed**, and session requests for it are rejected |
 
 For `unhealthy` (and `degraded`) models, the diagnosis is the combination of `errorKind` and `httpStatus`:
@@ -109,7 +110,8 @@ For `unhealthy` (and `degraded`) models, the diagnosis is the combination of `er
 | `bad_response` | `401` / `403` | Bad or expired `apiKey` |
 | `bad_response` | `5xx` | Upstream itself is failing |
 | `bad_response` | *(absent)* | Backend returned 200 but an empty/invalid completion |
-| `session_errors` | `429` or — | Flipped by consecutive real-session prompt failures (see [Live signals](#live-signals-between-sweeps)), not by a probe; carries status `degraded` with `httpStatus: 429` when the whole streak was rate limiting, `unhealthy` otherwise |
+| `bad_response` | `200` / `404` | Video vendor probe: the `apiUrl` answered, but not the way the vendor does — wrong base path or host |
+| `session_errors` | `429`, `402`/`403`/`404` or — | Flipped by consecutive real-session prompt failures (see [Live signals](#live-signals-between-sweeps)), not by a probe; carries status `degraded` with `httpStatus: 429` when the whole streak was rate limiting, `unhealthy` otherwise. The streak's `402`/`403`/`404` is shown when it had one; a hosted video model whose probe still passes is held `degraded` with it |
 | `tee_attestation` | — | Accompanies `tee_unverified`: the backend TEE attestation is not currently passed |
 
 A `healthy` model with `promptCorrect: false` deserves attention too: the backend responds, but the model can't answer 2-digit addition — usually the `apiUrl`/`modelName` pair is wired to the wrong model.

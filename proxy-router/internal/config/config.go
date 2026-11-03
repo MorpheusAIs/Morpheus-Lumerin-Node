@@ -28,6 +28,8 @@ type Config struct {
 		ChainID        int    `env:"ETH_NODE_CHAIN_ID"  flag:"eth-node-chain-id"  validate:"number"`
 		EthNodeAddress string `env:"ETH_NODE_ADDRESS"   flag:"eth-node-address"   validate:"omitempty,url"`
 		EthLegacyTx    bool   `env:"ETH_NODE_LEGACY_TX" flag:"eth-node-legacy-tx" desc:"use it to disable EIP-1559 transactions"`
+		// Ceiling for gas-price escalation on our own transactions. Default 1 gwei; -1 disables the cap.
+		EthMaxGasPriceGwei float64 `env:"ETH_NODE_MAX_GAS_PRICE_GWEI" flag:"eth-node-max-gas-price-gwei" validate:"omitempty,gte=-1" desc:"max gas price (gwei) the tx escalator will bid before giving up; defaults to 1, -1 = unlimited"`
 		// ExplorerApiUrl     string          `env:"EXPLORER_API_URL"   flag:"explorer-api-url"   validate:"required,url"`
 		BlockscoutApiUrl   string          `env:"BLOCKSCOUT_API_URL" flag:"blockscout-api-url" validate:"required,url"`
 		ExplorerRetryDelay time.Duration   `env:"EXPLORER_RETRY_DELAY" flag:"explorer-retry-delay" validate:"omitempty,duration" desc:"delay between retries"`
@@ -92,6 +94,11 @@ type Config struct {
 		// Single-bid opens always force permissive (healthPolicySingleBid is
 		// fixed to "permissive") so single-provider models remain usable.
 		SessionHealthPolicy string `env:"SESSION_HEALTH_POLICY" flag:"session-health-policy" validate:"omitempty,oneof=permissive preferred strict" desc:"model health strictness when opening a session by model: permissive (default; skip only providers self-reporting unhealthy/tee_unverified/no_model_configured), preferred (when any provider reports healthy or degraded, skip providers with unknown/missing reports; otherwise fall back to permissive), strict (only try providers reporting healthy); opens with a single candidate bid always use permissive"`
+
+		// Consumer side of video jobs: how often the status of a job is
+		// read, and for how long before the job is given up.
+		VideoJobPollInterval time.Duration `env:"VIDEO_JOB_POLL_INTERVAL" flag:"video-job-poll-interval" validate:"omitempty,duration" desc:"how often the consumer asks the provider for the status of a running video job; default 10s, minimum 2s"`
+		VideoJobMaxWatch     time.Duration `env:"VIDEO_JOB_MAX_WATCH" flag:"video-job-max-watch" validate:"omitempty,duration" desc:"how long the consumer keeps reading a video job's status before it marks the job failed; default 72h"`
 	}
 	System struct {
 		Enable           bool   `env:"SYS_ENABLE"              flag:"sys-enable" desc:"enable system level configuration adjustments"`
@@ -119,12 +126,19 @@ type Config struct {
 // each manual re-check.
 const MinModelApiDetectTTL = time.Minute
 
+// MinVideoJobPollInterval keeps many running jobs from hammering a vendor's
+// status endpoint.
+const MinVideoJobPollInterval = 2 * time.Second
+
 func (cfg *Config) SetDefaults() {
 	if cfg.Environment == "" {
 		cfg.Environment = "development"
 	}
 
 	// Blockchain
+	if cfg.Blockchain.EthMaxGasPriceGwei == 0 {
+		cfg.Blockchain.EthMaxGasPriceGwei = lib.DefaultMaxGasPriceGwei
+	}
 	if cfg.Blockchain.MaxReconnects == 0 {
 		cfg.Blockchain.MaxReconnects = 30
 	}
@@ -267,6 +281,15 @@ func (cfg *Config) SetDefaults() {
 	if cfg.Proxy.SessionHealthPolicy == "" {
 		cfg.Proxy.SessionHealthPolicy = "permissive"
 	}
+	if cfg.Proxy.VideoJobPollInterval == 0 {
+		cfg.Proxy.VideoJobPollInterval = 10 * time.Second
+	}
+	if cfg.Proxy.VideoJobPollInterval < MinVideoJobPollInterval {
+		cfg.Proxy.VideoJobPollInterval = MinVideoJobPollInterval
+	}
+	if cfg.Proxy.VideoJobMaxWatch == 0 {
+		cfg.Proxy.VideoJobMaxWatch = 72 * time.Hour
+	}
 
 	// IPFS: leave Address empty when unset. A host:port default is not a
 	// multiaddr and made NewIpfsManager log ERROR on every headless boot (#872).
@@ -311,6 +334,7 @@ func (cfg *Config) GetSanitized() interface{} {
 	publicCfg := Config{}
 
 	publicCfg.Blockchain.EthLegacyTx = cfg.Blockchain.EthLegacyTx
+	publicCfg.Blockchain.EthMaxGasPriceGwei = cfg.Blockchain.EthMaxGasPriceGwei
 	publicCfg.Blockchain.ChainID = cfg.Blockchain.ChainID
 	publicCfg.Blockchain.MaxReconnects = cfg.Blockchain.MaxReconnects
 	publicCfg.Blockchain.PollingInterval = cfg.Blockchain.PollingInterval
@@ -350,6 +374,8 @@ func (cfg *Config) GetSanitized() interface{} {
 	publicCfg.Proxy.ModelApiVerifyBindings = cfg.Proxy.ModelApiVerifyBindings
 	publicCfg.Proxy.ModelApiProbeCapabilities = cfg.Proxy.ModelApiProbeCapabilities
 	publicCfg.Proxy.SessionHealthPolicy = cfg.Proxy.SessionHealthPolicy
+	publicCfg.Proxy.VideoJobPollInterval = cfg.Proxy.VideoJobPollInterval
+	publicCfg.Proxy.VideoJobMaxWatch = cfg.Proxy.VideoJobMaxWatch
 
 	publicCfg.System.Enable = cfg.System.Enable
 	publicCfg.System.LocalPortRange = cfg.System.LocalPortRange
