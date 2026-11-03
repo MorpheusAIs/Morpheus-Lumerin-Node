@@ -208,8 +208,11 @@ const formatBidScore = (score: number): string =>
 
 const CHAT_BOTTOM_THRESHOLD_PX = 96;
 const MAX_AUDIO_BYTES = 20 * 1024 * 1024;
+// Video models take jobs, not prompts: they live on the Video screen.
 const selectAvailableMarketplaceModels = (models: unknown) =>
-  normalizeModelList(models).filter((model) => !model.IsDeleted);
+  normalizeModelList(models).filter(
+    (model) => !model.IsDeleted && getModelModality(model) !== 'video',
+  );
 
 const userMessage = { user: 'Me', role: 'user', icon: 'M', color: '#20dc8e' };
 

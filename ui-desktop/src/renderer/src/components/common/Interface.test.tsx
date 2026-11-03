@@ -28,7 +28,7 @@ describe('shared interface accessibility', () => {
     fireEvent.focus(workspace);
     expect(warm).toHaveBeenCalledWith('/workspace');
     expect(workspace).not.toHaveAttribute('aria-current');
-    expect(screen.getAllByRole('link')).toHaveLength(6);
+    expect(screen.getAllByRole('link')).toHaveLength(7);
   });
 
   it('associates field errors with the input and keeps test identifiers', () => {

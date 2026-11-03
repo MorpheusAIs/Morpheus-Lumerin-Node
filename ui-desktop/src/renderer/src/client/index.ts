@@ -254,6 +254,15 @@ const createClient = function (createStore) {
       window.ipfsDownload.onEvent(requestId, listener),
     synthesizeSpeech: utils.forwardToMainProcess('synthesize-speech', 330000),
     transcribeAudio: utils.forwardToMainProcess('transcribe-audio', 330000),
+    getVideoGuide: utils.forwardToMainProcess('get-video-guide', 60000),
+    quoteVideoJob: utils.forwardToMainProcess('quote-video-job', 60000),
+    // Longer than the node's two create attempts against a slow provider.
+    createVideoJob: utils.forwardToMainProcess('create-video-job', 300000),
+    getVideoJobs: utils.forwardToMainProcess('get-video-jobs'),
+    // No timeout: main fails a download that stalls, not one that is slow.
+    loadVideoClip: utils.forwardToMainProcess('load-video-clip', null),
+    // No timeout: the save dialog waits for the user.
+    saveVideoClip: utils.forwardToMainProcess('save-video-clip', null),
 
     getTransactions: utils.forwardToMainProcess('get-transactions'),
     getBalances: utils.forwardToMainProcess('get-balances'),
