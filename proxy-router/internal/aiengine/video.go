@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"time"
 
@@ -26,6 +27,11 @@ type VideoJobEngine interface {
 	// FetchVideoStatus returns the vendor's status body for a task, for
 	// videojob.ParseStatus.
 	FetchVideoStatus(ctx context.Context, taskID string) ([]byte, error)
+	// ProbeVideoVendor asks the vendor something free that only a working
+	// account can answer: it proves the vendor answers and accepts the key,
+	// without starting a render. It cannot see an inactive model or an empty
+	// balance; only a create shows those.
+	ProbeVideoVendor(ctx context.Context) error
 }
 
 type VideoJobInput struct {
@@ -183,11 +189,21 @@ func readVideoBody(res *http.Response) ([]byte, error) {
 }
 
 // vendorUnreachable logs a transport failure with its detail and returns the
-// error the consumer may see.
+// error the consumer may see. The cause is not wrapped, since its text names
+// the vendor's host; a timeout is kept as a fact, since the health report
+// tells it apart.
 func vendorUnreachable(log lib.ILogger, what string, err error) error {
 	log.Warnf("%s: %s", what, err)
+	var netErr net.Error
+	if errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &netErr) && netErr.Timeout()) {
+		return fmt.Errorf("%s: %w: %w", what, ErrVideoVendorUnreachable, context.DeadlineExceeded)
+	}
 	return fmt.Errorf("%s: %w", what, ErrVideoVendorUnreachable)
 }
+
+// errUnexpectedProbeAnswer marks a 2xx probe answer in a shape the vendor
+// does not use: the apiUrl reaches something else.
+const errUnexpectedProbeAnswer = "unexpected answer to the health probe"
 
 // videoOnly answers the streaming methods of a video adapter: a chat request
 // to a video model gets a clear error instead of a vendor call.

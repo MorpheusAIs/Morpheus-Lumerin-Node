@@ -42,7 +42,10 @@ const (
 	// capacity: emitted when a health probe fails with HTTP 429 (upstream
 	// throttled). It signals capacity risk, not failure: consumers treat it
 	// as serviceable under the permissive and preferred health policies;
-	// only the strict policy excludes it.
+	// only the strict policy excludes it. A hosted video model is also held
+	// degraded (with ModelHealthErrorSessionErrors) when its vendor probe
+	// passes but real jobs failed for an account reason the probe cannot see
+	// (402, 403, 404), until a job succeeds.
 	ModelHealthStatusDegraded = "degraded"
 
 	ModelHealthErrorTimeout     = "timeout"
@@ -52,8 +55,8 @@ const (
 	ModelHealthErrorTypeLookup  = "model_type_lookup"
 	// ModelHealthErrorSessionErrors marks a model flipped to unhealthy — or
 	// to degraded, when the whole failure streak was upstream rate limiting
-	// (429) — by consecutive real-session prompt failures rather than a
-	// scheduled probe.
+	// (429), or a video model held after its probe passed — by consecutive
+	// real-session prompt failures rather than a scheduled probe.
 	ModelHealthErrorSessionErrors = "session_errors"
 	// ModelHealthErrorTeeAttestation accompanies ModelHealthStatusTeeUnverified.
 	ModelHealthErrorTeeAttestation = "tee_attestation"

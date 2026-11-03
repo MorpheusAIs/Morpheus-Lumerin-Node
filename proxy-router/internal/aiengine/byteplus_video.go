@@ -222,6 +222,41 @@ func (b *BytePlusVideo) FetchVideoStatus(ctx context.Context, taskID string) ([]
 	return raw, nil
 }
 
+// ProbeVideoVendor lists one task of the account: free, and refused with 401
+// for a key that is not accepted. Only the list shape counts as an answer: a
+// wrong apiUrl that serves a page with 200 does not.
+func (b *BytePlusVideo) ProbeVideoVendor(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, videoStatusTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, b.baseURL+"/contents/generations/tasks?page_num=1&page_size=1", nil)
+	if err != nil {
+		return vendorUnreachable(b.log, "build the vendor request", err)
+	}
+	setVideoAuth(req, b.apiKey)
+
+	res, err := b.client.Do(req)
+	if err != nil {
+		return vendorUnreachable(b.log, "byteplus health probe", err)
+	}
+	defer res.Body.Close()
+
+	raw, err := readVideoBody(res)
+	if err != nil {
+		return vendorUnreachable(b.log, "byteplus health probe", err)
+	}
+	if res.StatusCode < 200 || res.StatusCode > 299 {
+		return bytePlusVendorError(res.StatusCode, raw)
+	}
+	var list struct {
+		Total *int `json:"total"`
+	}
+	if json.Unmarshal(raw, &list) != nil || list.Total == nil {
+		return &VideoVendorError{StatusCode: res.StatusCode, Message: errUnexpectedProbeAnswer}
+	}
+	return nil
+}
+
 func bytePlusVendorError(status int, raw []byte) *VideoVendorError {
 	e := &VideoVendorError{StatusCode: status}
 	var parsed bytePlusError

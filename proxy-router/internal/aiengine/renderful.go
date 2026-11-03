@@ -219,6 +219,68 @@ func (r *Renderful) FetchVideoStatus(ctx context.Context, taskID string) ([]byte
 	return raw, nil
 }
 
+// renderfulProbeID names a generation that does not exist: looking it up is
+// free.
+const renderfulProbeID = "morpheus-health-probe"
+
+// ProbeVideoVendor looks up a generation that does not exist. Renderful
+// checks the key first: a missing, wrong or disabled key gets 401, a working
+// one 404 with its JSON error ("Generation task not found"), and a wrong path
+// a 404 page. Only the JSON 404 counts, and only when the same URL without
+// the key is refused with 401: that proves the path sits behind Renderful's
+// key check, so another JSON API's 404 does not pass.
+func (r *Renderful) ProbeVideoVendor(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, videoStatusTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.statusURL(renderfulProbeID), nil)
+	if err != nil {
+		return vendorUnreachable(r.log, "build the vendor request", err)
+	}
+	setVideoAuth(req, r.apiKey)
+
+	res, err := r.client.Do(req)
+	if err != nil {
+		return vendorUnreachable(r.log, "renderful health probe", err)
+	}
+	defer res.Body.Close()
+
+	raw, err := readVideoBody(res)
+	if err != nil {
+		return vendorUnreachable(r.log, "renderful health probe", err)
+	}
+	if res.StatusCode == http.StatusNotFound {
+		var parsed renderfulError
+		if json.Unmarshal(raw, &parsed) == nil && (parsed.Error != "" || parsed.Message != "") {
+			return r.probeKeyRequired(ctx)
+		}
+	}
+	if res.StatusCode >= 200 && res.StatusCode <= 299 {
+		return &VideoVendorError{StatusCode: res.StatusCode, Message: errUnexpectedProbeAnswer}
+	}
+	return renderfulVendorError(res.StatusCode, raw)
+}
+
+// probeKeyRequired asks the probe URL again without the key and expects 401.
+func (r *Renderful) probeKeyRequired(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.statusURL(renderfulProbeID), nil)
+	if err != nil {
+		return vendorUnreachable(r.log, "build the vendor request", err)
+	}
+	res, err := r.client.Do(req)
+	if err != nil {
+		return vendorUnreachable(r.log, "renderful health probe", err)
+	}
+	defer res.Body.Close()
+	if _, err := readVideoBody(res); err != nil {
+		return vendorUnreachable(r.log, "renderful health probe", err)
+	}
+	if res.StatusCode != http.StatusUnauthorized {
+		return &VideoVendorError{StatusCode: res.StatusCode, Message: errUnexpectedProbeAnswer}
+	}
+	return nil
+}
+
 func renderfulVendorError(status int, raw []byte) *VideoVendorError {
 	e := &VideoVendorError{StatusCode: status}
 	var parsed renderfulError
