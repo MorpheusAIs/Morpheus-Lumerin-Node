@@ -7,10 +7,13 @@ import { DelegateRegistry } from '@/generated-types/ethers/contracts/mock/delega
 import { getHex, wei } from '@/scripts/utils/utils';
 import {
   deployDelegateRegistry,
+  deployFacetDelegateStaking,
+  deployFacetDelegateStakingFunding,
   deployFacetDelegation,
   deployFacetMarketplace,
   deployFacetModelRegistry,
   deployFacetProviderRegistry,
+  deployFacetProviderPayouts,
   deployFacetSessionRouter,
   deployLumerinDiamond,
   deployMORToken,
@@ -21,6 +24,8 @@ import { YEAR } from '@/utils/time';
 
 describe('ProviderRegistry', () => {
   const reverter = new Reverter();
+  // fixed registration time; must be later than the chain time after the full upgrade cut in before()
+  const registeredAt = 10_000;
 
   let OWNER: SignerWithAddress;
   let PROVIDER: SignerWithAddress;
@@ -52,6 +57,9 @@ describe('ProviderRegistry', () => {
       deployFacetSessionRouter(diamond, OWNER),
       deployFacetMarketplace(diamond, token, wei(0.0001), wei(900)),
       deployFacetDelegation(diamond, delegateRegistry),
+      deployFacetProviderPayouts(diamond),
+      deployFacetDelegateStaking(diamond),
+      deployFacetDelegateStakingFunding(diamond),
     ]);
 
     await token.transfer(PROVIDER, wei(1000));
@@ -94,15 +102,15 @@ describe('ProviderRegistry', () => {
 
   describe('#providerRegister', async () => {
     it('should register a new provider', async () => {
-      await setNextTime(300);
+      await setNextTime(registeredAt);
       await providerRegistry.connect(PROVIDER).providerRegister(PROVIDER, wei(100), 'test');
 
       const data = await providerRegistry.getProvider(PROVIDER);
 
       expect(data.endpoint).to.eq('test');
       expect(data.stake).to.eq(wei(100));
-      expect(data.createdAt).to.eq(300);
-      expect(data.limitPeriodEnd).to.eq(YEAR + 300);
+      expect(data.createdAt).to.eq(registeredAt);
+      expect(data.limitPeriodEnd).to.eq(YEAR + registeredAt);
       expect(data.limitPeriodEarned).to.eq(0);
       expect(data.isDeleted).to.eq(false);
       expect(await providerRegistry.getIsProviderActive(PROVIDER)).to.eq(true);
@@ -115,7 +123,7 @@ describe('ProviderRegistry', () => {
       await providerRegistry.connect(PROVIDER).providerRegister(PROVIDER, wei(0), 'test');
     });
     it('should add stake to existed provider', async () => {
-      await setNextTime(300);
+      await setNextTime(registeredAt);
       await providerRegistry.connect(PROVIDER).providerRegister(PROVIDER, wei(100), 'test');
       await providerRegistry.connect(PROVIDER).providerRegister(PROVIDER, wei(300), 'test2');
 
@@ -123,8 +131,8 @@ describe('ProviderRegistry', () => {
 
       expect(data.endpoint).to.eq('test2');
       expect(data.stake).to.eq(wei(400));
-      expect(data.createdAt).to.eq(300);
-      expect(data.limitPeriodEnd).to.eq(YEAR + 300);
+      expect(data.createdAt).to.eq(registeredAt);
+      expect(data.limitPeriodEnd).to.eq(YEAR + registeredAt);
       expect(data.limitPeriodEarned).to.eq(0);
       expect(data.isDeleted).to.eq(false);
       expect(await providerRegistry.getIsProviderActive(PROVIDER)).to.eq(true);
@@ -133,9 +141,9 @@ describe('ProviderRegistry', () => {
       expect(await token.balanceOf(PROVIDER)).to.eq(wei(600));
     });
     it('should activate deregistered provider', async () => {
-      await setNextTime(300);
+      await setNextTime(registeredAt);
       await providerRegistry.connect(PROVIDER).providerRegister(PROVIDER, wei(100), 'test');
-      await setNextTime(301 + YEAR);
+      await setNextTime(registeredAt + 1 + YEAR);
       await providerRegistry.connect(PROVIDER).providerDeregister(PROVIDER);
 
       let data = await providerRegistry.getProvider(PROVIDER);
@@ -147,8 +155,8 @@ describe('ProviderRegistry', () => {
 
       expect(data.endpoint).to.eq('test2');
       expect(data.stake).to.eq(wei(1));
-      expect(data.createdAt).to.eq(300);
-      expect(data.limitPeriodEnd).to.eq(YEAR + 300);
+      expect(data.createdAt).to.eq(registeredAt);
+      expect(data.limitPeriodEnd).to.eq(YEAR + registeredAt);
       expect(data.limitPeriodEarned).to.eq(0);
       expect(data.isDeleted).to.eq(false);
       expect(await providerRegistry.getIsProviderActive(PROVIDER)).to.eq(true);
@@ -158,15 +166,15 @@ describe('ProviderRegistry', () => {
         .connect(PROVIDER)
         .delegateContract(OWNER, providerRegistry, await providerRegistry.DELEGATION_RULES_PROVIDER(), true);
 
-      await setNextTime(300);
+      await setNextTime(registeredAt);
       await providerRegistry.connect(OWNER).providerRegister(PROVIDER, wei(100), 'test');
 
       const data = await providerRegistry.getProvider(PROVIDER);
 
       expect(data.endpoint).to.eq('test');
       expect(data.stake).to.eq(wei(100));
-      expect(data.createdAt).to.eq(300);
-      expect(data.limitPeriodEnd).to.eq(YEAR + 300);
+      expect(data.createdAt).to.eq(registeredAt);
+      expect(data.limitPeriodEnd).to.eq(YEAR + registeredAt);
       expect(data.limitPeriodEarned).to.eq(0);
       expect(data.isDeleted).to.eq(false);
       expect(await providerRegistry.getIsProviderActive(PROVIDER)).to.eq(true);
@@ -200,9 +208,9 @@ describe('ProviderRegistry', () => {
 
   describe('#providerDeregister', async () => {
     it('should deregister the provider', async () => {
-      await setNextTime(300);
+      await setNextTime(registeredAt);
       await providerRegistry.connect(PROVIDER).providerRegister(PROVIDER, wei(100), 'test');
-      await setNextTime(301 + YEAR);
+      await setNextTime(registeredAt + 1 + YEAR);
       await providerRegistry.connect(PROVIDER).providerDeregister(PROVIDER);
 
       expect((await providerRegistry.getProvider(PROVIDER)).isDeleted).to.equal(true);
@@ -213,13 +221,13 @@ describe('ProviderRegistry', () => {
       expect(await providerRegistry.getActiveProviders(0, 10)).to.deep.eq([[], 0n]);
     });
     it('should deregister the provider from the delegatee address', async () => {
-      await setNextTime(300);
+      await setNextTime(registeredAt);
       await providerRegistry.connect(PROVIDER).providerRegister(PROVIDER, wei(100), 'test');
 
       await delegateRegistry
         .connect(PROVIDER)
         .delegateContract(OWNER, providerRegistry, await providerRegistry.DELEGATION_RULES_PROVIDER(), true);
-      await setNextTime(301 + YEAR);
+      await setNextTime(registeredAt + 1 + YEAR);
       await providerRegistry.connect(OWNER).providerDeregister(PROVIDER);
 
       expect((await providerRegistry.getProvider(PROVIDER)).isDeleted).to.equal(true);
@@ -231,9 +239,9 @@ describe('ProviderRegistry', () => {
     });
     it('should deregister the provider without transfer', async () => {
       await providerRegistry.providerSetMinStake(0);
-      await setNextTime(300);
+      await setNextTime(registeredAt);
       await providerRegistry.connect(PROVIDER).providerRegister(PROVIDER, wei(0), 'test');
-      await setNextTime(301 + YEAR);
+      await setNextTime(registeredAt + 1 + YEAR);
       await providerRegistry.connect(PROVIDER).providerDeregister(PROVIDER);
 
       expect((await providerRegistry.getProvider(PROVIDER)).isDeleted).to.equal(true);

@@ -4,6 +4,7 @@ import {
   ModelRegistry,
   MorpheusToken,
   ProviderRegistry,
+  ProviderPayouts,
   ProvidersDelegate,
   SessionRouter,
 } from '@ethers-v6';
@@ -18,10 +19,13 @@ import { ZERO_ADDR } from '@/scripts/utils/constants';
 import { getHex, wei } from '@/scripts/utils/utils';
 import {
   deployDelegateRegistry,
+  deployFacetDelegateStaking,
+  deployFacetDelegateStakingFunding,
   deployFacetDelegation,
   deployFacetMarketplace,
   deployFacetModelRegistry,
   deployFacetProviderRegistry,
+  deployFacetProviderPayouts,
   deployFacetSessionRouter,
   deployLumerinDiamond,
   deployMORToken,
@@ -48,6 +52,7 @@ describe('ProvidersDelegate', () => {
   let providersDelegate: ProvidersDelegate;
   let marketplace: Marketplace;
   let sessionRouter: SessionRouter;
+  let providerPayouts: ProviderPayouts;
 
   let token: MorpheusToken;
   let delegateRegistry: DelegateRegistry;
@@ -61,12 +66,15 @@ describe('ProvidersDelegate', () => {
       deployDelegateRegistry(),
     ]);
 
-    [providerRegistry, modelRegistry, sessionRouter, marketplace] = await Promise.all([
+    [providerRegistry, modelRegistry, sessionRouter, marketplace, , providerPayouts] = await Promise.all([
       deployFacetProviderRegistry(diamond),
       deployFacetModelRegistry(diamond),
       deployFacetSessionRouter(diamond, OWNER),
       deployFacetMarketplace(diamond, token, wei(0.0001), wei(900)),
       deployFacetDelegation(diamond, delegateRegistry),
+      deployFacetProviderPayouts(diamond),
+      deployFacetDelegateStaking(diamond),
+      deployFacetDelegateStakingFunding(diamond),
     ]);
 
     providersDelegate = await deployProvidersDelegate(
@@ -475,7 +483,7 @@ describe('ProvidersDelegate', () => {
       await setTime(payoutStart + 10 * DAY);
       const { msg, signature } = await getProviderApproval(OWNER, ALAN, bidId);
       await sessionRouter.connect(ALAN).openSession(ALAN, wei(50), false, msg, signature);
-      const sessionId = await sessionRouter.getSessionId(ALAN, providersDelegate, bidId, 0);
+      const sessionId = await providerPayouts.getSessionId(ALAN, providersDelegate, bidId, 0);
 
       const sessionTreasuryBalanceBefore = await token.balanceOf(OWNER);
 
@@ -517,7 +525,7 @@ describe('ProvidersDelegate', () => {
       await setTime(payoutStart + 10 * DAY);
       const { msg, signature } = await getProviderApproval(OWNER, ALAN, bidId);
       await sessionRouter.connect(ALAN).openSession(ALAN, wei(50), false, msg, signature);
-      const sessionId = await sessionRouter.getSessionId(ALAN, providersDelegate, bidId, 0);
+      const sessionId = await providerPayouts.getSessionId(ALAN, providersDelegate, bidId, 0);
 
       // Close session
       await setTime(payoutStart + 15 * DAY);
