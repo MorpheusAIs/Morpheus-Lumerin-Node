@@ -388,6 +388,16 @@ func start() error {
 	proxyController := proxyapi.NewProxyController(proxyRouterApi, aiEngine, chatStorage, *cfg.Proxy.StoreChatContext.Bool, *cfg.Proxy.ForwardChatContext.Bool, *authCfg, ipfsManager, log)
 	proxyController.SetBackendAttestationStatus(backendVerifier)
 	proxyController.SetIPFSAllowedDirs(cfg.IPFS.AllowedDirs)
+	// Video job watchers live on the app context, not the proxy run loop, so
+	// a wallet key change does not drop them.
+	videoJobs := proxyapi.NewVideoJobService(ctx, proxyRouterApi, blockchainApi, sessionStorage, cfg.Proxy.VideoJobPollInterval, cfg.Proxy.VideoJobMaxWatch, appLog)
+	videoJobs.Resume()
+	defer func() {
+		// the deferred cancel above runs after this one: stop the watchers first
+		cancel()
+		videoJobs.Wait()
+	}()
+	proxyController.SetVideoJobService(videoJobs)
 	walletController := walletapi.NewWalletController(wallet, *authCfg)
 	var modelHealthChecker *modelhealth.Checker
 	// keep the interface nil when the checker is disabled to avoid a typed-nil

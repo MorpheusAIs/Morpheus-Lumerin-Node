@@ -52,10 +52,20 @@ export const MODALITY_TAGS = {
   tts: ['tts', 'text-to-speech', 'text2speech', 't2s'],
   embedding: ['embedding', 'embeddings'],
   llm: ['llm', 'textgeneration', 'text2text', 'text-to-text', 't2t'],
+  video: [
+    'video',
+    'text2video',
+    'text-to-video',
+    't2v',
+    'image2video',
+    'image-to-video',
+    'i2v',
+  ],
 };
 
-// Returns 'stt' | 'tts' | 'embedding' | 'llm' for a model. LLM is the default
-// when no recognised modality tag is present.
+// Returns 'stt' | 'tts' | 'embedding' | 'video' | 'llm' for a model. LLM is the
+// default when no recognised modality tag is present. Video is a fallback, as
+// on the backend: a model that also carries a chat tag is served as chat.
 export const getModelModality = (model) => {
   const declaredType = String(model?.ModelType ?? '')
     .trim()
@@ -64,13 +74,20 @@ export const getModelModality = (model) => {
   if (declaredType === 'embedding' || declaredType === 'embeddings') {
     return 'embedding';
   }
-  if (declaredType === 'llm') return 'llm';
+  if (declaredType === 'llm' || declaredType === 'decisions') return 'llm';
+  if (declaredType === 'video') return 'video';
 
   const tags = normalizeModelTags(model?.Tags).map((t) => t.toLowerCase());
   for (const k of ['stt', 'tts', 'embedding']) {
     if (tags.some((t) => MODALITY_TAGS[k].includes(t))) {
       return k;
     }
+  }
+  if (
+    !tags.some((t) => MODALITY_TAGS.llm.includes(t)) &&
+    tags.some((t) => MODALITY_TAGS.video.includes(t))
+  ) {
+    return 'video';
   }
   return 'llm';
 };

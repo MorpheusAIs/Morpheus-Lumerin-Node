@@ -483,6 +483,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	var reports []jsonReport
 	for _, e := range entries {
+		// A video vendor has no chat API to detect, and fingerprinting it
+		// would send the account key to every probed endpoint.
+		if aiengine.IsVideoApiType(e.Cfg.ApiType) {
+			fmt.Fprintf(stderr, "skipping %s: apiType %s is a video job vendor\n", e.Cfg.ModelName, e.Cfg.ApiType)
+			continue
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 		api, trace := detector.DetectWithTrace(ctx, e.Cfg)
 		cancel()

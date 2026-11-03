@@ -738,6 +738,51 @@ definitions:
     required:
     - title
     type: object
+  proxyapi.VideoJobListRes:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/videojob.Job'
+        type: array
+      object:
+        example: list
+        type: string
+    type: object
+  proxyapi.VideoQuote:
+    properties:
+      bid_id:
+        type: string
+      error:
+        type: string
+      price_per_second_wei:
+        type: string
+      provider:
+        type: string
+      quote_seconds:
+        description: |-
+          QuoteSeconds is what the job uses of a session, the figure the
+          provider adds up against the session length when it accepts a job.
+        type: integer
+      resolved:
+        $ref: '#/definitions/videojob.Resolved'
+      session_cost_wei:
+        type: string
+      session_seconds:
+        description: |-
+          SessionSeconds is the session to open for the job alone: QuoteSeconds
+          raised to the contract minimum.
+        type: integer
+    type: object
+  proxyapi.VideoQuoteRes:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/proxyapi.VideoQuote'
+        type: array
+      object:
+        example: list
+        type: string
+    type: object
   structs.AllowanceRes:
     properties:
       allowance:
@@ -915,7 +960,7 @@ definitions:
       modelType:
         allOf:
         - $ref: '#/definitions/structs.ModelType'
-        description: Type of the model (LLM, STT, TTS, EMBEDDING, DECISIONS)
+        description: Type of the model (LLM, STT, TTS, EMBEDDING, DECISIONS, VIDEO)
       name:
         type: string
       owner:
@@ -971,16 +1016,19 @@ definitions:
     - TTS
     - EMBEDDING
     - DECISIONS
+    - VIDEO
     - UNKNOWN
     type: string
     x-enum-comments:
       ModelTypeUnknown: Default type for unknown models
+      ModelTypeVIDEO: 'hosted video job: POST /v1/video/jobs, never chat'
     x-enum-varnames:
     - ModelTypeLLM
     - ModelTypeSTT
     - ModelTypeTTS
     - ModelTypeEMBEDDING
     - ModelTypeDECISIONS
+    - ModelTypeVIDEO
     - ModelTypeUnknown
   structs.ModelsRes:
     properties:
@@ -1454,6 +1502,13 @@ definitions:
         type: boolean
       status:
         type: string
+      video:
+        allOf:
+        - $ref: '#/definitions/videojob.Guide'
+        description: |-
+          Video is the job guide of a hosted video model: fields, limits,
+          defaults and the quote weights a consumer needs before it opens a
+          session. Absent for every other model.
     type: object
   system.ModelsReloadRes:
     properties:
@@ -1517,6 +1572,158 @@ definitions:
         description: 'always_on: cannot be disabled (a reasoning.disable binding may
           remain only with verified: false, the verifier''s refutation) | controllable:
           reasoning.disable/enable bindings | tunable: effort/budget bindings only'
+        type: string
+    type: object
+  videojob.CreateRequest:
+    properties:
+      aspect_ratio:
+        type: string
+      duration_seconds:
+        type: integer
+      generate_audio:
+        type: boolean
+      image_b64:
+        description: |-
+          ImageB64 is a first frame sent inline, as plain base64 or a data URI.
+          Ignored when ImageURL is set.
+        type: string
+      image_url:
+        description: ImageURL is a first frame the vendor can fetch itself.
+        type: string
+      model:
+        description: |-
+          Model is the on-chain model id POST /v1/video/quote prices the job for.
+          A submitted job takes its model from its session, and the provider
+          serves the session's model.
+        type: string
+      prompt:
+        type: string
+      resolution:
+        type: string
+    type: object
+  videojob.Defaults:
+    properties:
+      aspect_ratio:
+        type: string
+      duration_seconds:
+        type: integer
+      generate_audio:
+        type: boolean
+      resolution:
+        type: string
+    type: object
+  videojob.Field:
+    properties:
+      description:
+        type: string
+      enum:
+        items:
+          type: string
+        type: array
+      maximum:
+        type: integer
+      minimum:
+        type: integer
+      name:
+        type: string
+      required:
+        type: boolean
+      type:
+        type: string
+    type: object
+  videojob.Guide:
+    properties:
+      defaults:
+        $ref: '#/definitions/videojob.Defaults'
+      fields:
+        items:
+          $ref: '#/definitions/videojob.Field'
+        type: array
+      instructions:
+        type: string
+      model_name:
+        type: string
+      object:
+        type: string
+      quote:
+        $ref: '#/definitions/videojob.Quote'
+      summary:
+        type: string
+    type: object
+  videojob.Job:
+    properties:
+      created_at:
+        type: string
+      error:
+        $ref: '#/definitions/videojob.JobError'
+      expires_at:
+        description: ExpiresAt is when VideoURL stops working, when the vendor documents
+          it.
+        type: string
+      id:
+        type: string
+      model:
+        type: string
+      object:
+        type: string
+      quote_seconds:
+        type: integer
+      resolved:
+        $ref: '#/definitions/videojob.Resolved'
+      session_id:
+        type: string
+      status:
+        type: string
+      updated_at:
+        type: string
+      vendor:
+        type: string
+      vendor_task_id:
+        description: VendorTaskID is empty until the provider confirmed the job.
+        type: string
+      video_url:
+        description: |-
+          VideoURL is the vendor's MP4 link, present once the job succeeded. It
+          is a bearer link: anyone holding it can download until it expires.
+        type: string
+    type: object
+  videojob.JobError:
+    properties:
+      code:
+        type: string
+      message:
+        type: string
+    type: object
+  videojob.Quote:
+    properties:
+      audio_weight:
+        type: number
+      image_weight:
+        type: number
+      max_session_seconds:
+        type: integer
+      min_session_seconds:
+        type: integer
+      resolution_weights:
+        additionalProperties:
+          type: number
+        type: object
+      seconds_per_work_unit:
+        type: number
+    type: object
+  videojob.Resolved:
+    properties:
+      aspect_ratio:
+        type: string
+      duration_seconds:
+        type: integer
+      generate_audio:
+        type: boolean
+      has_image:
+        type: boolean
+      prompt:
+        type: string
+      resolution:
         type: string
     type: object
   walletapi.SetDerivationPathReqBody:
@@ -3695,6 +3902,112 @@ paths:
       summary: Get backend TEE attestation status for all configured models
       tags:
       - system
+  /v1/video/jobs:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/proxyapi.VideoJobListRes'
+      security:
+      - BasicAuth: []
+      summary: List video jobs
+      tags:
+      - video
+    post:
+      consumes:
+      - application/json
+      description: 'Sends the job on a session already opened for it and returns the
+        job once the vendor accepted it. Open the session first with POST /blockchain/bids/{id}/session,
+        for the bid and session_seconds from POST /v1/video/quote. A session takes
+        several jobs while their quotes add up to no more than its length. When the
+        provider cannot be reached the job is still created and sent again by this
+        node, with vendor_task_id empty until the provider confirms it. Poll GET /v1/video/jobs/{id}
+        for the video. Only prompt is required; other fields take the provider guide''s
+        defaults. A failed submit or render leaves the session open. Close it with
+        POST /blockchain/sessions/{id}/close when done: a clip not delivered by then
+        is not handed over.'
+      parameters:
+      - description: Session opened for this job
+        format: hex32
+        in: header
+        name: session_id
+        required: true
+        type: string
+      - description: Video job
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/videojob.CreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/videojob.Job'
+      security:
+      - BasicAuth: []
+      summary: Submit a video job
+      tags:
+      - video
+  /v1/video/jobs/{id}:
+    get:
+      description: The job's status as this node last read it. video_url appears once
+        the job succeeded; it is a bearer link that expires (expires_at, when the
+        vendor documents it).
+      parameters:
+      - description: Video job ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/videojob.Job'
+      security:
+      - BasicAuth: []
+      summary: Get a video job
+      tags:
+      - video
+  /v1/video/quote:
+    post:
+      consumes:
+      - application/json
+      description: The session length (and its cost at the bid price) each provider
+        would sell for this job. The stake to lock comes from GET /blockchain/models/{id}/session/estimate
+        with that length.
+      parameters:
+      - description: Model ID, when the body has no model
+        format: hex32
+        in: header
+        name: model_id
+        type: string
+      - description: Video job
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/videojob.CreateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/proxyapi.VideoQuoteRes'
+      security:
+      - BasicAuth: []
+      summary: Quote a video job
+      tags:
+      - video
   /wallet:
     delete:
       description: Remove wallet from proxy storage

@@ -181,6 +181,10 @@ func (s *MORRPCController) Handle(ctx context.Context, msg m.RPCMessage, sourceL
 		return s.sessionPromptStreamChunk(ctx, msg, sendResponse, sourceLog)
 	case "session.prompt.stream.end":
 		return s.sessionPromptStreamEnd(ctx, msg, sendResponse, sourceLog)
+	case "session.video.create":
+		return s.sessionVideoCreate(ctx, msg, sendResponse, sourceLog)
+	case "session.video.status":
+		return s.sessionVideoStatus(ctx, msg, sendResponse, sourceLog)
 	default:
 		return lib.WrapError(ErrUnknownMethod, fmt.Errorf("unknown method: %s", msg.Method))
 	}
@@ -208,6 +212,9 @@ func (s *MORRPCController) networkPing(_ context.Context, msg m.RPCMessage, send
 	var models []system.ModelHealthReport
 	if s.modelHealth != nil {
 		models = s.modelHealth.GetReports()
+	}
+	if s.service != nil {
+		models = s.service.withVideoGuides(models, sourceLog)
 	}
 
 	res, err := s.morRpc.PongResponce(msg.ID, s.prKey, req.Nonce, config.BuildVersion, models)

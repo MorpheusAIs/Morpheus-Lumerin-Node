@@ -17,6 +17,7 @@ import { modelPagesQueryOptions } from '../store/modelQueries';
 
 const Dashboard = lazy(routeModules['/wallet']);
 const Chat = lazy(routeModules['/chat']);
+const Video = lazy(routeModules['/video']);
 const Cowork = lazy(routeModules['/workspace']);
 const Agents = lazy(routeModules['/agents']);
 const Models = lazy(routeModules['/models']);
@@ -156,6 +157,7 @@ export const Layout = () => {
             <Routes>
               <Route path="/wallet" element={<Dashboard />} />
               <Route path="/chat" element={<Chat />} />
+              <Route path="/video" element={<Video />} />
               <Route path="/workspace" element={<Cowork />} />
               <Route path="/cowork" element={<LegacyCoworkRedirect />} />
               <Route path="/agents" element={<Agents />} />

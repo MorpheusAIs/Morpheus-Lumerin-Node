@@ -43,6 +43,15 @@ export const queryKeys = {
   allModels: ['allModels'] as const,
   // The Models screen loads the registry incrementally for a fast first paint.
   modelPages: ['modelPages'] as const,
+  // Video jobs the local node tracks, newest first.
+  videoJobs: ['videoJobs'] as const,
+  // A video model's job guide from its providers' pongs. The wallet belongs in
+  // the key because this wallet's own bids are left out.
+  videoGuide: (address?: string, modelId?: string) =>
+    ['videoGuide', address ?? '', modelId ?? ''] as const,
+  // Every provider's price for a job with these settings.
+  videoQuote: (modelId: string, settings: string) =>
+    ['videoQuote', modelId, settings] as const,
   // local IPFS node version / connectivity
   ipfsVersion: ['ipfsVersion'] as const,
   // IPFS-pinned model files

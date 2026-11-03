@@ -3373,6 +3373,155 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/video/jobs": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "video"
+                ],
+                "summary": "List video jobs",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.VideoJobListRes"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Sends the job on a session already opened for it and returns the job once the vendor accepted it. Open the session first with POST /blockchain/bids/{id}/session, for the bid and session_seconds from POST /v1/video/quote. A session takes several jobs while their quotes add up to no more than its length. When the provider cannot be reached the job is still created and sent again by this node, with vendor_task_id empty until the provider confirms it. Poll GET /v1/video/jobs/{id} for the video. Only prompt is required; other fields take the provider guide's defaults. A failed submit or render leaves the session open. Close it with POST /blockchain/sessions/{id}/close when done: a clip not delivered by then is not handed over.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "video"
+                ],
+                "summary": "Submit a video job",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "hex32",
+                        "description": "Session opened for this job",
+                        "name": "session_id",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Video job",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/videojob.CreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/videojob.Job"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/video/jobs/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "The job's status as this node last read it. video_url appears once the job succeeded; it is a bearer link that expires (expires_at, when the vendor documents it).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "video"
+                ],
+                "summary": "Get a video job",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Video job ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/videojob.Job"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/video/quote": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "The session length (and its cost at the bid price) each provider would sell for this job. The stake to lock comes from GET /blockchain/models/{id}/session/estimate with that length.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "video"
+                ],
+                "summary": "Quote a video job",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "hex32",
+                        "description": "Model ID, when the body has no model",
+                        "name": "model_id",
+                        "in": "header"
+                    },
+                    {
+                        "description": "Video job",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/videojob.CreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.VideoQuoteRes"
+                        }
+                    }
+                }
+            }
+        },
         "/wallet": {
             "get": {
                 "security": [
@@ -4636,6 +4785,67 @@ const docTemplate = `{
                 }
             }
         },
+        "proxyapi.VideoJobListRes": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/videojob.Job"
+                    }
+                },
+                "object": {
+                    "type": "string",
+                    "example": "list"
+                }
+            }
+        },
+        "proxyapi.VideoQuote": {
+            "type": "object",
+            "properties": {
+                "bid_id": {
+                    "type": "string"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "price_per_second_wei": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "quote_seconds": {
+                    "description": "QuoteSeconds is what the job uses of a session, the figure the\nprovider adds up against the session length when it accepts a job.",
+                    "type": "integer"
+                },
+                "resolved": {
+                    "$ref": "#/definitions/videojob.Resolved"
+                },
+                "session_cost_wei": {
+                    "type": "string"
+                },
+                "session_seconds": {
+                    "description": "SessionSeconds is the session to open for the job alone: QuoteSeconds\nraised to the contract minimum.",
+                    "type": "integer"
+                }
+            }
+        },
+        "proxyapi.VideoQuoteRes": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/proxyapi.VideoQuote"
+                    }
+                },
+                "object": {
+                    "type": "string",
+                    "example": "list"
+                }
+            }
+        },
         "structs.AllowanceRes": {
             "type": "object",
             "properties": {
@@ -4894,7 +5104,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "modelType": {
-                    "description": "Type of the model (LLM, STT, TTS, EMBEDDING, DECISIONS)",
+                    "description": "Type of the model (LLM, STT, TTS, EMBEDDING, DECISIONS, VIDEO)",
                     "allOf": [
                         {
                             "$ref": "#/definitions/structs.ModelType"
@@ -4971,10 +5181,12 @@ const docTemplate = `{
                 "TTS",
                 "EMBEDDING",
                 "DECISIONS",
+                "VIDEO",
                 "UNKNOWN"
             ],
             "x-enum-comments": {
-                "ModelTypeUnknown": "Default type for unknown models"
+                "ModelTypeUnknown": "Default type for unknown models",
+                "ModelTypeVIDEO": "hosted video job: POST /v1/video/jobs, never chat"
             },
             "x-enum-varnames": [
                 "ModelTypeLLM",
@@ -4982,6 +5194,7 @@ const docTemplate = `{
                 "ModelTypeTTS",
                 "ModelTypeEMBEDDING",
                 "ModelTypeDECISIONS",
+                "ModelTypeVIDEO",
                 "ModelTypeUnknown"
             ]
         },
@@ -5600,6 +5813,14 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "string"
+                },
+                "video": {
+                    "description": "Video is the job guide of a hosted video model: fields, limits,\ndefaults and the quote weights a consumer needs before it opens a\nsession. Absent for every other model.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/videojob.Guide"
+                        }
+                    ]
                 }
             }
         },
@@ -5689,6 +5910,223 @@ const docTemplate = `{
                 },
                 "mode": {
                     "description": "always_on: cannot be disabled (a reasoning.disable binding may remain only with verified: false, the verifier's refutation) | controllable: reasoning.disable/enable bindings | tunable: effort/budget bindings only",
+                    "type": "string"
+                }
+            }
+        },
+        "videojob.CreateRequest": {
+            "type": "object",
+            "properties": {
+                "aspect_ratio": {
+                    "type": "string"
+                },
+                "duration_seconds": {
+                    "type": "integer"
+                },
+                "generate_audio": {
+                    "type": "boolean"
+                },
+                "image_b64": {
+                    "description": "ImageB64 is a first frame sent inline, as plain base64 or a data URI.\nIgnored when ImageURL is set.",
+                    "type": "string"
+                },
+                "image_url": {
+                    "description": "ImageURL is a first frame the vendor can fetch itself.",
+                    "type": "string"
+                },
+                "model": {
+                    "description": "Model is the on-chain model id POST /v1/video/quote prices the job for.\nA submitted job takes its model from its session, and the provider\nserves the session's model.",
+                    "type": "string"
+                },
+                "prompt": {
+                    "type": "string"
+                },
+                "resolution": {
+                    "type": "string"
+                }
+            }
+        },
+        "videojob.Defaults": {
+            "type": "object",
+            "properties": {
+                "aspect_ratio": {
+                    "type": "string"
+                },
+                "duration_seconds": {
+                    "type": "integer"
+                },
+                "generate_audio": {
+                    "type": "boolean"
+                },
+                "resolution": {
+                    "type": "string"
+                }
+            }
+        },
+        "videojob.Field": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "enum": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "maximum": {
+                    "type": "integer"
+                },
+                "minimum": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "required": {
+                    "type": "boolean"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "videojob.Guide": {
+            "type": "object",
+            "properties": {
+                "defaults": {
+                    "$ref": "#/definitions/videojob.Defaults"
+                },
+                "fields": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/videojob.Field"
+                    }
+                },
+                "instructions": {
+                    "type": "string"
+                },
+                "model_name": {
+                    "type": "string"
+                },
+                "object": {
+                    "type": "string"
+                },
+                "quote": {
+                    "$ref": "#/definitions/videojob.Quote"
+                },
+                "summary": {
+                    "type": "string"
+                }
+            }
+        },
+        "videojob.Job": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "error": {
+                    "$ref": "#/definitions/videojob.JobError"
+                },
+                "expires_at": {
+                    "description": "ExpiresAt is when VideoURL stops working, when the vendor documents it.",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "object": {
+                    "type": "string"
+                },
+                "quote_seconds": {
+                    "type": "integer"
+                },
+                "resolved": {
+                    "$ref": "#/definitions/videojob.Resolved"
+                },
+                "session_id": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "vendor": {
+                    "type": "string"
+                },
+                "vendor_task_id": {
+                    "description": "VendorTaskID is empty until the provider confirmed the job.",
+                    "type": "string"
+                },
+                "video_url": {
+                    "description": "VideoURL is the vendor's MP4 link, present once the job succeeded. It\nis a bearer link: anyone holding it can download until it expires.",
+                    "type": "string"
+                }
+            }
+        },
+        "videojob.JobError": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "videojob.Quote": {
+            "type": "object",
+            "properties": {
+                "audio_weight": {
+                    "type": "number"
+                },
+                "image_weight": {
+                    "type": "number"
+                },
+                "max_session_seconds": {
+                    "type": "integer"
+                },
+                "min_session_seconds": {
+                    "type": "integer"
+                },
+                "resolution_weights": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number"
+                    }
+                },
+                "seconds_per_work_unit": {
+                    "type": "number"
+                }
+            }
+        },
+        "videojob.Resolved": {
+            "type": "object",
+            "properties": {
+                "aspect_ratio": {
+                    "type": "string"
+                },
+                "duration_seconds": {
+                    "type": "integer"
+                },
+                "generate_audio": {
+                    "type": "boolean"
+                },
+                "has_image": {
+                    "type": "boolean"
+                },
+                "prompt": {
+                    "type": "string"
+                },
+                "resolution": {
                     "type": "string"
                 }
             }
