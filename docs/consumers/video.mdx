@@ -9,7 +9,7 @@ last_verified: "2026-11-03"
 Video models turn a text prompt, and on some models a first-frame image, into a short MP4 clip. A clip takes minutes to render, so video is a **job**, not a chat request: you quote the job, open a session long enough to pay for it, submit the job on that session, and poll until the clip is ready. Independent providers run the jobs on hosted video vendors (BytePlus ModelArk, Renderful). Your node talks only to the provider, never to the vendor.
 
 <Note>
-Video jobs run only through the proxy-router HTTP API on your own node (`http://localhost:8082`). MorpheusUI, the API gateway, and the hosted Morpheus Inference API (`api.mor.org`) do not run video jobs.
+Video jobs run through the proxy-router HTTP API on your own node (`http://localhost:8082`), or through the **Video** screen in MorpheusUI, which runs the same steps for you ([In MorpheusUI](#in-morpheusui)). The API gateway and the hosted Morpheus Inference API (`api.mor.org`) do not run video jobs.
 </Note>
 
 ```mermaid
@@ -39,6 +39,12 @@ sequenceDiagram
   You->>CNode: POST /blockchain/sessions/…/close
   CNode->>Chain: closeSession
 ```
+
+## In MorpheusUI
+
+Open **Video** in the sidebar and pick a video model. The screen reads the model's limits from its providers and shows each provider's price for the clip as you change its length, resolution, aspect ratio, sound or first frame. Write the prompt and press **Open session & generate**: the app opens a session for exactly the quoted length on the provider you picked, after the usual confirmation window, and submits the clip on it. While the session has time left for another clip, **Generate in this session** submits the next one on the same session.
+
+Clips appear under **Clips** as they render. Play a finished clip in the app or save the MP4. Close the session from the same screen when you are done. Video models do not appear in the Chat model picker.
 
 ## Find a video model
 
@@ -95,6 +101,7 @@ curl -X POST 'http://localhost:8082/v1/video/quote' \
       "bid_id": "0x…",
       "price_per_second_wei": "…",
       "session_seconds": 844,
+      "quote_seconds": 844,
       "session_cost_wei": "…",
       "resolved": {
         "prompt": "A red fox runs through fresh snow at dawn, slow motion.",
@@ -116,7 +123,8 @@ curl -X POST 'http://localhost:8082/v1/video/quote' \
 ```
 
 - One entry per bid on the model, best-rated bid first.
-- `session_seconds` is the session length that pays for this job with this provider. `session_cost_wei` is `price_per_second_wei × session_seconds`.
+- `session_seconds` is the session length that pays for this job with this provider, raised to the contract's minimum session length. `session_cost_wei` is `price_per_second_wei × session_seconds`.
+- `quote_seconds` is what the job uses of a session. The provider adds these up against the session length when it takes a job. It equals `session_seconds` unless the contract minimum is longer than the job's quote.
 - `error` means this provider cannot take the job: it did not answer, it runs a version without video jobs (`provider advertises no video guide for this model`), or the job is outside its model's limits.
 
 The provider's job guide carries the quote formula. The current adapters all use:
@@ -242,7 +250,7 @@ curl -X POST 'http://localhost:8082/blockchain/sessions/<sessionId>/close' \
 
 ## Several jobs on one session
 
-A session pays for the jobs on it. The provider takes a job while the quotes of all jobs on the session, this one included, add up to no more than the session's length. For several clips, add up their `session_seconds` and open for the total: two 5-second `720p` clips need 844 + 844 = 1688 seconds.
+A session pays for the jobs on it. The provider takes a job while the quotes of all jobs on the session, this one included, add up to no more than the session's length. For several clips, add up their `quote_seconds` and open for the total, or for the contract minimum if that is longer: two 5-second `720p` clips need 844 + 844 = 1688 seconds.
 
 - Each job is quoted on its own, so the 300-second floor applies to each one.
 - A job the vendor accepted counts against the session even when its render fails later.
