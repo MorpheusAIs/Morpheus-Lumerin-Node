@@ -181,6 +181,7 @@ For TEE images logging is **frozen** to production / JSON / minimal at build tim
 | `LLM_TIMEOUT` | `4m` | P-Node → backend LLM timeout (streaming + non-streaming). Go duration (`30s`, `10m`, `1h`). Empty or `0` **falls back to the default** — there is no "no deadline" setting; raise the value for a genuinely slow model. |
 | `CNODE_PNODE_TIMEOUT` | `90s` | Per-attempt timeout for C-Node waiting for the P-Node's first response on chat / embeddings / media / audio. Empty or `0` falls back to the default. Total budget ≈ `CNODE_PNODE_TIMEOUT × CNODE_PNODE_MAX_RETRIES`. |
 | *(fixed)* | `30s` | Read deadline on the C-Node → P-Node control calls that are not streamed: session handshake (`initiate_session`), provider ping, session reports, agent tool listing / calls, and audio upload chunks. Not configurable. A provider that accepts the TCP connection and then goes silent now fails with `504 provider did not respond within 30s` instead of hanging the request forever. |
+| *(fixed)* | `60s` / `30s` | Read deadline on the C-Node → P-Node [video job](/consumers/video) calls: a submit waits up to 60 s for the provider's receipt (the provider gives its vendor 50 s), a status read 30 s. Not configurable. |
 | `CNODE_PNODE_MAX_RETRIES` | `3` | Max retries for C-Node → P-Node read timeout (chat / embeddings) |
 | `CNODE_PNODE_AUDIO_MAX_RETRIES` | `20` | Max retries for audio transcription / speech routes |
 
@@ -188,7 +189,7 @@ For exact defaults check the source of truth ([`config.go`](https://github.com/M
 
 ## Model health self-checks (provider)
 
-On provider nodes the proxy-router periodically probes every model from `models-config.json` that has an **active bid from this provider**: LLM models get a small dynamically generated arithmetic prompt (correctness is graded), embedding models get an embeddings request. Untagged / unknown-type models are probed as LLM unless their tags name image/video/audio/music; a failed guessed probe reports `skipped` (with `errorKind`), not `unhealthy`. STT/TTS and media-tagged models are skipped without a probe. The report covers the whole ecosystem of bids and configured models — active bids whose model is missing from `models-config.json` are flagged as `no_model_configured` (capacity being sold with no backend to serve it). The cached per-model results (on-chain `modelId` and registered model name, `bidId`, status, `errorKind` plus upstream `httpStatus` on failure, `lastHealthy` epoch, latency, prompt correctness — never the private `models-config.json` `modelName`, `apiUrl`, or `apiKey`) are exposed in the `models` field of `GET /healthcheck`, in the `network.ping` (pong) response on the `:3333` MOR RPC port, and in `POST /proxy/provider/ping`, so consumers can see a provider's model health before opening a session. The [active.mor.org](/ecosystem/active-status) sweep copies these stamps into ALL / ACTIVE / GATEWAY. Full operational guide: [Model health self-report](/providers/full/model-health).
+On provider nodes the proxy-router periodically probes every model from `models-config.json` that has an **active bid from this provider**: LLM models get a small dynamically generated arithmetic prompt (correctness is graded), embedding models get an embeddings request. Untagged / unknown-type models are probed as LLM unless their tags name image/video/audio/music; a failed guessed probe reports `skipped` (with `errorKind`), not `unhealthy`. STT/TTS and media-tagged models are skipped without a probe, except hosted video models (`apiType` `byteplus-video` or `renderful`), which get a free vendor probe that starts no render. The report covers the whole ecosystem of bids and configured models — active bids whose model is missing from `models-config.json` are flagged as `no_model_configured` (capacity being sold with no backend to serve it). The cached per-model results (on-chain `modelId` and registered model name, `bidId`, status, `errorKind` plus upstream `httpStatus` on failure, `lastHealthy` epoch, latency, prompt correctness — never the private `models-config.json` `apiUrl` or `apiKey`, and `modelName` only inside a hosted video model's job guide, as `video.model_name`) are exposed in the `models` field of `GET /healthcheck`, in the `network.ping` (pong) response on the `:3333` MOR RPC port, and in `POST /proxy/provider/ping`, so consumers can see a provider's model health before opening a session. The [active.mor.org](/ecosystem/active-status) sweep copies these stamps into ALL / ACTIVE / GATEWAY. Full operational guide: [Model health self-report](/providers/full/model-health).
 
 | Variable | Default | Notes |
 |----------|---------|-------|
@@ -217,6 +218,15 @@ On consumer nodes, `SESSION_HEALTH_POLICY` controls how strictly the pre-open he
 | `strict` | Only providers that report the model `healthy` are tried. `degraded` and unknown reports are excluded. |
 
 **Single-bid caveat** (`healthPolicySingleBid: permissive`, fixed): when the hard filters (omitted provider, own bids) leave a single candidate provider for the model, `preferred`/`strict` are forced to `permissive` for that open so the sole provider can still be tried — single-provider models must remain usable.
+
+## Video jobs (consumer)
+
+On consumer nodes the proxy-router asks the session's provider for the status of each running [video job](/consumers/video) until the job ends. Values are Go durations (`10s`, `1m`, `72h`). Empty or `0` uses the default.
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `VIDEO_JOB_POLL_INTERVAL` | `10s` | How often the node asks for a running job's status. Values below `2s` are raised to `2s`. After a failed read the wait doubles, up to 2 minutes. |
+| `VIDEO_JOB_MAX_WATCH` | `72h` | How long after the job was created the node keeps asking. After that it marks the job `failed` with error code `watch_timeout`. |
 
 ## Gateway managed mode (optional)
 

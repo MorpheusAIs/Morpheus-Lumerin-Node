@@ -52,6 +52,10 @@ Response:
 { "sessionID": "0x8e12df2f764b416c0ea1936a253c2a4be01005651c2d73f22dd0d72520f93ca1" }
 ```
 
+<Note>
+For a video model, the session length comes from the job's quote and you open on the quoted bid: `POST /v1/video/quote`, then `POST /blockchain/bids/<bidId>/session` with `sessionDuration` set to `session_seconds`. MorpheusUI does not run video jobs. See [Video generation](/consumers/video).
+</Note>
+
 Close it:
 
 ```bash

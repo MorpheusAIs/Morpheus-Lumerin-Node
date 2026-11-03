@@ -70,6 +70,7 @@
               "consumers/buy-bid",
               "consumers/chat",
               "consumers/decisions",
+              "consumers/video",
               "consumers/troubleshooting"
             ]
           },

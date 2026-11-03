@@ -60,6 +60,7 @@ curl -sS https://active.mor.org/active_bids.json \
 | Same logical model already listed (same weights / name you intend to serve) | **Do not create a model.** Register as a provider, then **bid on that existing `Id`**. Put that `Id` in `models-config.json`. |
 | You need a `tee` tag and no suitable `tee`-tagged model exists | Register a **new** model with tag `tee`, then bid. |
 | Genuinely new weights, fine-tune, or metadata | Register a **new** model (new `ipfsCID` / name), then bid. |
+| You serve a [hosted video model](/providers/full/model-setup#hosted-video-models) | Bid on an existing model whose `ModelType` is `VIDEO` in `GET /blockchain/models`. If none fits, register a **new** model with a video tag (see the create-model step below), then bid. |
 
 Any registered provider can bid on any active model — you do **not** need to own the model record. Creating another model with the same display name still adds a separate marketplace entry and is what produces the duplicate clutter on [active.mor.org](https://active.mor.org).
 
@@ -101,6 +102,7 @@ Any registered provider can bid on any active model — you do **not** need to o
         - `modelId`: random 32-byte hex (base id; on-chain id becomes `keccak256(owner ‖ baseId)`).
         - `ipfsCID`, `Fee`, `addStake` (`0.1` MOR min), `Owner`, `name`, `tags`.
         - **TEE providers must include `"tee"`** (case-insensitive).
+        - **Hosted video models need a video tag:** `video`, `t2v`, `i2v`, `text-to-video`, `text2video`, `image-to-video` or `image2video` (case-insensitive). Do not also add a chat, speech, embedding or decisions tag (`llm`, `stt`, `tts`, `embedding`, `decisions` or an alias of one): the model is then typed by that tag instead of `VIDEO`.
         Capture the response `modelID` (combined id) for `models-config.json` and the bid.
       </Step>
       <Step title="Update models-config.json">

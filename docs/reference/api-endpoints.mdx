@@ -146,6 +146,40 @@ See [Decisions](/consumers/decisions) for consumer how-to and [models-config.jso
 
 ---
 
+## Video jobs
+
+`POST /v1/video/quote` · `POST /v1/video/jobs` · `GET /v1/video/jobs` · `GET /v1/video/jobs/:id` — permission `video_jobs`
+
+For models whose `ModelType` is `VIDEO`. A video job runs asynchronously: you submit it on a session, and the node reads its status from the provider until the job ends. The node never opens a session for a video job and never closes one early: you close it when you are done, and a session that reaches its end is closed by the node's normal expiry auto-close, as for any session.
+
+| Route | Notes |
+|-------|-------|
+| `POST /v1/video/quote` | Body: the job (below) plus `model`, the on-chain model id (or send it in the `model_id` header). Opens nothing. Returns `data`, one entry per bid of the model in rating order: `provider`, `bid_id`, `price_per_second_wei`, `session_seconds` (already raised to the contract minimum), `session_cost_wei` and `resolved` (the job with the model's defaults applied), or `error` for a provider that cannot take the job. |
+| `POST /v1/video/jobs` | Header `session_id` required. Body: `prompt` (required, up to 4000 bytes) and optional `duration_seconds`, `aspect_ratio`, `resolution`, `generate_audio`, `image_url` (a public https URL) or `image_b64` (base64 or a data URI; JPEG, PNG or WebP, up to 10 MiB; only where the model offers it). Omitted fields take the model's defaults. Returns `201` with the job. |
+| `GET /v1/video/jobs` | Every job this node tracks, newest first. |
+| `GET /v1/video/jobs/:id` | One job as the node last read it: `status` (`queued`, `running`, `succeeded`, `failed`, `expired`, `cancelled`), `video_url` once it succeeded, `expires_at` when the vendor documents it, `error` (`code`, `message`). |
+
+The session routes do the rest. Open the session on the bid you chose with [`POST /blockchain/bids/:id/session`](#open-session-by-bid-id) and `{"sessionDuration": <session_seconds>}`. `session_cost_wei` is what the compute is worth. The MOR the open locks comes from [the estimate](#estimate-a-session-before-opening) with `sessionDuration=<session_seconds>&bidId=<bid_id>`. Several jobs can share a session while their quotes add up to no more than its length. Close it with [`POST /blockchain/sessions/:id/close`](#close-session) when you are done.
+
+```bash
+curl -s -u 'admin:admin' -X POST 'http://localhost:8082/v1/video/quote' \
+  -H 'Content-Type: application/json' \
+  -d '{"model": "0x…", "prompt": "A paper boat drifting down a rain gutter", "duration_seconds": 5, "resolution": "720p"}'
+
+curl -s -u 'admin:admin' -X POST 'http://localhost:8082/v1/video/jobs' \
+  -H 'session_id: 0x…' \
+  -H 'Content-Type: application/json' \
+  -d '{"prompt": "A paper boat drifting down a rain gutter", "duration_seconds": 5, "resolution": "720p"}'
+```
+
+`video_url` is the vendor's own download link: anyone who holds it can fetch the file until it expires. The node does not store or proxy the file.
+
+Errors: `400` bad request (for example no `prompt` or no `session_id`), `404` job, session or provider not found, `422` the provider refused the job (its message says why, for example a session too short for the quote), `502` your node could not send the job (for example a failed TEE attestation), or the quote could not read the model's bids or the contract's session bounds. A provider that does not answer is not a `502`: the submit still returns `201` with `vendor_task_id` empty and your node sends the job again, and on a quote that bid gets an `error` entry. `503` video jobs not enabled on this node.
+
+See [Video jobs](/consumers/video) for the consumer how-to and [models-config.json](/reference/models-config#video-models) for provider `apiType` rows.
+
+---
+
 ## Get providers
 
 `GET /blockchain/providers`
@@ -163,7 +197,7 @@ curl --location 'http://localhost:8082/blockchain/providers' \
 
 `GET /blockchain/models`
 
-`ModelType` is one of `LLM`, `STT`, `TTS`, `EMBEDDING`, `DECISIONS`, `UNKNOWN`. Use it to choose the appropriate endpoint family. Full sample response in [`proxy-router/docs/swagger.yaml`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/docs/swagger.yaml).
+`ModelType` is one of `LLM`, `STT`, `TTS`, `EMBEDDING`, `DECISIONS`, `VIDEO`, `UNKNOWN`. Use it to choose the appropriate endpoint family. A `VIDEO` model takes [video jobs](#video-jobs), not chat. Full sample response in [`proxy-router/docs/swagger.yaml`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/docs/swagger.yaml).
 
 The registry read is cached in the node for **30 seconds**. Your own `POST /blockchain/models` and `DELETE /blockchain/models/:id` invalidate it immediately; a model registered by someone else can take up to 30 s to appear.
 
