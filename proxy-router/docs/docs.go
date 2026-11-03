@@ -4815,6 +4815,10 @@ const docTemplate = `{
                 "provider": {
                     "type": "string"
                 },
+                "quote_seconds": {
+                    "description": "QuoteSeconds is what the job uses of a session, the figure the\nprovider adds up against the session length when it accepts a job.",
+                    "type": "integer"
+                },
                 "resolved": {
                     "$ref": "#/definitions/videojob.Resolved"
                 },
@@ -4822,6 +4826,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "session_seconds": {
+                    "description": "SessionSeconds is the session to open for the job alone: QuoteSeconds\nraised to the contract minimum.",
                     "type": "integer"
                 }
             }

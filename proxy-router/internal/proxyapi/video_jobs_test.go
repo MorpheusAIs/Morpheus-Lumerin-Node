@@ -838,3 +838,31 @@ func TestVideoJobNonPublicVideoURLFails(t *testing.T) {
 		})
 	}
 }
+
+// A rejected link still carries the receipt: the provider counts the job's
+// quote against its session, so the node has to record it too.
+func TestVideoJobNonPublicVideoURLKeepsReceipt(t *testing.T) {
+	sender := &vjSender{
+		createFn: func(n int, _ common.Hash, _ string) (*videojob.Receipt, error) {
+			if n == 1 {
+				return nil, lib.WrapError(ErrProvider, errors.New("read timeout"))
+			}
+			return nil, fmt.Errorf("%w: session expired", ErrProviderRefused)
+		},
+		statusFn: func(_ context.Context, _ int, _ common.Hash, jobID string) (*videojob.Update, error) {
+			return &videojob.Update{JobID: jobID, Status: videojob.StatusSucceeded,
+				VideoURL: "https://127.0.0.1/v.mp4", Receipt: vjReceipt(jobID)}, nil
+		},
+	}
+	svc := newVJService(t, sender, newVJSessions(), nil, 0)
+
+	job, err := svc.Create(context.Background(), vjCreateParams("x"))
+	require.NoError(t, err)
+	require.Empty(t, job.VendorTaskID)
+
+	ended := vjEventuallyStatus(t, svc, job.ID, videojob.StatusFailed)
+	vjWait(t, svc)
+	require.Equal(t, "invalid_video_url", ended.Error.Code)
+	require.Equal(t, "gen-123", ended.VendorTaskID)
+	require.EqualValues(t, 120, ended.QuoteSeconds)
+}

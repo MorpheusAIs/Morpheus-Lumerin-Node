@@ -758,11 +758,19 @@ definitions:
         type: string
       provider:
         type: string
+      quote_seconds:
+        description: |-
+          QuoteSeconds is what the job uses of a session, the figure the
+          provider adds up against the session length when it accepts a job.
+        type: integer
       resolved:
         $ref: '#/definitions/videojob.Resolved'
       session_cost_wei:
         type: string
       session_seconds:
+        description: |-
+          SessionSeconds is the session to open for the job alone: QuoteSeconds
+          raised to the contract minimum.
         type: integer
     type: object
   proxyapi.VideoQuoteRes:

@@ -298,13 +298,18 @@ func (s *VideoJobService) List() []videojob.Job {
 
 // VideoQuote is the session one provider would sell for a job.
 type VideoQuote struct {
-	Provider          common.Address     `json:"provider"`
-	BidID             common.Hash        `json:"bid_id"`
-	PricePerSecondWei string             `json:"price_per_second_wei"`
-	SessionSeconds    int64              `json:"session_seconds,omitempty"`
-	SessionCostWei    string             `json:"session_cost_wei,omitempty"`
-	Resolved          *videojob.Resolved `json:"resolved,omitempty"`
-	Error             string             `json:"error,omitempty"`
+	Provider          common.Address `json:"provider"`
+	BidID             common.Hash    `json:"bid_id"`
+	PricePerSecondWei string         `json:"price_per_second_wei"`
+	// SessionSeconds is the session to open for the job alone: QuoteSeconds
+	// raised to the contract minimum.
+	SessionSeconds int64 `json:"session_seconds,omitempty"`
+	// QuoteSeconds is what the job uses of a session, the figure the
+	// provider adds up against the session length when it accepts a job.
+	QuoteSeconds   int64              `json:"quote_seconds,omitempty"`
+	SessionCostWei string             `json:"session_cost_wei,omitempty"`
+	Resolved       *videojob.Resolved `json:"resolved,omitempty"`
+	Error          string             `json:"error,omitempty"`
 }
 
 // Quote prices a job at every provider of the model, before anything opens,
@@ -322,8 +327,8 @@ func (s *VideoJobService) Quote(ctx context.Context, modelID common.Hash, req *v
 	for _, g := range guides {
 		q := VideoQuote{Provider: g.Provider, BidID: g.BidID, PricePerSecondWei: g.PricePerSecondWei, Error: g.Error}
 		if g.Guide != nil {
-			resolved, secs, err := g.Guide.SessionSeconds(req)
-			secs = max(secs, minSeconds)
+			resolved, quoteSecs, err := g.Guide.SessionSeconds(req)
+			secs := max(quoteSecs, minSeconds)
 			if err == nil && maxSeconds > 0 && secs > maxSeconds {
 				err = fmt.Errorf("%w: quote %ds, contract max %ds", videojob.ErrQuoteTooLong, secs, maxSeconds)
 			}
@@ -331,6 +336,7 @@ func (s *VideoJobService) Quote(ctx context.Context, modelID common.Hash, req *v
 				q.Error = err.Error()
 			} else {
 				q.SessionSeconds = secs
+				q.QuoteSeconds = quoteSecs
 				q.Resolved = &resolved
 				if price, ok := new(big.Int).SetString(g.PricePerSecondWei, 10); ok {
 					q.SessionCostWei = price.Mul(price, new(big.Int).SetInt64(secs)).String()
@@ -444,12 +450,14 @@ func (s *VideoJobService) watch(ctx context.Context, jobID string) {
 // apply records an update and reports whether the job has ended.
 func (s *VideoJobService) apply(jobID string, update videojob.Update, log lib.ILogger) bool {
 	// A link that is not a public https URL is never handed to a caller: the
-	// job fails.
+	// job fails. The receipt stays: the provider still counts the job's quote
+	// against the session.
 	if update.VideoURL != "" {
 		if err := s.checkURL(update.VideoURL); err != nil {
 			update = videojob.Update{
-				Status: videojob.StatusFailed,
-				Error:  &videojob.JobError{Code: "invalid_video_url", Message: err.Error()},
+				Status:  videojob.StatusFailed,
+				Error:   &videojob.JobError{Code: "invalid_video_url", Message: err.Error()},
+				Receipt: update.Receipt,
 			}
 		}
 	}
