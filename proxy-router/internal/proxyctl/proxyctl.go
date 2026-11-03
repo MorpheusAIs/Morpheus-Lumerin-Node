@@ -223,6 +223,7 @@ func (p *Proxy) run(ctx context.Context, prKey lib.HexString) error {
 		proxyReceiver.SetBackendVerifier(p.backendVerifier)
 	}
 	proxyReceiver.SetModelTagsProvider(p.blockchainService)
+	proxyReceiver.SetSessionChainReader(p.blockchainService)
 	var modelHealthReporter system.ModelHealthReporter
 	if p.modelHealthChecker != nil {
 		modelHealthReporter = p.modelHealthChecker
