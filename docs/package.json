@@ -12,6 +12,6 @@
     "mint": "^4.2.574"
   },
   "devDependencies": {
-    "pagefind": "^1.3.0"
+    "pagefind": "^1.6.0"
   }
 }
