@@ -6,6 +6,7 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat/common"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/sashabaranov/go-openai"
 )
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -89,14 +90,28 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				switch val {
 				case "/c", "/clear":
+					// Clear the conversation the model is shown, not just the
+					// lines on screen. Leaving messagesContext populated here
+					// would mean a cleared-looking chat that still resends
+					// everything said before it.
 					m.viewport.SetContent(common.ChatWelcomeMessage)
 					m.messages = []string{}
+					m.messagesContext = nil
+					m.pending = ""
+					m.stopReason = ""
+					m.err = nil
 				default:
 					m.messages = append(m.messages, userMessage(val), botMessage(""))
 
 					m.viewport.SetContent(strings.Join(m.messages, "\n\n") + "\n\n")
 
 					m.viewport.GotoBottom()
+
+					// Held, not appended: see messagesContext's comment. The
+					// turn joins the transcript once there is a reply to pair
+					// it with.
+					m.pending = val
+					m.stopReason = ""
 
 					return m, tea.Batch(tiCmd, vpCmd, streamCompletions(m, val), waitForCompletion(m.completionChunkSub))
 				}
@@ -111,12 +126,34 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if n := len(m.messages); n > 0 && m.messages[n-1] == botMessage("") {
 					m.messages = m.messages[:n-1]
 				}
+				// The transcript is left exactly as it was. Dropping the held
+				// prompt is what stops a failed turn being resent as though
+				// the model had answered it.
+				m.pending = ""
 				m.viewport.SetContent(strings.Join(m.messages, "\n\n") + "\n\n")
 				return m, tea.Batch(tiCmd, vpCmd)
 
 			case msg.done:
-				// End of stream: nothing more to render, so do not re-arm the
-				// waiting command.
+				// End of stream: record the exchange, so the next turn carries
+				// it and the model can refer back to it. The router holds no
+				// conversational state, so this client-side transcript is the
+				// only memory the conversation has.
+				if m.pending != "" {
+					m.messagesContext = append(m.messagesContext,
+						openai.ChatCompletionMessage{Role: openai.ChatMessageRoleUser, Content: m.pending},
+						openai.ChatCompletionMessage{Role: openai.ChatMessageRoleAssistant, Content: msg.text},
+					)
+					m.pending = ""
+				}
+				// A provider that stopped early says so here. Anything other
+				// than a normal stop is worth showing: a reply cut off at the
+				// token limit otherwise reads as a complete, oddly short
+				// answer. Silence is treated as normal, because whether the
+				// reason is sent at all is the provider's choice.
+				if r := msg.finishReason; r != "" && r != string(openai.FinishReasonStop) {
+					m.stopReason = r
+				}
+				// Nothing more is coming, so do not re-arm the waiting command.
 				return m, tea.Batch(tiCmd, vpCmd)
 			}
 
