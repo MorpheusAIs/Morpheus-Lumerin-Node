@@ -2,7 +2,7 @@
 
 A change is done when it is on `main` and production has deployed. The issue stays open through `dev` and `test`.
 
-Maintainers follow the full practice in the private repo `MorpheusAIs/MorpheusMaintainerContext`, file `.ai-docs/how-we-work.md`. This page is the local rules for this repository.
+Maintainers follow the full practice in the private repo `MorpheusAIs/Morpheus-Maintainer-Context`, file `.ai-docs/how-we-work.md`. This page is the local rules for this repository.
 
 ## Filing
 
@@ -33,7 +33,7 @@ When this work is part of an initiative, create the issue as a sub-issue of that
 ```shell
 gh issue create --repo MorpheusAIs/Morpheus-Lumerin-Node \
   --title "TITLE" --body "BODY" \
-  --parent https://github.com/MorpheusAIs/MorpheusMaintainerContext/issues/N
+  --parent https://github.com/MorpheusAIs/Morpheus-Maintainer-Context/issues/N
 ```
 
 ## Status
