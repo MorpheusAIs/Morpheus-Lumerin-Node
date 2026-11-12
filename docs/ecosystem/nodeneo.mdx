@@ -1,24 +1,35 @@
 ---
 title: "NodeNeo"
-description: "Mirror summary of NodeNeo — a cross-platform consumer experience for Morpheus."
+description: "Mirror summary of NodeNeo — a cross-platform consumer experience for Morpheus, including a Mac local AI Gateway for coding tools."
 audience: ["consumer", "prosumer"]
 product: ["proxy-router"]
-last_verified: "v7.0.0"
-source_url: "https://nodeneo.io"
+last_verified: "v7.14.0"
+source_url: "https://nodeneo.ai"
 ---
 
 <Note>
-**Mirrored summary**, last verified for v7.0.0. For current platforms, screenshots, and feature lists, defer to [nodeneo.io](https://nodeneo.io) (transitioning from `nodeneo.io` formerly under different branding).
+**Mirrored summary.** For current platforms, screenshots, and feature lists, defer to [nodeneo.ai](https://nodeneo.ai).
 </Note>
 
 ## What it is
 
-NodeNeo is a cross-platform consumer-side experience for Morpheus — a complementary surface to MorpheusUI (this repo's Electron desktop app) and `app.mor.org` (the hosted web UI). It targets users who want a polished mobile / cross-device consumer experience while still using the Morpheus marketplace under the hood.
+NodeNeo (Node Neo) is a cross-platform consumer-side experience for Morpheus — a complementary surface to MorpheusUI (this repo's Electron desktop app) and `app.mor.org` (the hosted web UI). It targets users who want a polished phone / tablet / Mac experience while still using the Morpheus marketplace under the hood: self-custody wallet, on-chain sessions, and optional Max Privacy (TEE-tagged providers).
+
+## Platforms (from nodeneo.ai)
+
+| Platform | Status |
+|----------|--------|
+| iOS (iPhone & iPad) | Live on the App Store |
+| Android | Live on Google Play |
+| macOS (Apple Silicon) | TestFlight beta (App Store review in progress) |
+| Linux | Planned |
+| Windows | Evaluating demand |
 
 ## How it relates to this repo
 
 - Under the hood, NodeNeo speaks to a Morpheus C-Node — the same proxy-router code documented on this site. For a **shared catalog** without rediscovering bids, consume the **ACTIVE** slice on [active.mor.org](/ecosystem/active-status) (policy can still refuse `skipped` / `degraded`). ALL if you need failures too. GATEWAY is the hosted-API input, not NodeNeo's default.
 - A user can be a NodeNeo user while also running MorpheusUI on a desktop; they are separate clients sharing a common wallet (if configured).
+- **Mac + Pro:** NodeNeo exposes a **local OpenAI-compatible AI Gateway** so editors and agents (Zed, LangChain, etc.) can use Morpheus models through the app's wallet — see [How do I use Morpheus to code?](/get-started/code-with-morpheus) Path C.
 
 ## When to cite NodeNeo
 
@@ -26,13 +37,15 @@ When a user wants:
 - A consumer experience away from a desktop Electron app, **link NodeNeo**.
 - A self-hosted, full-featured desktop client with bundled local model, **link MorpheusUI** (this repo).
 - A zero-install hosted client to "just try Morpheus," **link [app.mor.org](/ecosystem/app-mor-org)**.
+- AI coding help with a **local OpenAI-shaped gateway** on Mac, **link [How do I use Morpheus to code?](/get-started/code-with-morpheus)** (Path C) alongside hosted API and Uplink.
 
 ## Related canonical pages on this site
 
+- [How do I use Morpheus to code?](/get-started/code-with-morpheus)
 - [What is Morpheus?](/concepts/what-is-morpheus)
 - [Consumer quickstart](/consumers/quickstart) — for the desktop counterpart
 - [app.mor.org (mirror)](/ecosystem/app-mor-org)
 
 ## Source
 
-- [https://nodeneo.io](https://nodeneo.io)
+- [https://nodeneo.ai](https://nodeneo.ai)
