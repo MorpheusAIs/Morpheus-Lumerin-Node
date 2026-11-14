@@ -9,7 +9,7 @@
     "export:site": "node scripts/build-site.mjs"
   },
   "dependencies": {
-    "mint": "^4.2.1200"
+    "mint": "^4.3.16"
   },
   "devDependencies": {
     "pagefind": "^1.6.0"
