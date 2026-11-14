@@ -99,7 +99,7 @@
     "react-simple-image-viewer": "^1.2.2",
     "react-syntax-highlighter": "^15.5.0",
     "react-textarea-autosize": "^8.5.3",
-    "react-virtualized": "9.22.6",
+    "react-virtualized": "10.0.1",
     "redux": "^5.0.1",
     "redux-actions": "2.3.0",
     "remark-gfm": "^4.0.1",
