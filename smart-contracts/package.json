@@ -49,7 +49,7 @@
     "morpheus-smart-contracts": "https://github.com/MorpheusAIs/SmartContracts.git#753accd",
     "prettier": "^3.3.3",
     "prettier-plugin-solidity": "^1.4.1",
-    "solhint": "^4.5.4",
+    "solhint": "^6.2.5",
     "solhint-plugin-prettier": "^0.1.0",
     "solidity-coverage": "^0.8.17",
     "ts-node": "^10.9.2",
