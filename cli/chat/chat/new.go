@@ -44,7 +44,18 @@ type model struct {
 
 	messages           []string
 	completionChunkSub chan streamEvent // receive chat stream updates
-	messagesContext    []openai.ChatCompletionMessage
+	// messagesContext is the conversation the model is shown, and it holds
+	// completed turns only. The prompt of the turn in flight is deliberately
+	// absent: PromptStream appends that itself, so adding it here too would
+	// send the last message twice, and leaving it out means a turn that fails
+	// never has to be unpicked from the transcript.
+	messagesContext []openai.ChatCompletionMessage
+	// pending is the prompt of the turn in flight, held until the reply
+	// arrives so that both halves of the exchange can be recorded together.
+	pending string
+	// stopReason is a provider's reason for ending the last reply early, such
+	// as "length". Empty when the reply ended normally.
+	stopReason string
 }
 
 func (m model) Init() tea.Cmd {
@@ -119,6 +130,15 @@ func New(opt *common.Options) model {
 
 	if opt.Session != "" {
 		m = m.SetRemoteSession(opt.Session)
+		// Say so rather than let it be discovered. A session outlives the
+		// process that opened it, so reattaching to one looks like picking a
+		// conversation back up -- but the transcript lives in memory here and
+		// the router keeps no conversational state, so the model on the other
+		// end has forgotten everything that was said.
+		m.viewport.SetContent(common.ChatWelcomeMessage + "\n\n" +
+			style.Help.Render("Resumed session "+opt.Session+".\n"+
+				"This starts a fresh conversation: earlier turns were not kept, so the model\n"+
+				"does not remember them."))
 	}
 
 	if m.isLocalChat {

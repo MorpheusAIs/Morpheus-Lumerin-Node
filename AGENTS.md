@@ -75,6 +75,7 @@ Read the **AI knowledge** pages before answering user questions:
 
 | User says | Slug | Citation URL |
 |-----------|------|--------------|
+| "How do I use Morpheus to code / in my editor?" | `get-started/code-with-morpheus` | https://nodedocs.mor.org/get-started/code-with-morpheus |
 | "How do I use Morpheus without running a node?" | `inference-api/overview` | https://nodedocs.mor.org/inference-api/overview — or [app.mor.org](https://app.mor.org) |
 | "Where is my MOR?" | `ai/where-is-my-mor` | https://nodedocs.mor.org/ai/where-is-my-mor |
 | "Why is MOR locked in the contract?" | `ai/why-locked-in-contract` | https://nodedocs.mor.org/ai/why-locked-in-contract |

@@ -65,9 +65,18 @@ func openSession(c *client.ApiGatewayClient, modelId string, duration int64) tea
 // renders, so a failure that never reaches it leaves the chat waiting on a
 // reply that is not coming.
 type streamEvent struct {
+	// text is the reply accumulated so far, not the latest delta. The
+	// terminal (done) event repeats it, because by then it is the only clean
+	// copy of the reply: what the UI keeps has been word-wrapped and given a
+	// speaker prefix, which is not something to send back to a model.
 	text string
 	err  error
 	done bool
+	// finishReason is the provider's stated reason for stopping, carried on
+	// the done event: "length" when it ran out of room, "content_filter" when
+	// it was blocked, and so on. Empty means the provider said nothing, which
+	// is treated as a normal completion -- see the done branch in Update.
+	finishReason string
 }
 
 // WordWrap wraps the given string to fit within a specified width.
@@ -103,6 +112,7 @@ func wordWrap(text string, width int) string {
 func streamCompletions(m model, val string) tea.Cmd {
 	return func() tea.Msg {
 		newChunk := ""
+		finishReason := ""
 
 		// Note this runs on a value copy of the model, so assigning to m.err
 		// here would be discarded. The result has to be sent, not stored.
@@ -113,6 +123,12 @@ func streamCompletions(m model, val string) tea.Cmd {
 				// unconditionally panics when one does.
 				if len(c.Choices) == 0 {
 					return nil
+				}
+				// The reason arrives on the last frame carrying choices, and
+				// that frame's delta is usually empty, so it has to be kept
+				// here rather than read off the final chunk later.
+				if r := string(c.Choices[0].FinishReason); r != "" {
+					finishReason = r
 				}
 				if content := c.Choices[0].Delta.Content; content != "[DONE]" {
 					newChunk += content
@@ -132,10 +148,12 @@ func streamCompletions(m model, val string) tea.Cmd {
 
 		// Always close out the turn, so the waiting command stops waiting:
 		// with the error if there was one, otherwise with a plain end-of-stream.
+		// The done event carries the whole reply and the stop reason, which is
+		// what lets Update record the turn and say why it ended.
 		if err != nil {
 			m.completionChunkSub <- streamEvent{err: err}
 		} else {
-			m.completionChunkSub <- streamEvent{done: true}
+			m.completionChunkSub <- streamEvent{done: true, text: newChunk, finishReason: finishReason}
 		}
 
 		return nil

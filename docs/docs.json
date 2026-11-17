@@ -28,6 +28,7 @@
             "group": "Get started",
             "pages": [
               "get-started/introduction",
+              "get-started/code-with-morpheus",
               "get-started/quickstart-consumer",
               "get-started/quickstart-provider",
               "get-started/networks-and-tokens"
@@ -260,7 +261,7 @@
           },
           {
             "label": "NodeNeo",
-            "href": "https://nodeneo.io"
+            "href": "https://nodeneo.ai"
           },
           {
             "label": "Everclaw",
