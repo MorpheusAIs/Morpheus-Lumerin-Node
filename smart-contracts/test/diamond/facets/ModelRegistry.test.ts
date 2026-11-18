@@ -13,10 +13,13 @@ import { ethers } from 'hardhat';
 import { getHex, wei } from '@/scripts/utils/utils';
 import {
   deployDelegateRegistry,
+  deployFacetDelegateStaking,
+  deployFacetDelegateStakingFunding,
   deployFacetDelegation,
   deployFacetMarketplace,
   deployFacetModelRegistry,
   deployFacetProviderRegistry,
+  deployFacetProviderPayouts,
   deployFacetSessionRouter,
   deployLumerinDiamond,
   deployMORToken,
@@ -57,6 +60,9 @@ describe('ModelRegistry', () => {
       deployFacetSessionRouter(diamond, OWNER),
       deployFacetMarketplace(diamond, token, wei(0.0001), wei(900)),
       deployFacetDelegation(diamond, delegateRegistry),
+      deployFacetProviderPayouts(diamond),
+      deployFacetDelegateStaking(diamond),
+      deployFacetDelegateStakingFunding(diamond),
     ]);
 
     await token.transfer(SECOND, wei(1000));
