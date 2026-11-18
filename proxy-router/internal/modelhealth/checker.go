@@ -310,9 +310,10 @@ func (c *Checker) checkAll(ctx context.Context, walletAddr common.Address) {
 		// Pace backend requests so a provider with many models doesn't burst
 		// its upstream (often a single account behind all models) and
 		// self-inflict rate-limit failures. Only requests that reach the
-		// backend are paced: the health probe of a model with an active bid,
-		// and an API detection the detector cannot answer from its cache.
-		// Both kinds share one pace, since they share that account.
+		// backend are paced: the health probe of a model with an active bid
+		// (for a video model, its free vendor probe), and an API detection the
+		// detector cannot answer from its cache. Both kinds share one pace,
+		// since they share that account.
 		willHit := hasBid || c.detectionWouldProbe(cfg)
 		if willHit && backendHit && !c.sleep(ctx, c.probeDelay) {
 			return
@@ -498,6 +499,17 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 		c.setReport(report)
 	}()
 
+	// A hosted video model advertises the guide consumers quote jobs by. Its
+	// health comes from a free vendor probe (probeVideo), not a render.
+	isVideo := aiengine.IsVideoApiType(cfg.ApiType)
+	if isVideo {
+		if guide, err := aiengine.VideoGuideFor(&cfg, c.log); err != nil {
+			c.log.Warnf("model %s: no video guide: %s", lib.Short(modelID), err)
+		} else {
+			report.Video = guide
+		}
+	}
+
 	if !hasBid {
 		report.Status = system.ModelHealthStatusNoBid
 		return
@@ -551,6 +563,22 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 		var err error
 		meta, err = c.probeLLM(ctx, adapter, report)
 		return err
+	}
+
+	// The apiType decides even when the on-chain tags do not say video, so
+	// an untagged video model is never sent the guessed LLM prompt.
+	if isVideo {
+		c.probeVideo(ctx, modelID, cfg, &report)
+		return
+	}
+	if modelMeta.modelType == structs.ModelTypeVIDEO {
+		// Tagged video but served through a chat adapter: there is no video
+		// adapter to probe. Nothing heals such a model, so the sweep does what
+		// a healthy probe does for the others: the session-failure streak
+		// starts over.
+		c.resetFailures(modelID)
+		report.Status = system.ModelHealthStatusSkipped
+		return
 	}
 
 	var probe func(ctx context.Context, adapter aiengine.AIEngineStream, report *system.ModelHealthReport) error
@@ -642,6 +670,96 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 	if (modelMeta.modelType == structs.ModelTypeLLM || typeGuessed) && api != nil {
 		c.verify(ctx, modelID, cfg, api, adapter)
 	}
+}
+
+// probeVideo checks a hosted video model with its vendor's free probe: the
+// vendor answers and accepts the provider's key. A healthy probe ends a
+// session-failure streak, as for any model, except a streak of failures the
+// probe cannot see (probeBlindStreak).
+func (c *Checker) probeVideo(ctx context.Context, modelID common.Hash, cfg config.ModelConfig, report *system.ModelHealthReport) {
+	engine, err := aiengine.NewVideoJobEngine(&cfg, c.log, nil)
+	if err != nil {
+		c.log.Warnf("model %s: cannot build the video adapter: %s", lib.Short(modelID), err)
+		report.Status = system.ModelHealthStatusUnhealthy
+		report.ErrorKind = system.ModelHealthErrorBadResponse
+		return
+	}
+
+	probeCtx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+
+	start := time.Now()
+	err = engine.ProbeVideoVendor(probeCtx)
+	report.LatencyMs = time.Since(start).Milliseconds()
+	if err == nil {
+		if lastStatus, held := c.probeBlindStreak(modelID); held {
+			// The vendor answers and takes the key, yet jobs failed for a
+			// reason this probe cannot see. Degraded keeps the model routable,
+			// so the next job can show it fixed (a success heals it), and one
+			// more failure flips it back at once.
+			report.Status = system.ModelHealthStatusDegraded
+			report.ErrorKind = system.ModelHealthErrorSessionErrors
+			report.HttpStatus = lastStatus
+			return
+		}
+		report.Status = system.ModelHealthStatusHealthy
+		report.LastHealthy = time.Now().Unix()
+		c.resetFailures(modelID)
+		return
+	}
+
+	c.log.Warnf("model %s: video vendor probe failed: %s", lib.Short(modelID), err)
+	var vendorErr *aiengine.VideoVendorError
+	if errors.As(err, &vendorErr) {
+		report.HttpStatus = vendorErr.StatusCode
+	}
+	switch {
+	case report.HttpStatus == http.StatusTooManyRequests:
+		report.Status = system.ModelHealthStatusDegraded
+		report.ErrorKind = system.ModelHealthErrorRateLimited
+	case vendorErr != nil:
+		// The vendor answered; its message is its own and decides nothing.
+		report.Status = system.ModelHealthStatusUnhealthy
+		report.ErrorKind = system.ModelHealthErrorBadResponse
+	case errors.Is(err, context.DeadlineExceeded) || errors.Is(probeCtx.Err(), context.DeadlineExceeded):
+		report.Status = system.ModelHealthStatusUnhealthy
+		report.ErrorKind = system.ModelHealthErrorTimeout
+	case errors.Is(err, aiengine.ErrVideoVendorUnreachable):
+		report.Status = system.ModelHealthStatusUnhealthy
+		report.ErrorKind = system.ModelHealthErrorConnection
+	default:
+		report.Status = system.ModelHealthStatusUnhealthy
+		report.ErrorKind = classifyError(err)
+	}
+}
+
+// probeBlindStreak reports a session-failure flip of a video model that the
+// vendor probe cannot see the cause of: the streak had a 402 (no balance), a
+// 403 or a 404 (model not permitted or not activated for the account). Once
+// held, the hold lasts until a job succeeds (ReportPromptSuccess ends the
+// streak); each time it leaves the streak one failure short of flipping again.
+func (c *Checker) probeBlindStreak(modelID common.Hash) (int, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	id := modelID.Hex()
+	streak, ok := c.failures[id]
+	if !ok || streak.blindStatus == 0 || (!streak.held && streak.count < c.maxConsecutiveErrors) {
+		return 0, false
+	}
+	streak.held = true
+	streak.count = c.maxConsecutiveErrors - 1
+	c.failures[id] = streak
+	return streak.blindStatus, true
+}
+
+// probeBlindStatus is an upstream status a video vendor's free probe cannot
+// observe: it concerns the balance or the model, not the key.
+func probeBlindStatus(status int) bool {
+	switch status {
+	case http.StatusPaymentRequired, http.StatusForbidden, http.StatusNotFound:
+		return true
+	}
+	return false
 }
 
 // verify runs the verifier and the capability probes (design contract §5)
@@ -1007,6 +1125,13 @@ func (c *Checker) setReport(report system.ModelHealthReport) {
 // failureStreak tracks consecutive real-session prompt failures for a model.
 type failureStreak struct {
 	count int
+	// blindStatus is the latest upstream status in the streak that a video
+	// vendor probe cannot see (402, 403, 404); 0 when there was none. It
+	// sticks for the streak's life, so the order of failures does not matter.
+	blindStatus int
+	// held is set once a passing video probe has held the flip as degraded:
+	// the hold lasts until a job succeeds, however many sweeps pass.
+	held bool
 	// rateLimitedOnly stays true while every failure in the current streak
 	// was an upstream 429 — a pure throttling streak flips the model to
 	// degraded (capacity risk) instead of unhealthy.
@@ -1030,6 +1155,9 @@ func (c *Checker) ReportPromptFailure(modelID common.Hash, upstreamStatus int) {
 		streak.rateLimitedOnly = true
 	}
 	streak.count++
+	if probeBlindStatus(upstreamStatus) {
+		streak.blindStatus = upstreamStatus
+	}
 	streak.rateLimitedOnly = streak.rateLimitedOnly && upstreamStatus == http.StatusTooManyRequests
 	c.failures[id] = streak
 
@@ -1054,8 +1182,14 @@ func (c *Checker) ReportPromptFailure(modelID common.Hash, upstreamStatus int) {
 	}
 	report.Status = status
 	report.ErrorKind = system.ModelHealthErrorSessionErrors
-	if streak.rateLimitedOnly {
+	// The status that explains the flip, not one an earlier probe left
+	// behind: 429 for a throttling streak, the account status (402/403/404)
+	// when the streak had one, nothing otherwise.
+	switch {
+	case streak.rateLimitedOnly:
 		report.HttpStatus = http.StatusTooManyRequests
+	default:
+		report.HttpStatus = streak.blindStatus
 	}
 	report.LastChecked = time.Now().Unix()
 	c.reports[id] = report

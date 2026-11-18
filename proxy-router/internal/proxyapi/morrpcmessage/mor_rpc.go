@@ -36,6 +36,19 @@ func (m *MORRPCMessage) PongResponce(requestId string, providerPrKey lib.HexStri
 	// consumers that don't know the models field (see PongRes)
 	params.Models = models
 	params.Signature = signature
+	if len(models) > 0 {
+		// json.Marshal is deterministic: these are the bytes the models field
+		// carries inside the response below.
+		modelsJSON, err := json.Marshal(models)
+		if err != nil {
+			return &RpcResponse{}, err
+		}
+		modelsSig, err := m.signBytes(modelsJSON, providerPrKey)
+		if err != nil {
+			return &RpcResponse{}, err
+		}
+		params.ModelsSignature = modelsSig
+	}
 
 	paramsBytes, err := json.Marshal(params)
 	if err != nil {
@@ -487,6 +500,70 @@ func (m *MORRPCMessage) CallAgentToolRequest(sessionID common.Hash, toolName str
 	}, nil
 }
 
+// SessionVideoCreateRequest builds session.video.create. The job JSON is
+// encoded like a session.prompt body: ECIES-encrypted to providerPubKey when
+// encrypt is set, then signed.
+func (m *MORRPCMessage) SessionVideoCreateRequest(sessionID common.Hash, jobID string, job interface{}, providerPubKey lib.HexString, userPrivateKeyHex lib.HexString, requestId string, encrypt bool) (*RPCMessage, error) {
+	message, err := json.Marshal(job)
+	if err != nil {
+		return &RPCMessage{}, err
+	}
+	content, enc, err := encodeContent(message, providerPubKey, encrypt)
+	if err != nil {
+		return &RPCMessage{}, err
+	}
+
+	params := SessionVideoCreateReq{
+		SessionID: sessionID,
+		JobID:     jobID,
+		Message:   content,
+		Enc:       enc,
+		Timestamp: m.generateTimestamp(),
+	}
+
+	signature, err := m.generateSignature(params, userPrivateKeyHex)
+	if err != nil {
+		return &RPCMessage{}, err
+	}
+	params.Signature = signature
+
+	serializedParams, err := json.Marshal(params)
+	if err != nil {
+		return &RPCMessage{}, err
+	}
+
+	return &RPCMessage{
+		ID:     requestId,
+		Method: "session.video.create",
+		Params: serializedParams,
+	}, nil
+}
+
+func (m *MORRPCMessage) SessionVideoStatusRequest(sessionID common.Hash, jobID string, userPrivateKeyHex lib.HexString, requestId string) (*RPCMessage, error) {
+	params := SessionVideoStatusReq{
+		SessionID: sessionID,
+		JobID:     jobID,
+		Timestamp: m.generateTimestamp(),
+	}
+
+	signature, err := m.generateSignature(params, userPrivateKeyHex)
+	if err != nil {
+		return &RPCMessage{}, err
+	}
+	params.Signature = signature
+
+	serializedParams, err := json.Marshal(params)
+	if err != nil {
+		return &RPCMessage{}, err
+	}
+
+	return &RPCMessage{
+		ID:     requestId,
+		Method: "session.video.status",
+		Params: serializedParams,
+	}, nil
+}
+
 func (m *MORRPCMessage) CallGetAgentToolsRequest(sessionID common.Hash, userPrivateKeyHex lib.HexString, requestId string) (*RPCMessage, error) {
 	method := "agent.get_tools"
 
@@ -751,6 +828,10 @@ func (m *MORRPCMessage) generateSignature(params any, privateKeyHex lib.HexStrin
 	if err != nil {
 		return nil, err
 	}
+	return m.signBytes(result, privateKeyHex)
+}
+
+func (m *MORRPCMessage) signBytes(result []byte, privateKeyHex lib.HexString) (lib.HexString, error) {
 	privateKey, err := crypto.ToECDSA(privateKeyHex)
 	if err != nil {
 		return nil, err

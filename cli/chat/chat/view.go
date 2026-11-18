@@ -5,7 +5,26 @@ import (
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat/common"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat/style"
+	"github.com/sashabaranov/go-openai"
 )
+
+// stopReasonNotice explains a non-normal finish_reason in the terms the user
+// can act on, and falls back to naming the raw value for anything new rather
+// than swallowing it.
+func stopReasonNotice(reason string) string {
+	switch reason {
+	case string(openai.FinishReasonLength):
+		return "The reply stopped at the provider's output limit, so it is incomplete. " +
+			"Ask it to continue, or for a shorter answer."
+	case string(openai.FinishReasonContentFilter):
+		return "The provider's content filter stopped this reply, so it is incomplete."
+	case string(openai.FinishReasonToolCalls), string(openai.FinishReasonFunctionCall):
+		return "The reply ended by asking for a tool call, which this client does not run, " +
+			"so nothing further will arrive."
+	default:
+		return "The reply ended early, reason: " + reason + "."
+	}
+}
 
 func (m model) View() string {
 	if m.mode == Chat {
@@ -17,7 +36,14 @@ func (m model) View() string {
 		b.WriteString("\n\n")
 
 		if m.err != nil {
-			b.WriteString(style.Error.Render(m.err.Error()) + "\n\n")
+			b.WriteString(style.Error.Copy().Width(m.messageWidth()).Render(m.err.Error()) + "\n\n")
+		}
+
+		// A reply that stopped early looks identical to a short one, so the
+		// provider's reason has to be said out loud.
+		if m.stopReason != "" {
+			b.WriteString(style.Error.Copy().Width(m.messageWidth()).Render(
+				stopReasonNotice(m.stopReason)) + "\n\n")
 		}
 
 		b.WriteString(style.Help.Render(common.HelpTextProTip))

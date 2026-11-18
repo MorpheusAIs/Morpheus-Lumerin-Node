@@ -46,7 +46,7 @@ If you already pay for **Venice Diem** (or similar) and want a low-friction way 
 
 - **Concurrency.** Set `concurrentSlots` in `models-config.json` to a value your upstream account actually supports — over-promising leads to dropped sessions and reputation damage.
 - **Latency.** Resale adds two extra hops vs a colocated backend. Bid pricing should reflect this.
-- **API compatibility.** The proxy-router speaks OpenAI-shaped requests; your upstream should as well. Mappings exist for Anthropic and Prodia. See [models-config.json](/reference/models-config).
+- **API compatibility.** The proxy-router speaks OpenAI-shaped requests; your upstream should as well. Mappings exist for Anthropic and Prodia, and for the hosted video vendors BytePlus ModelArk and Renderful ([Hosted video models](/providers/full/model-setup#hosted-video-models)). See [models-config.json](/reference/models-config).
 
 ## Next steps
 

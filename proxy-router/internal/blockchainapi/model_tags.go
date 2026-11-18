@@ -26,14 +26,26 @@ func isDecisionTag(tag string) bool {
 	}
 }
 
+func isVideoTag(tag string) bool {
+	switch tag {
+	case "video", "text2video", "text-to-video", "t2v", "image2video", "image-to-video", "i2v":
+		return true
+	default:
+		return false
+	}
+}
+
 // DetectModelType classifies a model from its tags.
 // Decision-class tags (decision/decisions/typesafe/systemone/system-one) take
 // precedence over LLM when both are present — required for catalog rows like
-// jev-1.13-ts that carry both LLM and Decision tags.
+// jev-1.13-ts that carry both LLM and Decision tags. Video is the fallback:
+// a model tagged only as video is a video job model, while one that also
+// carries an LLM/STT/TTS/embedding tag keeps that type (live chat rows such
+// as seedance-2.0:beta are tagged LLM+Video and served as chat).
 func DetectModelType(tags []string) structs.ModelType {
 	normalized := make([]string, 0, len(tags))
 	for _, raw := range tags {
-		normalized = append(normalized, strings.ToLower(raw))
+		normalized = append(normalized, strings.ToLower(strings.TrimSpace(raw)))
 	}
 
 	for _, tag := range normalized {
@@ -52,6 +64,12 @@ func DetectModelType(tags []string) structs.ModelType {
 			return structs.ModelTypeEMBEDDING
 		case "llm", "textgeneration", "text2text", "text-to-text", "t2t":
 			return structs.ModelTypeLLM
+		}
+	}
+
+	for _, tag := range normalized {
+		if isVideoTag(tag) {
+			return structs.ModelTypeVIDEO
 		}
 	}
 

@@ -271,6 +271,12 @@ func (p *ProxyServiceSender) Ping(ctx context.Context, providerURL string, provi
 		return 0, "", nil, lib.WrapError(ErrProvider, fmt.Errorf("code: %d, msg: %v, error: %s", code, res, err))
 	}
 	pingDuration := time.Since(reqStartTime)
+	if res.Error != nil {
+		return pingDuration, "", nil, lib.WrapError(ErrResponseErr, fmt.Errorf("error: %v", res.Error.Message))
+	}
+	if res.Result == nil {
+		return pingDuration, "", nil, lib.WrapError(ErrInvalidResponse, ErrEmpty)
+	}
 
 	var typedMsg *msgs.PongRes
 	err = json.Unmarshal(*res.Result, &typedMsg)
@@ -285,8 +291,10 @@ func (p *ProxyServiceSender) Ping(ctx context.Context, providerURL string, provi
 
 	signature := typedMsg.Signature
 	models := typedMsg.Models
+	modelsSignature := typedMsg.ModelsSignature
 	typedMsg.Signature = lib.HexString{}
 	typedMsg.Models = nil // not part of the signed payload (see PongRes)
+	typedMsg.ModelsSignature = nil
 
 	signer, err := p.authorizedSigner(ctx, providerAddr)
 	if err != nil {
@@ -296,7 +304,30 @@ func (p *ProxyServiceSender) Ping(ctx context.Context, providerURL string, provi
 		return pingDuration, "", nil, ErrInvalidSig
 	}
 
+	// A video guide sets how long a session the consumer pays for, so it is
+	// used only when the provider signed the models it came in.
+	if !pongModelsSigned(*res.Result, modelsSignature, signer) {
+		for i := range models {
+			models[i].Video = nil
+		}
+	}
+
 	return pingDuration, typedMsg.Version, models, nil
+}
+
+// pongModelsSigned checks the models signature against the models bytes as
+// received, so it holds whatever version either side encodes them with.
+func pongModelsSigned(result json.RawMessage, signature lib.HexString, signer common.Address) bool {
+	if len(signature) == 0 {
+		return false
+	}
+	var raw struct {
+		Models json.RawMessage `json:"models"`
+	}
+	if err := json.Unmarshal(result, &raw); err != nil || len(raw.Models) == 0 {
+		return false
+	}
+	return lib.VerifySignatureAddr(raw.Models, signature, signer)
 }
 
 // EnsureProviderRegistered re-discovers provider URL + public key (via ping) and stores them in session storage.
@@ -330,6 +361,12 @@ func (p *ProxyServiceSender) EnsureProviderRegistered(ctx context.Context, provi
 	res, code, err := p.rpcRequest(providerURL, msg)
 	if err != nil {
 		return lib.WrapError(ErrProvider, fmt.Errorf("code: %d, msg: %v, error: %s", code, res, err))
+	}
+	if res.Error != nil {
+		return lib.WrapError(ErrResponseErr, fmt.Errorf("error: %v", res.Error.Message))
+	}
+	if res.Result == nil {
+		return lib.WrapError(ErrInvalidResponse, ErrEmpty)
 	}
 
 	var typedMsg *msgs.PongRes
@@ -727,6 +764,12 @@ const (
 )
 
 func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msgs.RPCMessage) (*msgs.RpcResponse, int, error) {
+	return p.rpcRequestWithReadTimeout(url, rpcMessage, TIMEOUT_TO_READ_RESPONSE, 0)
+}
+
+// rpcRequestWithReadTimeout is rpcRequest with its own read deadline and, when
+// maxBytes > 0, a cap on the size of the response.
+func (p *ProxyServiceSender) rpcRequestWithReadTimeout(url string, rpcMessage *msgs.RPCMessage, readTimeout time.Duration, maxBytes int64) (*msgs.RpcResponse, int, error) {
 	// TODO: enable request-response matching by using requestID
 	// TODO: add context cancellation
 
@@ -758,11 +801,15 @@ func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msgs.RPCMessage)
 	}
 
 	// read response
-	if err := conn.SetReadDeadline(time.Now().Add(TIMEOUT_TO_READ_RESPONSE)); err != nil {
+	if err := conn.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
 		p.log.Warnf("failed to set read deadline: %s", err)
 	}
 
-	reader := bufio.NewReader(conn)
+	var src io.Reader = conn
+	if maxBytes > 0 {
+		src = io.LimitReader(conn, maxBytes)
+	}
+	reader := bufio.NewReader(src)
 	d := json.NewDecoder(reader)
 
 	var msg *msgs.RpcResponse
@@ -770,11 +817,17 @@ func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msgs.RPCMessage)
 	if err != nil {
 		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 			err = lib.WrapError(ErrConnectProvider,
-				fmt.Errorf("provider did not respond within %s", TIMEOUT_TO_READ_RESPONSE))
+				fmt.Errorf("provider did not respond within %s", readTimeout))
 			p.log.Warnf("%s", err)
 			return nil, http.StatusGatewayTimeout, err
 		}
 		err = lib.WrapError(ErrDecode, err)
+		p.log.Errorf("%s", err)
+		return nil, http.StatusBadRequest, err
+	}
+	if msg == nil {
+		// The literal null decodes without error into a nil response.
+		err = lib.WrapError(ErrDecode, ErrEmpty)
 		p.log.Errorf("%s", err)
 		return nil, http.StatusBadRequest, err
 	}
@@ -1126,6 +1179,10 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 			}
 		}
 
+		if msg == nil {
+			log.Warnf("provider sent an empty (null) response")
+			return nil, ttftMs, inputTokens, outputTokens, lib.WrapError(ErrDecode, ErrEmpty)
+		}
 		if msg.Error != nil {
 			sig := msg.Error.Data.Signature
 
@@ -1656,6 +1713,12 @@ func (p *ProxyServiceSender) sendStreamChunks(ctx context.Context, provider *sto
 			return fmt.Errorf("failed to send chunk %d: %w", chunkIndex, err)
 		}
 
+		if response.Error != nil {
+			return fmt.Errorf("chunk %d failed: %s", chunkIndex, response.Error.Message)
+		}
+		if response.Result == nil {
+			return fmt.Errorf("failed to send chunk %d: %w", chunkIndex, lib.WrapError(ErrInvalidResponse, ErrEmpty))
+		}
 		var typedMsg *msgs.SessionPromptStreamChunkRes
 		err = json.Unmarshal(*response.Result, &typedMsg)
 		if err != nil {
@@ -1671,10 +1734,6 @@ func (p *ProxyServiceSender) sendStreamChunks(ctx context.Context, provider *sto
 		}
 		if !p.validateMsgSignature(typedMsg, signature, hexPubKey) {
 			return fmt.Errorf("invalid signature for stream chunk response")
-		}
-
-		if response.Error != nil {
-			return fmt.Errorf("chunk %d failed: %s", chunkIndex, response.Error.Message)
 		}
 
 		p.log.With("request_id", lib.RequestIDFromContext(ctx)).Infof("Successfully sent chunk %d/%d for stream %s", chunkIndex+1, totalChunks, streamID)

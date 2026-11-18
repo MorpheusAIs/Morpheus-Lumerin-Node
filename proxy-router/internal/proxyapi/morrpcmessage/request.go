@@ -59,6 +59,29 @@ type CallAgentToolRes struct {
 	Timestamp uint64        `json:"timestamp" validate:"required,number"`
 }
 
+// SessionVideoCreateReq starts a video job on the session. JobID is the
+// consumer's id for the job: a retry with the same id gets the same receipt
+// instead of a second vendor task. Message is the videojob.CreateRequest JSON.
+type SessionVideoCreateReq struct {
+	SessionID common.Hash `json:"sessionid" validate:"required,hex32"`
+	JobID     string      `json:"jobid" validate:"required,max=64"`
+	Message   string      `json:"message" validate:"required"`
+	// Enc is EncECIES when Message is ciphertext under the provider's key,
+	// as for session.prompt. Inside the signed payload.
+	Enc       string        `json:"enc,omitempty" validate:"omitempty,oneof=ecies"`
+	Signature lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
+	Timestamp uint64        `json:"timestamp" validate:"required,number"`
+}
+
+// SessionVideoStatusReq asks the provider for the vendor status of one of the
+// session's video jobs; the vendor key never leaves the provider.
+type SessionVideoStatusReq struct {
+	SessionID common.Hash   `json:"sessionid" validate:"required,hex32"`
+	JobID     string        `json:"jobid" validate:"required,max=64"`
+	Signature lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
+	Timestamp uint64        `json:"timestamp" validate:"required,number"`
+}
+
 type GetAgentToolsReq struct {
 	SessionID common.Hash   `json:"sessionid" validate:"required,hex32"`
 	Signature lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
@@ -175,8 +198,12 @@ type PongRes struct {
 	// Models is set after signing (like Signature) and excluded from the
 	// signed payload: consumers with an older PongRes struct drop the unknown
 	// field on unmarshal, so signature verification keeps working for them.
-	Models    []system.ModelHealthReport `json:"models,omitempty" validate:"omitempty"`
-	Signature lib.HexString              `json:"signature" validate:"required,hexadecimal"`
+	Models []system.ModelHealthReport `json:"models,omitempty" validate:"omitempty"`
+	// ModelsSignature signs the exact JSON bytes of Models, so a consumer can
+	// trust what it prices from them (video guides) without re-encoding.
+	// Also set after signing; older consumers ignore it.
+	ModelsSignature lib.HexString `json:"modelsSignature,omitempty" validate:"omitempty"`
+	Signature       lib.HexString `json:"signature" validate:"required,hexadecimal"`
 }
 
 // Audio streaming message types

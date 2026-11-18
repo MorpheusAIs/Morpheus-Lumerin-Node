@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   IconMessage,
+  IconMovie,
   IconSparkles,
   IconBrandStackshare,
   IconWallet,
@@ -12,6 +13,7 @@ import { NavGroup, NavItem } from './Nav.styles';
 const pages = [
   { path: '/wallet', label: 'Wallet', icon: IconWallet },
   { path: '/chat', label: 'Chat', icon: IconMessage },
+  { path: '/video', label: 'Video', icon: IconMovie },
   { path: '/workspace', label: 'Workspace', icon: IconSparkles },
   { path: '/models', label: 'Models', icon: IconPackages },
   { path: '/agents', label: 'Agents', icon: IconUsers },

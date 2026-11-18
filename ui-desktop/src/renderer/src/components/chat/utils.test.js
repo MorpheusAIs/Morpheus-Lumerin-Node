@@ -128,6 +128,24 @@ describe('isCoworkCandidate', () => {
   });
 });
 
+// Video models take jobs on the Video screen; one that also carries a chat tag
+// (seedance-2.0:beta is tagged LLM+Video) is served as chat, as on the backend.
+describe('getModelModality for video', () => {
+  it.each([
+    [{ ModelType: 'VIDEO', Tags: ['video'] }, 'video'],
+    [{ ModelType: 'LLM', Tags: ['llm', 'video'] }, 'llm'],
+    [{ ModelType: 'UNKNOWN', Tags: ['t2v'] }, 'video'],
+    [{ Tags: ['LLM', 'Video'] }, 'llm'],
+    [{ Tags: ['tts', 'video'] }, 'tts'],
+  ])('%j is %s', (model, modality) => {
+    expect(getModelModality(model)).toBe(modality);
+  });
+
+  it('keeps tag-only video models out of Workspace', () => {
+    expect(isCoworkCandidate({ Tags: ['text-to-video'] })).toBe(false);
+  });
+});
+
 describe('model tag helpers', () => {
   it('detects secure models from supported tag shapes', () => {
     expect(isSecureModel({ Tags: null })).toBe(false);

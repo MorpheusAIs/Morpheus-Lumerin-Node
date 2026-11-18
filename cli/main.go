@@ -145,6 +145,15 @@ func main() {
 						Value:    chatCommon.DefaultSessionDuration,
 						Usage:    "session length in seconds; opening a session escrows stake for the whole duration up front",
 					},
+					&cli.StringFlag{
+						Name:     "models-source",
+						Required: false,
+						Value:    defaultModelSource,
+						Usage: "where to load the model list from: router (the chain, the default), " +
+							"or a published active.mor.org view -- gateway (tested and openable), " +
+							"active (the polled working set) or all (includes failures). " +
+							"A view that is stale or unreachable falls back to router",
+					},
 				},
 			},
 			{
@@ -314,10 +323,14 @@ func main() {
 
 type actions struct {
 	client *client.ApiGatewayClient
+	// feedBase is where --models-source fetches the published catalogue from.
+	// Empty means defaultModelsFeedBase; MODELS_FEED_URL overrides it, which is
+	// how a mirror is pointed at and how tests reach a local server.
+	feedBase string
 }
 
 func NewActions(c *client.ApiGatewayClient) *actions {
-	return &actions{client: c}
+	return &actions{client: c, feedBase: os.Getenv("MODELS_FEED_URL")}
 }
 
 func (a *actions) setupWallet(cCtx *cli.Context) error {
@@ -378,9 +391,14 @@ func (a *actions) startRemoteChat(cCtx *cli.Context) error {
 
 	var options *chatCommon.Options
 
+	source := cCtx.String("models-source")
+	if !modelSourceValid(source) {
+		return fmt.Errorf("unknown --models-source %q: use %s, %s, %s or %s",
+			source, modelSourceRouter, modelSourceGateway, modelSourceActive, modelSourceAll)
+	}
+
 	if sessionId == "" {
-		fmt.Println("Loading remote models...")
-		resultModels, err := a.loadModelsWithBids(cCtx.Context)
+		resultModels, err := a.loadModels(cCtx.Context, source)
 		if err != nil {
 			return err
 		}
@@ -403,6 +421,26 @@ func (a *actions) startRemoteChat(cCtx *cli.Context) error {
 	chat.Run(options)
 
 	return nil
+}
+
+// loadModels returns the picker's catalogue from the requested source, falling
+// back to the router whenever a published view cannot be used.
+//
+// The fallback is automatic, as it has to be -- a stalled generator goes quiet
+// rather than loud, and the published JSON still parses perfectly while the
+// prices in it go old. It is deliberately not silent: someone who asked for the
+// fast path and then waited out the chain walk instead deserves to be told why.
+func (a *actions) loadModels(ctx context.Context, source string) ([]interface{}, error) {
+	if source != modelSourceRouter {
+		models, err := a.loadModelsFromFeed(ctx, source)
+		if err == nil {
+			return models, nil
+		}
+		fmt.Printf("Could not use the %s model list (%v); falling back to the router.\n", source, err)
+	}
+
+	fmt.Println("Loading remote models...")
+	return a.loadModelsWithBids(ctx)
 }
 
 // loadModelsWithBids returns the marketplace models that currently have at

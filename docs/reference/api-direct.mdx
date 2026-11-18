@@ -94,6 +94,10 @@ curl -X POST 'http://localhost:8082/v1/chat/completions' \
 
 OpenAI-compatible SSE response.
 
+<Note>
+A video model (`ModelType` `VIDEO`) takes no chat prompt: the provider refuses `/v1/chat/completions` on its session and says to submit a video job instead. Quote the job, open the session by bid for the quoted length, then submit. See [Video jobs](/consumers/video).
+</Note>
+
 ## Quick-and-dirty one-liner
 
 ```bash

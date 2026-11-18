@@ -157,6 +157,7 @@ func NewBlockchainService(
 	log lib.ILogger,
 	logEthRpc lib.ILogger,
 	legacyTx bool,
+	maxGasPriceWei *big.Int,
 	attestationVerifier *attestation.Verifier,
 ) *BlockchainService {
 	providerRegistry := r.NewProviderRegistry(diamonContractAddr, ethClient, mc, logEthRpc)
@@ -165,7 +166,17 @@ func NewBlockchainService(
 	sessionRouter := r.NewSessionRouter(diamonContractAddr, ethClient, mc, logEthRpc)
 	morToken := r.NewMorToken(morTokenAddr, ethClient, logEthRpc)
 
-	txEscalator := lib.NewTransactionEscalator(ethClient, log, lib.DefaultEscalationConfig())
+	// Gas-price ceiling for our own txs. nil keeps the library default (1 gwei);
+	// callers pass an explicit value from ETH_NODE_MAX_GAS_PRICE_GWEI (-1 → unlimited).
+	escalationCfg := lib.DefaultEscalationConfig()
+	if maxGasPriceWei != nil {
+		if maxGasPriceWei.Sign() > 0 {
+			escalationCfg.MaxGasPrice = maxGasPriceWei
+		} else {
+			escalationCfg.MaxGasPrice = nil
+		}
+	}
+	txEscalator := lib.NewTransactionEscalator(ethClient, log, escalationCfg)
 
 	return &BlockchainService{
 		ethClient:           ethClient,
@@ -526,7 +537,8 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 		}
 	}
 	if lastOpenErr != nil {
-		if errors.Is(lastOpenErr, lib.ErrEscalationFailed) {
+		// A tx from this call may still land, so keep the agent debit in place.
+		if errors.Is(lastOpenErr, lib.ErrEscalationFailed) || errors.Is(lastOpenErr, lib.ErrTxStillPending) {
 			keepHold = true
 		}
 		s.handleTxError(ctx, addr, lastOpenErr)
@@ -2142,6 +2154,10 @@ func isInsufficientMOR(err error) bool {
 		strings.Contains(msg, "erc20: transfer amount exceeds balance")
 }
 
+func isGasCapExceeded(err error) bool {
+	return errors.Is(err, lib.ErrMaxGasExceeded)
+}
+
 func isTxNotMined(err error) bool {
 	if err == nil {
 		return false
@@ -2159,8 +2175,10 @@ func classifyOpenSessionError(stage string, err error) error {
 		return fmt.Errorf("%s: insufficient ETH for gas — add ETH to your wallet to cover transaction fees. Original: %w", stage, err)
 	case isInsufficientMOR(err):
 		return fmt.Errorf("%s: insufficient MOR balance — your wallet does not have enough MOR to stake for this session length. Original: %w", stage, err)
+	case isGasCapExceeded(err):
+		return fmt.Errorf("%s: gas price needed exceeds the configured cap — the network is not including transactions at a sane price. Wait for it to recover or raise ETH_NODE_MAX_GAS_PRICE_GWEI. Original: %w", stage, err)
 	case isTxNotMined(err):
-		return fmt.Errorf("%s: transaction could not be confirmed on-chain — the network may be congested, try again shortly. Original: %w", stage, err)
+		return fmt.Errorf("%s: transaction was submitted but not confirmed within the wait window — it may still be mined. Check your sessions before retrying so a late confirmation does not open a second session. Original: %w", stage, err)
 	default:
 		return fmt.Errorf("%s: %w", stage, err)
 	}
@@ -2174,8 +2192,10 @@ func classifyCloseSessionError(err error) error {
 	case isInsufficientAllowance(err):
 		return fmt.Errorf("close session failed: the protocol funding pool does not have enough MOR allowance to settle provider payment — "+
 			"this is a network-level issue, not a wallet issue. The auto-close will keep retrying. Original: %w", err)
+	case isGasCapExceeded(err):
+		return fmt.Errorf("close session failed: gas price needed exceeds the configured cap — the network is not including transactions at a sane price. The auto-close will retry once it recovers, or raise ETH_NODE_MAX_GAS_PRICE_GWEI. Original: %w", err)
 	case isTxNotMined(err):
-		return fmt.Errorf("close session failed: transaction could not be confirmed on-chain — the network may be congested, try again shortly. Original: %w", err)
+		return fmt.Errorf("close session failed: transaction was submitted but not confirmed within the wait window — it may still be mined. Check the session state before retrying. Original: %w", err)
 	default:
 		return fmt.Errorf("close session failed: %w", err)
 	}

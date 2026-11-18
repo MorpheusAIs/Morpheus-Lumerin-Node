@@ -95,6 +95,10 @@ func getMessage(conn net.Conn) (*morrpc.RPCMessage, error) {
 	if err != nil {
 		return nil, err
 	}
+	if msg == nil {
+		// The literal null decodes without error into a nil message.
+		return nil, errors.New("empty (null) request")
+	}
 	return msg, nil
 }
 

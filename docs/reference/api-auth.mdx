@@ -152,6 +152,7 @@ embeddings
 decisions
 audio_transcription
 audio_speech
+video_jobs
 get_local_models
 get_local_agents
 get_agent_tools
@@ -174,6 +175,7 @@ Notes on a few of these:
 - `get_bids` also gates `GET /blockchain/models/prices` and `GET /blockchain/models/:id/session/estimate`; `get_sessions` gates `GET /blockchain/sessions/duration`.
 - `set_wallet` covers `POST /wallet/privateKey`, `POST /wallet/mnemonic`, and `POST /wallet/derivationPath` (HD account switching). `get_wallet` is `GET /wallet`; `remove_wallet` is `DELETE /wallet`.
 - `system_config` covers `GET /config`, `POST /config/ethNode`, and `POST /config/models/reload`.
+- `video_jobs` covers `POST /v1/video/quote`, `POST /v1/video/jobs`, `GET /v1/video/jobs` and `GET /v1/video/jobs/:id`. A video client also needs `open_session` and `close_session` for the session its jobs run on, and `get_bids` for the stake estimate.
 - `add_user`, `remove_user`, and `agent_requests` are **delegable without becoming admin**. A caller whose whitelist is not `*` may only create, update, confirm, decline, or remove users whose permissions are a subset of its own. It can never grant `*`, never touch `admin`, never touch a user that carries a spending allowance, never approve an agent request that asks for one, and never re-confirm an already confirmed agent. Such requests return `403`. `admin` cannot be removed through the API by anyone (that would lock the node until `proxy.conf` is edited by hand).
 - Usernames may not contain whitespace, `:` or `$`, and permission names may not contain whitespace, `,` or `:`, because `proxy.conf` is line-oriented. Such requests return `400`.
 - `ipfs_get` writes the downloaded file to the caller-supplied `dest`, and `ipfs_add` reads the caller-supplied `filePath`. A caller with `*` may use any absolute path (that is how the desktop app's "pick a folder" flow works). Any other caller is confined to the directories in `IPFS_ALLOWED_DIRS` and refused with `403` when that variable is unset. Downloads never overwrite an existing file.

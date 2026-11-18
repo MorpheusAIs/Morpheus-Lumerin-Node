@@ -219,6 +219,7 @@ func NewSDK(cfg Config) (*SDK, error) {
 		nil,
 		log, rpcLog,
 		false,
+		nil, // gas-price cap: library default (1 gwei)
 		teeVerifier,
 	)
 

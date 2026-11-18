@@ -3,6 +3,7 @@ package proxyapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"strings"
@@ -56,6 +57,7 @@ type ProxyReceiver struct {
 	backendVerifier   BackendTEEVerifier
 	modelTagsProvider ModelTagsProvider
 	modelHealth       ModelHealthTracker
+	video             videoProviderState
 }
 
 func NewProxyReceiver(privateKeyHex, publicKeyHex lib.HexString, sessionStorage *storages.SessionStorage, aiEngine *aiengine.AiEngine, chainID *big.Int, modelConfigLoader *config.ModelConfigLoader, blockchainService BidGetter, sessionRepo *sessionrepo.SessionRepositoryCached) *ProxyReceiver {
@@ -103,6 +105,11 @@ func isBackendFaultStatus(status int) bool {
 // response).
 func (s *ProxyReceiver) trackPromptResult(modelID common.Hash, transportErr error, engineErrStatus int, gotEngineErr bool) {
 	if s.modelHealth == nil {
+		return
+	}
+	// A chat request to a video model is the client's mistake, not the
+	// backend's: it must not mark the model unhealthy for video jobs.
+	if errors.Is(transportErr, aiengine.ErrVideoNotSupported) {
 		return
 	}
 	if transportErr != nil {

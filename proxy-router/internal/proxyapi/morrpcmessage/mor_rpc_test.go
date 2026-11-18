@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
@@ -112,14 +113,17 @@ func TestPongResponceModelsExcludedFromSignature(t *testing.T) {
 	res, err := rpc.PongResponce("1", prKeyBytes, lib.HexString{0x01, 0x02}, "v1.0.0", models)
 	assert.NoError(t, err)
 
-	// new consumer: zeroes both signature and models before verifying
+	// new consumer: zeroes the signature, the models and their signature
+	// before verifying
 	var pong PongRes
 	assert.NoError(t, json.Unmarshal(*res.Result, &pong))
 	assert.Len(t, pong.Models, 1)
+	assert.NotEmpty(t, pong.ModelsSignature)
 
 	signature := pong.Signature
 	pong.Signature = lib.HexString{}
 	pong.Models = nil
+	pong.ModelsSignature = nil
 	assert.True(t, rpc.VerifySignatureAddr(pong, signature, addr, lib.NewTestLogger()))
 
 	// old consumer: models field silently dropped, verification still passes
@@ -161,5 +165,41 @@ func TestPongResponseModelsCarryApiSpecOutsideSignature(t *testing.T) {
 	signature := pong.Signature
 	pong.Signature = lib.HexString{}
 	pong.Models = nil
+	pong.ModelsSignature = nil
 	assert.True(t, rpc.VerifySignatureAddr(pong, signature, addr, lib.NewTestLogger()))
+}
+
+// The models signature covers the models bytes as sent, so a consumer checks
+// it without re-encoding them (its struct may be older or newer); any change
+// to the bytes breaks it.
+func TestPongResponseModelsSignatureCoversRawModels(t *testing.T) {
+	prKey, err := crypto.GenerateKey()
+	assert.NoError(t, err)
+	addr := crypto.PubkeyToAddress(prKey.PublicKey)
+
+	models := []system.ModelHealthReport{{ModelID: "0x01", Status: system.ModelHealthStatusSkipped, LastChecked: 1}}
+	rpc := NewMorRpc()
+	res, err := rpc.PongResponce("req-1", crypto.FromECDSA(prKey), lib.HexString{0x01}, "1.0.0", models)
+	assert.NoError(t, err)
+
+	// through the wire, as the consumer decodes it
+	wire, err := json.Marshal(res)
+	assert.NoError(t, err)
+	var got RpcResponse
+	assert.NoError(t, json.Unmarshal(wire, &got))
+
+	var raw struct {
+		Models          json.RawMessage `json:"models"`
+		ModelsSignature lib.HexString   `json:"modelsSignature"`
+	}
+	assert.NoError(t, json.Unmarshal(*got.Result, &raw))
+	assert.True(t, lib.VerifySignatureAddr(raw.Models, raw.ModelsSignature, addr))
+
+	tampered := []byte(strings.Replace(string(raw.Models), "skipped", "healthy", 1))
+	assert.False(t, lib.VerifySignatureAddr(tampered, raw.ModelsSignature, addr))
+
+	// no models, no models signature
+	res, err = rpc.PongResponce("req-2", crypto.FromECDSA(prKey), lib.HexString{0x01}, "1.0.0", nil)
+	assert.NoError(t, err)
+	assert.NotContains(t, string(*res.Result), "modelsSignature")
 }

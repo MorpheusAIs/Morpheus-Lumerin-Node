@@ -64,7 +64,7 @@ On provider nodes the response also includes a `models` array — the periodic m
 | `unhealthy` | Probe failed — see `errorKind` and `httpStatus` below | Fix the backend; consumers opening a session hit the same failure |
 | `no_bid` | Configured model has no active bid; not probed | Post a bid if you want to sell it |
 | `no_model_configured` | **Active bid exists but the model is missing from `models-config.json`** | Add the model entry or delete the bid — consumers can open sessions against this bid and get errors |
-| `skipped` | STT/TTS, media tags (image/video/audio/music), or an untagged/unknown type whose guessed LLM probe failed. Not the same as "anything other than LLM." Still routable under default `permissive`. | — unless you need GATEWAY / hosted-API listing |
+| `skipped` | STT/TTS, media tags (image/video/audio/music), or an untagged/unknown type whose guessed LLM probe failed. Not the same as "anything other than LLM." Still routable under default `permissive`. Hosted video models (`apiType` `byteplus-video` or `renderful`) are not skipped: they get a free vendor probe ([Model health](/providers/full/model-health)). | — unless you need GATEWAY / hosted-API listing |
 
 The self-report has its own operational reference — schedule, tuning, backend impact, and diagnosis recipes — at [Model health self-report](/providers/full/model-health).
 
@@ -163,6 +163,10 @@ The dashboards refresh on a schedule (a few minutes); give it time before conclu
 ## Step 5 — End-to-end prompt via the Inference API
 
 The hosted [Morpheus Inference API](/inference-api/overview) serves as the easiest end-to-end consumer. If a real prompt against your model name returns text, you've proven the full chain (consumer → API Gateway → discovery → your P-Node → your backend → response).
+
+<Note>
+The Inference API does not serve hosted video models. Test a video model from a consumer proxy-router instead: quote a short job, open a session on your bid for the quoted length, submit the job, and wait for its `video_url`. Steps: [Video generation](/consumers/video).
+</Note>
 
 1. Sign in at [app.mor.org](https://app.mor.org), grab an API key.
 2. In the dashboard's **API Test** page (or any OpenAI-compatible client) pick your model name from the dropdown.

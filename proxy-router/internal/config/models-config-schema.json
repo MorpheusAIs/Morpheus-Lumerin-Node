@@ -22,9 +22,9 @@
           },
           "apiType": {
             "title": "API Type",
-            "description": "Defines the type of API to be used with this model",
+            "description": "Defines the type of API to be used with this model. renderful and byteplus-video are hosted video job vendors: apiUrl is the vendor API base (https://api.renderful.ai/api/v1, https://ark.ap-southeast.bytepluses.com/api/v3), modelName the vendor model id, and the model serves video jobs (POST /v1/video/jobs on the consumer), never chat.",
             "type": "string",
-            "enum": ["openai", "claudeai", "prodia-sd", "prodia-sdxl", "prodia-v2", "hyperbolic-sd", "decisions"]
+            "enum": ["openai", "claudeai", "prodia-sd", "prodia-sdxl", "prodia-v2", "hyperbolic-sd", "decisions", "renderful", "byteplus-video"]
           },
           "apiStack": {
             "title": "API Stack",

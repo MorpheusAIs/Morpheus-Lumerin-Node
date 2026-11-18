@@ -1,0 +1,17 @@
+/* Pill-style tabs for get-started/code-with-morpheus (classNames path-tabs / editor-tabs).
+   Page-scoped <style> cannot reach html.dark, so dark overrides live here. */
+html.dark ul.path-tabs,
+html.dark ul.editor-tabs {
+  border-color: rgb(63 63 70);
+  background: rgb(39 39 42 / 0.9);
+}
+
+html.dark ul.path-tabs [data-component-part="tab-button"],
+html.dark ul.editor-tabs [data-component-part="tab-button"] {
+  color: rgb(212 212 216);
+}
+
+html.dark ul.path-tabs [data-component-part="tab-button"][data-active="false"]:hover,
+html.dark ul.editor-tabs [data-component-part="tab-button"][data-active="false"]:hover {
+  background: rgb(63 63 70 / 0.85);
+}

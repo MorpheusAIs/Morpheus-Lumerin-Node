@@ -30,6 +30,13 @@ You probably recovered at the wrong **account index**. A mnemonic import default
   ```
 - Try a different model from a different provider.
 
+## Video job refused, `cancelled`, or its link stops working
+
+- `422` on `POST /v1/video/jobs` saying the job "needs a …-second session" or "needs … seconds of session": the session has no room left for this job. Open a session for the job's quote ([Several jobs on one session](/consumers/video#several-jobs-on-one-session)).
+- `cancelled` with `session_closed_early`: the session was closed before the clip was delivered. Close only after every job on it shows a final status ([Close the session](/consumers/video#close-the-session)).
+- `vendor_task_id` stays empty: the provider has not confirmed the job yet, and your node keeps sending it again ([When the provider cannot be reached](/consumers/video#when-the-provider-cannot-be-reached)).
+- `video_url` no longer downloads: the vendor link expired (`expires_at`). Your node keeps no copy of the file, so download it as soon as the job succeeds ([Poll for the clip](/consumers/video#poll-for-the-clip)).
+
 ## Local model returns nonsense
 
 The local `tinyllama` demo (downloaded by the desktop app on first launch) is a **demonstration model only**. It will hallucinate, miscount, and contradict itself. Don't compare it to a real Morpheus model. See [Local vs on-chain models](/concepts/local-vs-onchain-models).

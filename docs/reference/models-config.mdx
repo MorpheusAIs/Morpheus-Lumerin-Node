@@ -1,6 +1,6 @@
 ---
 title: "models-config.json"
-description: "How the proxy-router maps on-chain model IDs to backend HTTP endpoints: the apiType transport adapter, the optional apiStack backend preset (OpenAI, vLLM, SGLang, llama.cpp, Ollama, Venice, OpenRouter, LiteLLM, Anthropic, Gemini) that declares the advertised API, the declared capabilities override, and the Prodia / Hyperbolic image adapters; when apiStack is omitted the backend API and the model's capabilities are detected at runtime (service-endpoint probes, never inference requests, one hop through LiteLLM), with every capability carrying its evidence."
+description: "How the proxy-router maps on-chain model IDs to backend HTTP endpoints: the apiType transport adapter, the optional apiStack backend preset (OpenAI, vLLM, SGLang, llama.cpp, Ollama, Venice, OpenRouter, LiteLLM, Anthropic, Gemini) that declares the advertised API, the declared capabilities override, the Prodia / Hyperbolic image adapters, and the BytePlus ModelArk / Renderful video job adapters; when apiStack is omitted the backend API and the model's capabilities are detected at runtime (service-endpoint probes, never inference requests, one hop through LiteLLM), with every capability carrying its evidence."
 audience: ["provider-full", "provider-resale", "developer"]
 product: ["proxy-router"]
 last_verified: "2026-10-20"
@@ -14,11 +14,11 @@ source: "docs/models-config.json.md"
 | Field | Required | Notes |
 |-------|----------|-------|
 | `modelId` | yes | The on-chain model id (32-byte hex) |
-| `modelName` | yes | Human-readable name |
-| `apiType` | yes | Transport adapter the proxy-router speaks to the backend: `openai` (any OpenAI-compatible chat/completions endpoint), `claudeai` (Anthropic Messages), `prodia-sd`, `prodia-sdxl`, `prodia-v2`, `hyperbolic-sd` (image generation), `decisions` (TypeSafe Decisions / System One, see the note under the example below) |
+| `modelName` | yes | Human-readable name. For `byteplus-video` and `renderful`, the vendor's model id, which also sets the job limits (see [Video models](#video-models)) |
+| `apiType` | yes | Transport adapter the proxy-router speaks to the backend: `openai` (any OpenAI-compatible chat/completions endpoint), `claudeai` (Anthropic Messages), `prodia-sd`, `prodia-sdxl`, `prodia-v2`, `hyperbolic-sd` (image generation), `decisions` (TypeSafe Decisions / System One, see the note under the example below), `byteplus-video` and `renderful` (hosted video jobs, see [Video models](#video-models)) |
 | `apiStack` | optional | Backend API preset advertised to consumers: `openai`, `vllm`, `sglang`, `llamacpp`, `ollama`, `venice`, `openrouter`, `litellm`, `anthropic`, `gemini`. Never selects the adapter; its required `apiType` is listed under [API presets](#api-presets). On a mismatch or an unknown preset the proxy-router logs an error and ignores `apiStack` for that model (the model is still served and its backend API is detected at runtime, as if `apiStack` were omitted). When omitted, the backend API is detected at runtime — see [Detection](#detection) |
 | `modelFamily` | optional | Canonical model family used to pick reasoning-control bindings. Families with bindings: `qwen3`, `qwen3.5`, `qwq`, `deepseek-v3.1`, `deepseek-r1`, `phi-4-reasoning`, `gpt-oss`, `glm`, `granite`, `hunyuan`, `seed-oss`, `nemotron`, `cogito`, `hermes` (Hermes 4 only), `mimo` (MiMo-V2 only), `olmo` (Olmo 3 Think always-on), `claude`, `o-series`, `gemini`, `gemma` (Gemma 4 members only), `kimi` (Kimi K2.5 / K2.6 hybrid; K2.7-Code and K3 always-on), `minimax` (MiniMax-M2 and M2.x always-on; MiniMax-M3 hybrid via `thinking_mode`; Text-01 and M1 none), `exaone` (EXAONE 4.x hybrid; EXAONE Deep always-on). For `gemma`, `kimi`, `minimax`, `exaone`, `hermes`, `mimo`, `olmo` and `nemotron` the member is detected from the model id the backend reports, or from `modelName` when it reports none, so `modelFamily` alone does not select those bindings. Any other value (or an inferred label such as `llama`, `mistral`, `phi`, `magistral`, `arcee`) is accepted and reported as the `api` block's `modelFamily` without reasoning bindings. Inferred from `modelName` when omitted. Detection never overrides an explicit value; it only fills an empty one |
-| `apiUrl` | yes | Full backend URL including the endpoint path |
+| `apiUrl` | yes | Full backend URL including the endpoint path. For `byteplus-video` and `renderful`, the vendor's API base instead (see [Video models](#video-models)) |
 | `apiKey` | optional | Backend API key (resale providers usually need this) |
 | `capabilities` | optional | Facts about the model as served that you state instead of letting detection find them: `context`, `maxOutput`, `modalities`, `tools`, `structured`, `webSearch`, `embeddings`. Each declared field wins over every other source and is published with evidence `declared`; see [Declared capabilities](#declared-capabilities) |
 | `concurrentSlots` | optional | Distinct concurrent chats your backend can handle for **this** model |
@@ -370,6 +370,20 @@ Models without `apiStack` (such as `llama2` below) get a detected `api` block.
       "apiType": "decisions",
       "apiUrl": "https://openrouter.ai/api/alpha/decisions",
       "apiKey": "FILL_ME_IN"
+    },
+    {
+      "modelId": "0x00000000000000000000000000000000000000000000000000000000000000b1",
+      "modelName": "dreamina-seedance-2-0-260128",
+      "apiType": "byteplus-video",
+      "apiUrl": "https://ark.ap-southeast.bytepluses.com/api/v3",
+      "apiKey": "FILL_ME_IN"
+    },
+    {
+      "modelId": "0x00000000000000000000000000000000000000000000000000000000000000b2",
+      "modelName": "seedance-2.5-t2v",
+      "apiType": "renderful",
+      "apiUrl": "https://api.renderful.ai/api/v1",
+      "apiKey": "FILL_ME_IN"
     }
   ]
 }
@@ -378,6 +392,46 @@ Models without `apiStack` (such as `llama2` below) get a detected `api` block.
 <Note>
 **Decisions (`apiType=decisions`).** `apiUrl` must be the **full** upstream Decisions / System One endpoint URL (embeddings parity — no path append). TypeSafe example: `https://api.typesafe.ai/v1/systemone`. OpenRouter example: `https://openrouter.ai/api/alpha/decisions`. `modelName` is the upstream model id (e.g. `jev-1.13.0` or `typesafe/jev-1.13`); the adapter overwrites any client body `model`. Consumers call `POST /v1/decisions` — see [Decisions](/consumers/decisions).
 </Note>
+
+## Video models
+
+`apiType` `byteplus-video` and `renderful` serve hosted video generation as [video jobs](/consumers/video), never chat. A consumer submits a job on a session. The provider sends it to the vendor with its own `apiKey` and relays the job's status. The key never leaves the provider.
+
+| `apiType` | Vendor | `apiUrl` (API base) | `modelName` |
+|-----------|--------|---------------------|-------------|
+| `byteplus-video` | BytePlus ModelArk (Seedance) | `https://ark.ap-southeast.bytepluses.com/api/v3` | The Ark model id with its version, e.g. `dreamina-seedance-2-0-260128`, or a custom inference endpoint id |
+| `renderful` | Renderful | `https://api.renderful.ai/api/v1` | The Renderful model id, e.g. `seedance-2.5-t2v` |
+
+- `apiUrl` is the API base, not an endpoint: the adapter appends the task paths. The values above are also what the adapter uses when `apiUrl` is empty.
+- **BytePlus:** activate the model for your account in the Ark console. Otherwise every job fails with `404 ModelNotOpen`, and the health probe cannot see it.
+- **Renderful:** a first frame (image-to-video) works only when `modelName` ends in `-t2v`. The node sends those jobs to the `-i2v` sibling (`seedance-2.5-t2v` → `seedance-2.5-i2v`). Renderful takes the frame as `image_url` only.
+- **Price:** there is no per-model `video` block; a leftover `"video"` key is ignored. The bid's `pricePerSecond` sets the price.
+- **On chain:** register the model with a video tag (`video`, `t2v`, `i2v`, `text-to-video`, `text2video`, `image-to-video`, `image2video`) so `GET /blockchain/models` reports `ModelType` `VIDEO`. A model that also carries an `llm`, `stt`, `tts`, `embedding` or decisions tag keeps that type. Clients then send it chat, which a video `apiType` refuses.
+- **Health:** a free vendor probe, never a render. See [Model health self-report](/providers/full/model-health).
+- **Load:** consumers' status reads reach the vendor at most once per job every 5 s. The provider keeps each task record for 8 days.
+
+**`modelName` sets the limits** that the node offers and advertises in the model's job guide (`video` in the `/healthcheck` and pong `models` lists). The guide also publishes `modelName` itself as `model_name`, so a custom inference endpoint id used there is public. A job outside them is refused before it reaches the vendor. Omitted fields default to 5 s, `16:9`, `720p` and no audio. Every model takes the aspect ratios `16:9`, `4:3`, `1:1`, `3:4`, `9:16` and `21:9`. The `adaptive` column says whether it also takes `adaptive`, which keeps the first frame's own ratio. A job with a first frame is sent as `adaptive` on every BytePlus model and on Renderful Seedance models.
+
+`byteplus-video`: every model takes a first frame, as `image_url` or inline `image_b64`.
+
+| `modelName` starts with | Duration (s) | Resolutions | `adaptive` | `generate_audio` |
+|-------------------------|--------------|-------------|------------|------------------|
+| `dreamina-seedance-2-5` | 4–30 | `480p`, `720p`, `1080p` | yes | yes |
+| `dreamina-seedance-2-0-fast`, `dreamina-seedance-2-0-mini` | 4–15 | `480p`, `720p` | yes | yes |
+| `dreamina-seedance-2-0` (other) | 4–15 | `480p`, `720p`, `1080p` | yes | yes |
+| `seedance-1-5-pro` | 4–12 | `480p`, `720p`, `1080p` | yes | yes |
+| `seedance-1-0-pro` | 2–12 | `480p`, `720p`, `1080p` | no | no |
+| anything else, e.g. a custom inference endpoint id | 4–12 | `480p`, `720p` | no | no |
+
+`renderful`: a first frame only for a `-t2v` `modelName`, as `image_url`.
+
+| `modelName` starts with | Duration (s) | Resolutions | `adaptive` | `generate_audio` |
+|-------------------------|--------------|-------------|------------|------------------|
+| `seedance-2.0` | 4–15 | `480p`, `720p` | yes | yes |
+| `seedance-1.5` | 4–12 | `480p`, `720p` | yes | yes |
+| `seedance-1.0` | 2–12 | `720p`, `1080p` | yes | no |
+| any other `seedance-`, e.g. `seedance-2.5-t2v` | 4–30 | `480p`, `720p` | yes | yes |
+| anything else | 4–30 | `480p`, `720p` | yes | no |
 
 ## Reload without a restart
 

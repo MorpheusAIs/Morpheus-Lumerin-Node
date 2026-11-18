@@ -33,7 +33,7 @@ This page is the high-level checklist. For the full setup, branch into one of:
 
 <Steps>
   <Step title="Have a backend model">
-    OpenAI-compatible endpoint reachable from your proxy-router host (e.g. `http://my-model:8080/v1/chat/completions`).
+    OpenAI-compatible endpoint reachable from your proxy-router host (e.g. `http://my-model:8080/v1/chat/completions`). For a hosted video model, an account and API key at BytePlus ModelArk or Renderful instead: see [Hosted video models](/providers/full/model-setup#hosted-video-models).
   </Step>
   <Step title="Look up what already exists">
     Before minting a new marketplace model, check [active.mor.org/status](https://active.mor.org/status) (or the JSON layers on [active.mor.org](/ecosystem/active-status) — usually `active_models.json` / `active_bids.json`) for the model name you intend to serve and competing prices. Prefer **bidding on an existing `modelId`**. See [Register on chain → Step 0](/providers/full/register-onchain#step-0--look-up-models-before-you-mint).
@@ -51,7 +51,7 @@ This page is the high-level checklist. For the full setup, branch into one of:
     Use [MyProvider](/providers/full/myprovider-gui) when you can (HTTPS node / SecretVM): register the provider, then **bid on an existing model**. Mint a new model only when nothing suitable exists (or you need a new `tee`-tagged listing). Swagger/API steps: [Register on chain](/providers/full/register-onchain). Every `postModelBid` charges a non-refundable `0.3 MOR` fee — finish local config before your first bid; see [Pricing](/providers/full/pricing).
   </Step>
   <Step title="Verify end-to-end">
-    Don't trust startup logs alone — run the five-step self-check in [Verify your provider setup](/providers/full/verify-setup): healthcheck, public TCP, on-chain records, `active.mor.org` discovery, and a real prompt via the hosted Inference API.
+    Don't trust startup logs alone — run the five-step self-check in [Verify your provider setup](/providers/full/verify-setup): healthcheck, public TCP, on-chain records, `active.mor.org` discovery, and a real prompt via the hosted Inference API (for a video model, a real job from a consumer proxy-router).
   </Step>
 </Steps>
 

@@ -85,6 +85,20 @@
       "apiType": "decisions",
       "apiUrl": "https://openrouter.ai/api/alpha/decisions",
       "apiKey": "FILL_ME_IN"
+    },
+    {
+      "modelId": "0x00000000000000000000000000000000000000000000000000000000000000b1",
+      "modelName": "dreamina-seedance-2-5-260628",
+      "apiType": "byteplus-video",
+      "apiUrl": "https://ark.ap-southeast.bytepluses.com/api/v3",
+      "apiKey": "FILL_ME_IN"
+    },
+    {
+      "modelId": "0x00000000000000000000000000000000000000000000000000000000000000b2",
+      "modelName": "seedance-2.5-t2v",
+      "apiType": "renderful",
+      "apiUrl": "https://api.renderful.ai/api/v1",
+      "apiKey": "FILL_ME_IN"
     }
   ]
 }

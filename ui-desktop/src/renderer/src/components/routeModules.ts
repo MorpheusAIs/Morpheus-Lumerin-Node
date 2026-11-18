@@ -5,6 +5,7 @@ type RouteModule = { default: ComponentType<any> };
 export type AppRoutePath =
   | '/wallet'
   | '/chat'
+  | '/video'
   | '/workspace'
   | '/agents'
   | '/models'
@@ -15,6 +16,7 @@ export type AppRoutePath =
 export const routeModules: Record<AppRoutePath, () => Promise<RouteModule>> = {
   '/wallet': () => import('./dashboard/Dashboard'),
   '/chat': () => import('./chat/Chat'),
+  '/video': () => import('./video/Video'),
   '/workspace': () => import('./cowork/Cowork'),
   '/agents': () => import('./agents/Agents'),
   '/models': () => import('./models/Models'),

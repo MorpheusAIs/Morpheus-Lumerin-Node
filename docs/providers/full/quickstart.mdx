@@ -85,6 +85,8 @@ This page covers a **non-TEE provider** running on your own infrastructure. For 
     }
     ```
     Full schema: [models-config.json](/reference/models-config). After edits, restart or call `POST /config/models/reload`.
+
+    A hosted video model (BytePlus ModelArk or Renderful) goes in the same file with `apiType` `byteplus-video` or `renderful`: see [Hosted video models](/providers/full/model-setup#hosted-video-models).
   </Step>
   <Step title="(Optional) provider weights & allowlist">
     Create `rating-config.json` in the working directory (and set `RATING_CONFIG_PATH=./rating-config.json` in `.env`) to bias selection or restrict to specific providers:

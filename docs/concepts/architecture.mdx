@@ -54,6 +54,14 @@ sequenceDiagram
   CRouter->>Chain: closeSession + settlement
 ```
 
+The diagram shows a chat prompt. A video job, a clip rendered by the provider's hosted video vendor (BytePlus ModelArk or Renderful), also travels over `:3333`, with its own MOR-RPC methods. MOR-RPC is the signed message protocol the two proxy-routers speak.
+
+1. To quote a job, the consumer proxy-router pings each provider that bids on the model (`network.ping`). The reply carries the model's job guide: fields, limits, defaults, and the weights that turn a clip into session seconds.
+2. On a session opened for that length, the consumer sends `session.video.create`. The provider submits the job to its vendor and returns a receipt.
+3. The consumer asks for progress with `session.video.status` until the job ends.
+
+The finished clip is a link on the vendor's CDN. Neither proxy-router carries the file, and the vendor API key stays on the provider. See [Video jobs](/consumers/video).
+
 ## Ports and surfaces
 
 | Port | Process | Visibility | Purpose |
