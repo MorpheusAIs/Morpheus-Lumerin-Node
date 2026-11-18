@@ -77,6 +77,7 @@ jobs:
       proxy: ${{ steps.classify.outputs.proxy }}
       ui: ${{ steps.classify.outputs.ui }}
       cicd: ${{ steps.classify.outputs.cicd }}
+      cli: ${{ steps.classify.outputs.cli }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -97,6 +98,7 @@ jobs:
             echo "proxy=$1" >> "$GITHUB_OUTPUT"
             echo "ui=$2"     >> "$GITHUB_OUTPUT"
             echo "cicd=$3"   >> "$GITHUB_OUTPUT"
+            echo "cli=$4"    >> "$GITHUB_OUTPUT"
             {
               echo "### 🔎 Component change detection"
               echo ""
@@ -105,6 +107,7 @@ jobs:
               echo "| proxy-router | \`$1\` |"
               echo "| ui-desktop / cli | \`$2\` |"
               echo "| ci-cd (.github) | \`$3\` |"
+              echo "| cli | \`$4\` |"
             } >> "$GITHUB_STEP_SUMMARY"
           }
 
@@ -113,7 +116,7 @@ jobs:
           # actually runs, so classify every component as changed here.
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             echo "Manual dispatch → all components treated as changed."
-            emit true true true
+            emit true true true true
             exit 0
           fi
 
@@ -121,7 +124,7 @@ jobs:
           # to a full build (and a minor version bump).
           if [ -z "${BEFORE_SHA:-}" ] || [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
             echo "No usable base commit ('${BEFORE_SHA:-}') → all components treated as changed."
-            emit true true true
+            emit true true true true
             exit 0
           fi
 
@@ -132,15 +135,19 @@ jobs:
           PROXY=false
           UI=false
           CICD=false
+          CLI=false
           # proxy-router (anchor component). Per design, swagger/docs under
           # proxy-router/ intentionally count as a proxy change.
           if echo "$CHANGED" | grep -Eq '^proxy-router/'; then PROXY=true; fi
           # UI components eligible for an independent patch release.
           if echo "$CHANGED" | grep -Eq '^(ui-desktop|cli)/'; then UI=true; fi
+          # mor-cli sources. Release executables must rebuild when these change,
+          # even if proxy-router did not.
+          if echo "$CHANGED" | grep -Eq '^cli/'; then CLI=true; fi
           # CI/CD changes (excluding the docs workflow, which docs.yml owns).
           if echo "$CHANGED" | grep -E '^\.github/' | grep -qv '^\.github/workflows/docs\.yml$'; then CICD=true; fi
 
-          emit "$PROXY" "$UI" "$CICD"
+          emit "$PROXY" "$UI" "$CICD" "$CLI"
 
   Go-Module-Verify:
     name: Verify Go Modules
@@ -246,6 +253,17 @@ jobs:
               VMAJ=0
               VMIN=0
               VPAT=0
+          fi
+
+          # A proxy release that failed before tagging (v7.20.0) leaves the
+          # proxy-router delta sitting on main with no production tag. The next
+          # main build must still be a minor, or it would ship as a patch of
+          # the previous release and point the desktop app at the old router.
+          if [ "$GITHUB_REF_NAME" = "main" ] && [ "${PROXY_CHANGED}" != "true" ] && [ -n "$VLAST" ]; then
+              if git diff --name-only "v${VLAST}" HEAD -- proxy-router | grep -q .; then
+                  PROXY_CHANGED=true
+                  echo "proxy-router differs from v${VLAST}; this main build is a proxy release."
+              fi
           fi
 
           if [ "$GITHUB_REF_NAME" = "main" ]; then
@@ -1215,7 +1233,7 @@ jobs:
     name: Build Service Executables
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
-      !(github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test') && needs.changes.outputs.proxy != 'true') &&
+      !(github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test') && needs.changes.outputs.proxy != 'true' && needs.changes.outputs.cli != 'true') &&
       (
         (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true') 
@@ -3172,6 +3190,7 @@ jobs:
           # where the router stays at the anchor and is NOT re-attached here.
           if { [ "${{ github.ref }}" = "refs/heads/main" ] || [ "${{ github.ref }}" = "refs/heads/test" ]; } && \
              [ "${{ needs.changes.outputs.proxy }}" != "true" ] && \
+             [ "${{ needs.changes.outputs.cli }}" != "true" ] && \
              [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
             echo "full=false" >> "$GITHUB_OUTPUT"
             echo "Release mode: UI-ONLY (router anchored to ${{ needs.Generate-Tag.outputs.anchor_tag }})"
