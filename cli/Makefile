@@ -3,11 +3,13 @@ PROG = mor-cli
 
 all: $(PROG)
 
-$(PROG): main.go
-	go build -o $@ $^
+# Build the whole package. `go build main.go` compiles only that file and
+# drops modelsource.go, which is how the v7.20.0 release executable job failed.
+$(PROG):
+	go build -o $(PROG) .
 
 build:
-	go build -o mor-cli main.go
+	go build -o mor-cli .
 
 clean:
 	rm -f $(PROG)
@@ -20,7 +22,7 @@ uninstall:
 	rm $(DESTDIR)$(prefix)/bin/$(PROG)
 
 run:
-	go run main.go
+	go run .
 
-.PHONY: all clean install uninstall run
+.PHONY: all build clean install uninstall run
 
