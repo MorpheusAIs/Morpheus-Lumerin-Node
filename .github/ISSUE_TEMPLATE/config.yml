@@ -1,8 +1,11 @@
 blank_issues_enabled: false
 contact_links:
   - name: Ask a question
-    url: https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/discussions
-    about: How-to and support questions go in Discussions
+    url: https://github.com/orgs/MorpheusAIs/discussions
+    about: How-to and support questions go in Morpheus Discussions
+  - name: Report a security issue
+    url: https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/security/policy
+    about: Report a vulnerability privately. Do not open a public issue
   - name: Node docs
     url: https://nodedocs.mor.org
     about: Product and node documentation
