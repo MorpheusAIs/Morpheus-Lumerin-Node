@@ -120,7 +120,12 @@ func (g *SessionRouter) parseOpenSessionReceipt(ctx context.Context, receipt *ty
 }
 
 func (g *SessionRouter) GetSession(ctx context.Context, sessionID common.Hash) (*src.ISessionStorageSession, error) {
-	session, err := g.sessionRouter.GetSession(&bind.CallOpts{Context: ctx}, sessionID)
+	return g.GetSessionAt(ctx, sessionID, nil)
+}
+
+// GetSessionAt reads the session at block, or at the latest block when block is nil.
+func (g *SessionRouter) GetSessionAt(ctx context.Context, sessionID common.Hash, block *big.Int) (*src.ISessionStorageSession, error) {
+	session, err := g.sessionRouter.GetSession(&bind.CallOpts{Context: ctx, BlockNumber: block}, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -216,35 +221,6 @@ func (g *SessionRouter) CloseSessionTx(opts *bind.TransactOpts, report []byte, s
 		return nil, lib.TryConvertGethError(err)
 	}
 	return tx, nil
-}
-
-func (g *SessionRouter) GetProviderClaimableBalance(ctx context.Context, sessionId [32]byte) (*big.Int, error) {
-	session, err := g.sessionRouter.GetSession(&bind.CallOpts{Context: ctx}, sessionId)
-	if err != nil {
-		return nil, lib.TryConvertGethError(err)
-	}
-
-	bid, err := g.sessionRouter.GetBid(&bind.CallOpts{Context: ctx}, session.BidId)
-	if err != nil {
-		return nil, lib.TryConvertGethError(err)
-	}
-
-	var sessionEnd *big.Int
-	if session.ClosedAt.Cmp(big.NewInt(0)) == 0 {
-		sessionEnd = session.EndsAt
-	} else {
-		sessionEnd = session.ClosedAt
-	}
-
-	if sessionEnd.Cmp(big.NewInt(time.Now().Unix())) > 0 {
-		return nil, fmt.Errorf("session not ended or does not exist")
-	}
-
-	duration := new(big.Int).Sub(sessionEnd, session.OpenedAt)
-	amount := new(big.Int).Mul(duration, bid.PricePerSecond)
-	amount.Sub(amount, session.ProviderWithdrawnAmount)
-
-	return amount, nil
 }
 
 func (g *SessionRouter) ClaimProviderBalance(opts *bind.TransactOpts, sessionId [32]byte) (common.Hash, error) {

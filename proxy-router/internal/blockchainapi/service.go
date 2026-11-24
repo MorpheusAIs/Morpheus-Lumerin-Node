@@ -981,10 +981,6 @@ func (s *BlockchainService) GetSession(ctx context.Context, sessionID common.Has
 	return mapSession(sessionID, *ses, *bid), nil
 }
 
-func (s *BlockchainService) GetProviderClaimableBalance(ctx context.Context, sessionID common.Hash) (*big.Int, error) {
-	return s.sessionRouter.GetProviderClaimableBalance(ctx, sessionID)
-}
-
 func (s *BlockchainService) GetBalance(ctx context.Context) (eth *big.Int, mor *big.Int, err error) {
 	prKey, err := s.privateKey.GetPrivateKey()
 	if err != nil {

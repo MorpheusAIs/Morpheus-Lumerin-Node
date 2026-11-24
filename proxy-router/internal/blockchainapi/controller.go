@@ -213,11 +213,13 @@ func (c *BlockchainController) withdrawUserStakes(ctx *gin.Context) {
 // GetProviderClaimableBalance godoc
 //
 //	@Summary		Get Provider Claimable Balance
-//	@Description	Get provider claimable balance from session
+//	@Description	What a claim for the session would accrue now, worked out like the contract: the reward ends at the earlier of closedAt and endsAt, what the session already paid out or recorded as debt is left out, the closing day's share is held back until that UTC day ends, and the provider's reward limiter caps the rest. A claim pays it to the payout target when the funding account covers it (always for direct-payment sessions) and otherwise adds it to the provider's debt, which GET /blockchain/providers/{id}/payouts reports. Answers 500 for an unknown session and until the session has ended on the node's clock.
 //	@Tags			sessions
 //	@Produce		json
 //	@Param			id	path		string	true	"Session ID"
 //	@Success		200	{object}	structs.BalanceRes
+//	@Failure		400	{object}	structs.ErrRes
+//	@Failure		500	{object}	structs.ErrRes
 //	@Security		BasicAuth
 //	@Router			/proxy/sessions/{id}/providerClaimableBalance [get]
 func (c *BlockchainController) getProviderClaimableBalance(ctx *gin.Context) {

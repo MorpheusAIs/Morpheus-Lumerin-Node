@@ -3550,7 +3550,7 @@ const docTemplate = `{
                         "BasicAuth": []
                     }
                 ],
-                "description": "Get provider claimable balance from session",
+                "description": "What a claim for the session would accrue now, worked out like the contract: the reward ends at the earlier of closedAt and endsAt, what the session already paid out or recorded as debt is left out, the closing day's share is held back until that UTC day ends, and the provider's reward limiter caps the rest. A claim pays it to the payout target when the funding account covers it (always for direct-payment sessions) and otherwise adds it to the provider's debt, which GET /blockchain/providers/{id}/payouts reports. Answers 500 for an unknown session and until the session has ended on the node's clock.",
                 "produces": [
                     "application/json"
                 ],
@@ -3572,6 +3572,18 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/structs.BalanceRes"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
                         }
                     }
                 }

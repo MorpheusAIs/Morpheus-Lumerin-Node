@@ -128,7 +128,12 @@ func (g *ProviderRegistry) DeregisterProvider(opts *bind.TransactOpts) (common.H
 }
 
 func (g *ProviderRegistry) GetProviderById(ctx context.Context, id common.Address) (*providerregistry.IProviderStorageProvider, error) {
-	provider, err := g.providerRegistry.GetProvider(&bind.CallOpts{Context: ctx}, id)
+	return g.GetProviderByIdAt(ctx, id, nil)
+}
+
+// GetProviderByIdAt reads the provider at block, or at the latest block when block is nil.
+func (g *ProviderRegistry) GetProviderByIdAt(ctx context.Context, id common.Address, block *big.Int) (*providerregistry.IProviderStorageProvider, error) {
+	provider, err := g.providerRegistry.GetProvider(&bind.CallOpts{Context: ctx, BlockNumber: block}, id)
 	if err != nil {
 		return nil, err
 	}

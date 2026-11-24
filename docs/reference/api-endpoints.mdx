@@ -425,7 +425,7 @@ Anyone may settle a pool session that nobody closed once `endsAt + settlementGra
 
 With the Stage 1 cut, anyone may send `POST /proxy/sessions/:id/providerClaim`, and the reward plus any debt of the provider go to its payout target, never to the sender.
 
-`GET /proxy/sessions/:id/providerClaimableBalance` is an upper bound, worked out by the node as before: (`closedAt`, or `endsAt` while the session is open, minus `openedAt`) × `pricePerSecond`, minus what the session already paid out or recorded as debt. A claim can pay less. The contract ends the reward at the earlier of `closedAt` and `endsAt`, holds back the reward of the closing day until that day ends (the dispute hold), and caps a provider's reward per period at its stake (the limiter); the node's figure ignores all three. Reward that accrued as debt is not in it; it is in `owed` above.
+`GET /proxy/sessions/:id/providerClaimableBalance` is what a claim for that session would accrue now, worked out the way the contract does: the reward ends at the earlier of `closedAt` and `endsAt`, the part the session already paid out or recorded as debt is left out, the closing day's share is held back until that UTC day ends (this matters after a disputed close), and the provider's reward limiter caps the rest at its stake per period. A claim pays that amount to the payout target when the funding account covers it (always for direct-payment sessions); otherwise it is added to `owed` above. Reward already owed as debt is not in the figure. The endpoint answers `500` for an unknown session and until the session has ended on the node's clock.
 
 ---
 
