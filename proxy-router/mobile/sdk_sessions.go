@@ -27,7 +27,7 @@ func (s *SDK) OpenSessionOmitting(ctx context.Context, modelID string, durationS
 	if omitProviderAddr != "" {
 		omit = common.HexToAddress(omitProviderAddr)
 	}
-	txHash, err := s.blockchain.OpenSessionByModelId(ctx, id, dur, directPayment, true, omit, "")
+	txHash, err := s.blockchain.OpenSessionByModelId(ctx, id, dur, directPayment, false, true, omit, "")
 	if err != nil {
 		return "", err
 	}
@@ -43,7 +43,7 @@ func (s *SDK) OpenSessionByBid(ctx context.Context, bidID string, durationSec in
 	}
 	id := common.HexToHash(bidID)
 	dur := big.NewInt(durationSec)
-	txHash, err := s.blockchain.OpenSessionByBidId(ctx, id, dur, directPayment, "")
+	txHash, err := s.blockchain.OpenSessionByBidId(ctx, id, dur, directPayment, false, "")
 	if err != nil {
 		return "", err
 	}

@@ -212,6 +212,10 @@ func (s *SystemController) GetConfig(ctx *gin.Context) {
 			"stake-limit-v1",
 			"operation-journal-v1",
 			"transaction-progress-v1",
+			// fromPool on the open routes and the estimate, the pool routes,
+			// settle and the payout routes. Older routers ignore fromPool and
+			// open from the wallet's MOR, so a client checks for this first.
+			"delegate-staking-pool-v1",
 		},
 		DerivedConfig: config.DerivedConfig{
 			WalletAddress: addr,

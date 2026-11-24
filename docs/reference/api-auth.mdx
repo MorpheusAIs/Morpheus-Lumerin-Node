@@ -3,7 +3,7 @@ title: "API authentication"
 description: "How the proxy-router authenticates HTTP API callers: the .cookie file, proxy.conf, rpcauth/rpcwhitelist, and the /auth/users endpoints."
 audience: ["consumer", "prosumer", "provider-full", "provider-resale", "developer"]
 product: ["proxy-router"]
-last_verified: "2026-10-06"
+last_verified: "2026-11-24"
 source: "docs/02.5-api-auth.md"
 ---
 
@@ -125,6 +125,7 @@ send_mor
 get_providers
 create_provider
 delete_provider
+set_payout_target
 get_models
 create_model
 delete_model
@@ -137,6 +138,9 @@ open_session
 close_session
 get_budget
 get_supply
+get_pool
+manage_pool_funders
+pool_maintenance
 get_wallet
 set_wallet
 remove_wallet
@@ -173,6 +177,8 @@ docker_manage
 Notes on a few of these:
 
 - `get_bids` also gates `GET /blockchain/models/prices` and `GET /blockchain/models/:id/session/estimate`; `get_sessions` gates `GET /blockchain/sessions/duration`.
+- The delegate-staking pool routes ([API endpoints](/reference/api-endpoints#delegate-staking-pool-and-provider-payouts)): `get_pool` covers the four pool reads (`GET /blockchain/pool`, `/pool/funders`, `/pool/withdrawals`, `/pool/locks`); `manage_pool_funders` approves and revokes funders of the node wallet's pool; `pool_maintenance` covers serving withdrawals, releasing locks and `POST /blockchain/sessions/:id/settle`, which spend only the node's gas. Opening from the pool needs no new permission: `fromPool` rides on `open_session`, and on the estimate on `get_bids`. `get_providers` also gates `GET /blockchain/providers/:id/payouts`.
+- `set_payout_target` (`POST /blockchain/providers/:id/payouts/target`) also requires `*`: the payout target receives the provider's income, so a caller without `*` gets `403` even when it holds the permission.
 - `set_wallet` covers `POST /wallet/privateKey`, `POST /wallet/mnemonic`, and `POST /wallet/derivationPath` (HD account switching). `get_wallet` is `GET /wallet`; `remove_wallet` is `DELETE /wallet`.
 - `system_config` covers `GET /config`, `POST /config/ethNode`, and `POST /config/models/reload`.
 - `video_jobs` covers `POST /v1/video/quote`, `POST /v1/video/jobs`, `GET /v1/video/jobs` and `GET /v1/video/jobs/:id`. A video client also needs `open_session` and `close_session` for the session its jobs run on, and `get_bids` for the stake estimate.
@@ -196,6 +202,8 @@ Beyond method whitelists, an **agent user** can carry per-token spending allowan
 The allowance is consumed by `POST /blockchain/send/eth`, `POST /blockchain/send/mor`, and session opens (the stake). It is spendable only once the agent is **confirmed**; the amount in a pending request has no effect. The `admin` user is never subject to allowances.
 
 **When the cap is debited.** The amount is held from the allowance **before** the transaction is broadcast and released only if the transaction was provably never sent (a pre-broadcast build or signing failure, or a session open whose attempts all failed without a pending transaction). A transaction that was broadcast but **timed out** waiting to be mined **keeps the debit**, because it may still mine. Earlier releases debited only after a successful mine, which let a retry after a timeout spend past the cap; that is closed. `send/eth` and `send/mor` that revert after broadcast also keep the debit — the cap is conservative by design; an admin re-grants via `POST /auth/allowance/confirm` if that leaves an agent short. Concurrent debits against one agent are serialised inside a single store transaction, so two simultaneous opens cannot both pass a cap that only covers one.
+
+**Pool sessions.** An open with `fromPool` debits the agent's MOR allowance by the stake too, although the stake comes from the node wallet's delegate-staking pool and the wallet's own MOR does not move. The cap limits how much stake an agent can put into sessions, whatever funds it, so one agent cannot take the whole pool. As with any open, the debit is not returned when the session closes.
 
 ## Recommendations
 

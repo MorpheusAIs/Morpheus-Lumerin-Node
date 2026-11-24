@@ -229,6 +229,12 @@ func shouldRetryRPCError(err error) bool {
 	if strings.Contains(msg, "execution reverted") || strings.Contains(msg, "revert") {
 		return false
 	}
+	// A read pinned to a block number (several views read at one block) can
+	// reach an endpoint that has not seen that block yet, while the endpoint
+	// that reported it as the head, or the next one, has it.
+	if strings.Contains(msg, "header not found") || strings.Contains(msg, "unknown block") {
+		return true
+	}
 	if strings.Contains(msg, "429") ||
 		strings.Contains(msg, "too many requests") ||
 		strings.Contains(msg, "rate limit") ||

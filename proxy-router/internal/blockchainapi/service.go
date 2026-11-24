@@ -94,6 +94,12 @@ type BlockchainService struct {
 	// OpenSessionByModelId; empty means HealthPolicyPermissive.
 	sessionHealthPolicy string
 
+	// Stage 1 facets. On a diamond without the Stage 1 cut their calls fail
+	// with registries.ErrStage1NotDeployed, and IsPoolSession is false.
+	providerPayouts        *r.ProviderPayouts
+	delegateStaking        *r.DelegateStaking
+	delegateStakingFunding *r.DelegateStakingFunding
+
 	supplyBudgetMu   sync.Mutex
 	cachedSupply     *big.Int
 	cachedSupplyAt   time.Time
@@ -141,6 +147,9 @@ var (
 
 	ErrProviderUnreachable    = errors.New("provider healthcheck ping failed")
 	ErrProviderModelUnhealthy = errors.New("provider self-reports model as not serviceable")
+
+	ErrPoolStakeOnly = errors.New("pool sessions are stake-only")
+	ErrPoolCapacity  = errors.New("the pool cannot cover the session stake")
 )
 
 func NewBlockchainService(
@@ -164,6 +173,9 @@ func NewBlockchainService(
 	modelRegistry := r.NewModelRegistry(diamonContractAddr, ethClient, mc, logEthRpc)
 	marketplace := r.NewMarketplace(diamonContractAddr, ethClient, mc, logEthRpc)
 	sessionRouter := r.NewSessionRouter(diamonContractAddr, ethClient, mc, logEthRpc)
+	providerPayouts := r.NewProviderPayouts(diamonContractAddr, ethClient, logEthRpc)
+	delegateStaking := r.NewDelegateStaking(diamonContractAddr, ethClient, logEthRpc)
+	delegateStakingFunding := r.NewDelegateStakingFunding(diamonContractAddr, ethClient, logEthRpc)
 	morToken := r.NewMorToken(morTokenAddr, ethClient, logEthRpc)
 
 	// Gas-price ceiling for our own txs. nil keeps the library default (1 gwei);
@@ -197,6 +209,10 @@ func NewBlockchainService(
 		authConfig:          authConfig,
 		txEscalator:         txEscalator,
 		attestationVerifier: attestationVerifier,
+
+		providerPayouts:        providerPayouts,
+		delegateStaking:        delegateStaking,
+		delegateStakingFunding: delegateStakingFunding,
 	}
 }
 
@@ -407,7 +423,14 @@ func (s *BlockchainService) rateBids(bidIds [][32]byte, bids []m.IBidStorageBid,
 	return scoredBids
 }
 
-func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalSig []byte, stake *big.Int, directPayment bool, agentUsername string, isTee bool) (common.Hash, error) {
+// OpenSession opens a session from a provider approval. With fromPool the stake
+// is drawn from the delegate-staking pool of this wallet as the hot wallet
+// instead of from its MOR, so the approval must name this wallet.
+func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalSig []byte, stake *big.Int, directPayment bool, fromPool bool, agentUsername string, isTee bool) (common.Hash, error) {
+	if fromPool && directPayment {
+		return common.Hash{}, ErrPoolStakeOnly
+	}
+
 	unlock, lockErr := lib.GatewayWalletLock(ctx)
 	if lockErr != nil {
 		return common.Hash{}, lockErr
@@ -416,6 +439,8 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 
 	log := s.requestLog(ctx)
 
+	// A pool open is held too: the agent cap limits the stake an agent puts
+	// into sessions, whatever funds it, so one agent cannot take the whole pool.
 	held, holdAmount, err := s.holdAgentAllowance(agentUsername, s.morTokenAddr.Hex(), stake)
 	if err != nil {
 		return common.Hash{}, err
@@ -438,19 +463,23 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 		return common.Hash{}, err
 	}
 
-	// Step 1: Approve MOR tokens with escalation (skip if allowance is already sufficient)
-	currentAllowance, err := s.morToken.GetAllowance(ctx, addr, s.diamonContractAddr)
-	if err != nil {
-		return common.Hash{}, fmt.Errorf("failed to get current MOR allowance: %w", err)
-	}
+	// Step 1: Approve MOR tokens with escalation (skip if allowance is already sufficient).
+	// A pool session takes no MOR from this wallet, so it needs no allowance.
+	needsApproval := false
+	if !fromPool {
+		currentAllowance, err := s.morToken.GetAllowance(ctx, addr, s.diamonContractAddr)
+		if err != nil {
+			return common.Hash{}, fmt.Errorf("failed to get current MOR allowance: %w", err)
+		}
 
-	stakeReserve := new(big.Int).Mul(stake, big.NewInt(allowanceReserveMultiplier))
-	needsApproval := currentAllowance.Cmp(stakeReserve) < 0
-	wouldOverflow := new(big.Int).Sub(maxUint256, currentAllowance).Cmp(stake) < 0
+		stakeReserve := new(big.Int).Mul(stake, big.NewInt(allowanceReserveMultiplier))
+		needsApproval = currentAllowance.Cmp(stakeReserve) < 0
+		wouldOverflow := new(big.Int).Sub(maxUint256, currentAllowance).Cmp(stake) < 0
 
-	if wouldOverflow {
-		log.Warnf("skipping increaseAllowance: current allowance %s + stake %s would overflow uint256", currentAllowance.String(), stake.String())
-		needsApproval = false
+		if wouldOverflow {
+			log.Warnf("skipping increaseAllowance: current allowance %s + stake %s would overflow uint256", currentAllowance.String(), stake.String())
+			needsApproval = false
+		}
 	}
 
 	if needsApproval {
@@ -495,6 +524,16 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 	// Step 2: Open session with escalation.
 	// Retry on "execution reverted" — the approval tx may have been mined but
 	// not yet visible to the RPC node serving the simulation/estimate call.
+	// A pool open retries the pool's own shortfall reverts for the same reason:
+	// the close or top-up that freed the stake may not be visible there yet.
+	openTx := func(opts *bind.TransactOpts) (*types.Transaction, error) {
+		return s.sessionRouter.OpenSessionTx(opts, approval, approvalSig, stake, directPayment)
+	}
+	if fromPool {
+		openTx = func(opts *bind.TransactOpts) (*types.Transaction, error) {
+			return s.delegateStaking.OpenSessionFromPoolTx(opts, opts.From, stake, approval, approvalSig)
+		}
+	}
 	var sessionReceipt *types.Receipt
 	var lastOpenErr error
 	for attempt := 0; attempt < sessionTxMaxRetries; attempt++ {
@@ -520,7 +559,7 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 				if err := lib.GatewayAttempt(ctx, "open"); err != nil {
 					return nil, err
 				}
-				tx, err := s.sessionRouter.OpenSessionTx(opts, approval, approvalSig, stake, directPayment)
+				tx, err := openTx(opts)
 				if opts.NoSend && err != nil && tx == nil {
 					lib.GatewayBuildFailure(ctx, "open")
 				}
@@ -532,7 +571,11 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 		if lastOpenErr == nil {
 			break
 		}
-		if !isExecutionReverted(lastOpenErr) {
+		// A diamond without the Stage 1 cut rejects every pool open the same way.
+		if errors.Is(lastOpenErr, r.ErrStage1NotDeployed) {
+			break
+		}
+		if !isExecutionReverted(lastOpenErr) && !(fromPool && isPoolShortfall(lastOpenErr)) {
 			break
 		}
 	}
@@ -809,20 +852,28 @@ func (s *BlockchainService) DeregisterProdiver(ctx context.Context) (common.Hash
 }
 
 func (s *BlockchainService) CloseSession(ctx context.Context, sessionID common.Hash) (common.Hash, error) {
+	txHash, _, err := s.CloseSessionReportingPool(ctx, sessionID)
+	return txHash, err
+}
+
+// CloseSessionReportingPool closes the session like CloseSession and reports
+// whether the close the chain accepted was the pool close. A failover reopens
+// with that answer, so the new session is funded the way the closed one was.
+func (s *BlockchainService) CloseSessionReportingPool(ctx context.Context, sessionID common.Hash) (common.Hash, bool, error) {
 	unlock, lockErr := lib.GatewayWalletLock(ctx)
 	if lockErr != nil {
-		return common.Hash{}, lockErr
+		return common.Hash{}, false, lockErr
 	}
 	defer unlock()
 
 	prKey, err := s.privateKey.GetPrivateKey()
 	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrPrKey, err)
+		return common.Hash{}, false, lib.WrapError(ErrPrKey, err)
 	}
 
 	addr, err := lib.PrivKeyBytesToAddr(prKey)
 	if err != nil {
-		return common.Hash{}, err
+		return common.Hash{}, false, err
 	}
 
 	var reportMessage []byte
@@ -835,11 +886,26 @@ func (s *BlockchainService) CloseSession(ctx context.Context, sessionID common.H
 		s.log.Info("using user report")
 		reportMessage, signedReport, err = s.proxyService.GetSessionReportFromUser(ctx, sessionID)
 		if err != nil {
-			return common.Hash{}, lib.WrapError(ErrSessionUserReport, err)
+			return common.Hash{}, false, lib.WrapError(ErrSessionUserReport, err)
 		}
 	} else {
 		reportMessage = report.Message
 		signedReport = report.SignedReport
+	}
+
+	// SessionRouter.closeSession rejects pool sessions and closePoolSession
+	// rejects the others; a diamond without the Stage 1 cut has no pool
+	// sessions. The lookup only picks the close to try first. When it fails,
+	// or the node answering it has not seen the open yet, the regular close
+	// is tried, and its SessionPoolSessionCannotBeClosed revert switches to
+	// closePoolSession: the close the chain accepts decides.
+	closeTx := s.sessionRouter.CloseSessionTx
+	isPool, err := s.delegateStakingFunding.IsPoolSession(ctx, sessionID)
+	if err != nil {
+		s.log.Warnf("cannot tell whether session %s is a pool session, trying the regular close first: %s", sessionID.Hex(), err)
+	}
+	if isPool {
+		closeTx = s.delegateStaking.ClosePoolSessionTx
 	}
 
 	var receipt *types.Receipt
@@ -850,14 +916,14 @@ func (s *BlockchainService) CloseSession(ctx context.Context, sessionID common.H
 			s.log.Warnf("closeSession reverted (attempt %d/%d), retrying in %s", attempt, sessionTxMaxRetries, backoff)
 			select {
 			case <-ctx.Done():
-				return common.Hash{}, fmt.Errorf("context cancelled during closeSession retry: %w", ctx.Err())
+				return common.Hash{}, false, fmt.Errorf("context cancelled during closeSession retry: %w", ctx.Err())
 			case <-time.After(backoff):
 			}
 		}
 
 		baseOpts, err := s.getTransactOpts(ctx, prKey)
 		if err != nil {
-			return common.Hash{}, lib.WrapError(ErrTxOpts, err)
+			return common.Hash{}, false, lib.WrapError(ErrTxOpts, err)
 		}
 
 		receipt, lastCloseErr = s.txEscalator.SendWithEscalation(
@@ -867,7 +933,7 @@ func (s *BlockchainService) CloseSession(ctx context.Context, sessionID common.H
 				if err := lib.GatewayAttempt(ctx, "close"); err != nil {
 					return nil, err
 				}
-				tx, err := s.sessionRouter.CloseSessionTx(opts, reportMessage, signedReport)
+				tx, err := closeTx(opts, reportMessage, signedReport)
 				if opts.NoSend && err != nil && tx == nil {
 					lib.GatewayBuildFailure(ctx, "close")
 				}
@@ -879,20 +945,28 @@ func (s *BlockchainService) CloseSession(ctx context.Context, sessionID common.H
 		if lastCloseErr == nil {
 			break
 		}
+		if !isPool && contractErrorName(lastCloseErr) == "SessionPoolSessionCannotBeClosed" {
+			s.log.Warnf("session %s is a pool session, closing it with closePoolSession", sessionID.Hex())
+			isPool = true
+			closeTx = s.delegateStaking.ClosePoolSessionTx
+			// Switching closes is not a retry of the same close.
+			attempt--
+			continue
+		}
 		if !isExecutionReverted(lastCloseErr) {
 			break
 		}
 	}
 	if lastCloseErr != nil {
 		s.handleTxError(ctx, addr, lastCloseErr)
-		return common.Hash{}, lib.WrapError(ErrSendTx, classifyCloseSessionError(lastCloseErr))
+		return common.Hash{}, false, lib.WrapError(ErrSendTx, classifyCloseSessionError(lastCloseErr))
 	}
 
 	if receipt.Status != 1 {
-		return receipt.TxHash, lib.WrapError(ErrSendTx, fmt.Errorf("close session tx failed with status %d", receipt.Status))
+		return receipt.TxHash, false, lib.WrapError(ErrSendTx, fmt.Errorf("close session tx failed with status %d", receipt.Status))
 	}
 
-	return receipt.TxHash, nil
+	return receipt.TxHash, isPool, nil
 }
 
 func (s *BlockchainService) GetSession(ctx context.Context, sessionID common.Hash) (*structs.Session, error) {
@@ -1204,6 +1278,9 @@ func (s *BlockchainService) increaseAllowance(ctx context.Context, spender commo
 	return tx.Hash(), nil
 }
 
+// ClaimProviderBalance sends claimForProvider for the session. On a diamond
+// with the Stage 1 cut anyone may send it: the reward and any debt of the
+// provider are paid to the provider's payout target, never to the sender.
 func (s *BlockchainService) ClaimProviderBalance(ctx context.Context, sessionID [32]byte) (common.Hash, error) {
 	prKey, err := s.privateKey.GetPrivateKey()
 	if err != nil {
@@ -1372,8 +1449,8 @@ func (s *BlockchainService) GetTransactions(ctx context.Context, page uint64, li
 }
 
 // OpenSessionByBidId opens a session against a specific bid (no provider failover).
-func (s *BlockchainService) OpenSessionByBidId(ctx context.Context, bidID common.Hash, duration *big.Int, directPayment bool, agentUsername string) (common.Hash, error) {
-	return s.openSessionByBid(ctx, bidID, duration, directPayment, agentUsername, nil)
+func (s *BlockchainService) OpenSessionByBidId(ctx context.Context, bidID common.Hash, duration *big.Int, directPayment bool, fromPool bool, agentUsername string) (common.Hash, error) {
+	return s.openSessionByBid(ctx, bidID, duration, directPayment, fromPool, agentUsername, nil)
 }
 
 // beforeOpen, when set, runs after the wallet and the bid have been resolved but
@@ -1381,7 +1458,11 @@ func (s *BlockchainService) OpenSessionByBidId(ctx context.Context, bidID common
 // and exists for the same reason: the guarded desktop flow has to decide whether
 // a session already exists while holding the wallet/model lock, and it cannot
 // know the model until the bid has been read.
-func (s *BlockchainService) openSessionByBid(ctx context.Context, bidID common.Hash, duration *big.Int, directPayment bool, agentUsername string, beforeOpen func(context.Context, common.Address, common.Hash) error) (common.Hash, error) {
+func (s *BlockchainService) openSessionByBid(ctx context.Context, bidID common.Hash, duration *big.Int, directPayment bool, fromPool bool, agentUsername string, beforeOpen func(context.Context, common.Address, common.Hash) error) (common.Hash, error) {
+	if fromPool && directPayment {
+		return common.Hash{}, ErrPoolStakeOnly
+	}
+
 	supply, err := s.GetTokenSupply(ctx)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrTokenSupply, err)
@@ -1406,6 +1487,14 @@ func (s *BlockchainService) openSessionByBid(ctx context.Context, bidID common.H
 		return common.Hash{}, ErrOpenOwnBid
 	}
 
+	var pool *poolCapacity
+	if fromPool {
+		pool, err = s.newPoolCapacity(ctx, userAddr)
+		if err != nil {
+			return common.Hash{}, err
+		}
+	}
+
 	if beforeOpen != nil {
 		if err := beforeOpen(ctx, userAddr, bid.ModelAgentId); err != nil {
 			return common.Hash{}, err
@@ -1420,18 +1509,29 @@ func (s *BlockchainService) openSessionByBid(ctx context.Context, bidID common.H
 		}
 	}
 
-	hash, _, err := s.tryOpenSession(ctx, bid, duration, supply, budget, userAddr, directPayment, false, agentUsername, isTee)
+	hash, _, err := s.tryOpenSession(ctx, bid, duration, supply, budget, userAddr, directPayment, pool, false, agentUsername, isTee)
 	return hash, err
 }
 
-func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID common.Hash, duration *big.Int, directPayment bool, isFailoverEnabled bool, omitProvider common.Address, agentUsername string) (common.Hash, error) {
-	return s.openSessionByModelID(ctx, modelID, duration, directPayment, isFailoverEnabled, omitProvider, agentUsername, nil)
+func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID common.Hash, duration *big.Int, directPayment bool, fromPool bool, isFailoverEnabled bool, omitProvider common.Address, agentUsername string) (common.Hash, error) {
+	return s.openSessionByModelID(ctx, modelID, duration, directPayment, fromPool, isFailoverEnabled, omitProvider, agentUsername, nil)
 }
 
-func (s *BlockchainService) openSessionByModelID(ctx context.Context, modelID common.Hash, duration *big.Int, directPayment bool, isFailoverEnabled bool, omitProvider common.Address, agentUsername string, beforeOpen func(context.Context, common.Address) error) (common.Hash, error) {
+func (s *BlockchainService) openSessionByModelID(ctx context.Context, modelID common.Hash, duration *big.Int, directPayment bool, fromPool bool, isFailoverEnabled bool, omitProvider common.Address, agentUsername string, beforeOpen func(context.Context, common.Address) error) (common.Hash, error) {
+	if fromPool && directPayment {
+		return common.Hash{}, ErrPoolStakeOnly
+	}
+
 	userAddr, err := s.GetMyAddress(ctx)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrMyAddress, err)
+	}
+	var pool *poolCapacity
+	if fromPool {
+		pool, err = s.newPoolCapacity(ctx, userAddr)
+		if err != nil {
+			return common.Hash{}, err
+		}
 	}
 	if beforeOpen != nil {
 		// Guarded desktop opens check for a resumable session before provider
@@ -1549,14 +1649,19 @@ func (s *BlockchainService) openSessionByModelID(ctx context.Context, modelID co
 			return common.Hash{}, err
 		}
 	}
+	// poolShort stays true while every provider tried failed because the pool
+	// cannot cover its stake; the open then fails as a capacity shortfall
+	// rather than as an unreachable market.
+	poolShort := len(candidates) > 0
 	for i, bid := range candidates {
 		log.Infof("trying to open session with provider #%d %s", i, bid.Bid.Provider.String())
 		durationCopy := new(big.Int).Set(duration)
 
-		hash, tryNext, err := s.tryOpenSession(ctx, &bid.Bid, durationCopy, supply, budget, userAddr, directPayment, isFailoverEnabled, agentUsername, isTee)
+		hash, tryNext, err := s.tryOpenSession(ctx, &bid.Bid, durationCopy, supply, budget, userAddr, directPayment, pool, isFailoverEnabled, agentUsername, isTee)
 		if err != nil {
 			log.Errorf("failed to open session with provider %s: %s", bid.Bid.Provider.String(), err.Error())
 			failures = append(failures, providerFailure{Provider: bid.Bid.Provider.String(), Reason: err.Error()})
+			poolShort = poolShort && errors.Is(err, ErrPoolCapacity)
 			if tryNext {
 				continue
 			} else {
@@ -1568,7 +1673,11 @@ func (s *BlockchainService) openSessionByModelID(ctx context.Context, modelID co
 	}
 
 	failuresJSON, _ := json.Marshal(failures)
-	return common.Hash{}, fmt.Errorf("no provider accepting session: %s", string(failuresJSON))
+	err = fmt.Errorf("no provider accepting session: %s", string(failuresJSON))
+	if poolShort {
+		return common.Hash{}, lib.WrapError(ErrPoolCapacity, err)
+	}
+	return common.Hash{}, err
 }
 
 func (s *BlockchainService) GetAllBidsWithRating(ctx context.Context, modelAgentID [32]byte) ([][32]byte, []m.IBidStorageBid, []sr.IStatsStorageProviderModelStats, []pr.IProviderStorageProvider, error) {
@@ -1684,8 +1793,28 @@ func computeSessionTokenAmount(ctx context.Context, bid *structs.Bid, duration, 
 // cost next to the amount being locked up.
 //
 // bidID selects the bid to quote. The zero hash quotes the highest-scored bid,
-// which is the one an unattended open tries first.
-func (s *BlockchainService) EstimateOpenSessionStake(ctx context.Context, modelID common.Hash, bidID common.Hash, duration *big.Int, directPayment bool) (*structs.OpenSessionStakeEstimate, error) {
+// which is the one an unattended open tries first. fromPool also reports the
+// stake the pool of this wallet can draw now.
+func (s *BlockchainService) EstimateOpenSessionStake(ctx context.Context, modelID common.Hash, bidID common.Hash, duration *big.Int, directPayment bool, fromPool bool) (*structs.OpenSessionStakeEstimate, error) {
+	if fromPool && directPayment {
+		return nil, ErrPoolStakeOnly
+	}
+
+	// The pool is read before the bids are rated, so a diamond without the
+	// Stage 1 cut answers at once.
+	poolAvailableStake := ""
+	if fromPool {
+		hot, err := s.GetMyAddress(ctx)
+		if err != nil {
+			return nil, lib.WrapError(ErrMyAddress, err)
+		}
+		available, err := s.delegateStakingFunding.GetAvailablePoolStake(ctx, hot, nil)
+		if err != nil {
+			return nil, err
+		}
+		poolAvailableStake = available.String()
+	}
+
 	rated, err := s.GetRatedBids(ctx, modelID)
 	if err != nil {
 		return nil, err
@@ -1726,6 +1855,10 @@ func (s *BlockchainService) EstimateOpenSessionStake(ctx context.Context, modelI
 	if directPayment {
 		settlement = "Direct payment pays the provider out of this amount at close and refunds the remainder."
 	}
+	funding := " The app raises its MOR allowance for the diamond when the allowance is below ~3× stake_wei, then the diamond pulls it in openSession."
+	if fromPool {
+		funding = " A pool open draws it from this wallet's delegate-staking pool instead, needs no MOR allowance, and fails when pool_available_stake_wei is below stake_wei."
+	}
 	return &structs.OpenSessionStakeEstimate{
 		StakeWei:           stake.String(),
 		SessionCostWei:     sessionCost.String(),
@@ -1739,8 +1872,9 @@ func (s *BlockchainService) EstimateOpenSessionStake(ctx context.Context, modelI
 		TopBidScore:        quoted.Score,
 		Explanation: "stake_wei ≈ (total MOR supply × price_per_second × duration) ÷ today's emissions budget, rounded up. " +
 			"It is not price_per_second × duration; that is session_cost_wei, the compute this session actually buys. " +
-			settlement +
-			" The app raises its MOR allowance for the diamond when the allowance is below ~3× stake_wei, then the diamond pulls it in openSession.",
+			settlement + funding,
+		FromPool:              fromPool,
+		PoolAvailableStakeWei: poolAvailableStake,
 	}, nil
 }
 
@@ -1761,8 +1895,11 @@ func (s *BlockchainService) GetSessionDurationBounds(ctx context.Context) (*stru
 	}, nil
 }
 
-func (s *BlockchainService) tryOpenSession(ctx context.Context, bid *structs.Bid, duration, supply, budget *big.Int, userAddr common.Address, directPayment bool, failoverEnabled bool, agentUsername string, isTeeSession bool) (common.Hash, bool, error) {
+// tryOpenSession opens a session on one bid. pool is set for an open from the
+// pool of userAddr, nil for an open from its MOR.
+func (s *BlockchainService) tryOpenSession(ctx context.Context, bid *structs.Bid, duration, supply, budget *big.Int, userAddr common.Address, directPayment bool, pool *poolCapacity, failoverEnabled bool, agentUsername string, isTeeSession bool) (common.Hash, bool, error) {
 	log := s.requestLog(ctx)
+	fromPool := pool != nil
 
 	provider, err := s.providerRegistry.GetProviderById(ctx, bid.Provider)
 	if err != nil {
@@ -1816,9 +1953,19 @@ func (s *BlockchainService) tryOpenSession(ctx context.Context, bid *structs.Bid
 	if err := lib.CheckGatewayStake(ctx, amountTransferred); err != nil {
 		return common.Hash{}, false, err
 	}
+	// The check runs before the provider is asked for an approval, so a stake
+	// the pool cannot cover costs no approval. The stake follows the bid's
+	// price, so the next bid may still fit: only a capacity shortfall tries
+	// it, not a diamond without the Stage 1 cut or a failed read.
+	if fromPool {
+		if err := s.checkPoolCapacity(ctx, pool, amountTransferred); err != nil {
+			return common.Hash{}, errors.Is(err, ErrPoolCapacity), err
+		}
+	}
 	log.Infof("attempting to initiate session %s", map[string]string{
 		"provider":          bid.Provider.String(),
 		"directPayment":     strconv.FormatBool(directPayment),
+		"fromPool":          strconv.FormatBool(fromPool),
 		"duration":          duration.String(),
 		"bid":               bid.Id.String(),
 		"endpoint":          provider.Endpoint,
@@ -1830,7 +1977,7 @@ func (s *BlockchainService) tryOpenSession(ctx context.Context, bid *structs.Bid
 		return common.Hash{}, true, lib.WrapError(ErrInitSession, err)
 	}
 
-	hash, err := s.OpenSession(ctx, initRes.Approval, initRes.ApprovalSig, amountTransferred, directPayment, agentUsername, isTeeSession)
+	hash, err := s.OpenSession(ctx, initRes.Approval, initRes.ApprovalSig, amountTransferred, directPayment, fromPool, agentUsername, isTeeSession)
 	if err != nil {
 		return common.Hash{}, false, err
 	}
@@ -2086,6 +2233,55 @@ func (s *BlockchainService) getTransactOpts(ctx context.Context, privKey lib.Hex
 	return transactOpts, nil
 }
 
+// sendWalletTx sends one transaction from the node wallet the way CloseSession
+// does: under the gateway wallet lock and through the escalator, with the
+// attempt and the signed transaction journaled under kind before it is
+// broadcast. build makes the transaction without sending it (opts.NoSend).
+func (s *BlockchainService) sendWalletTx(ctx context.Context, kind string, build func(opts *bind.TransactOpts) (*types.Transaction, error)) (common.Hash, error) {
+	unlock, lockErr := lib.GatewayWalletLock(ctx)
+	if lockErr != nil {
+		return common.Hash{}, lockErr
+	}
+	defer unlock()
+
+	prKey, err := s.privateKey.GetPrivateKey()
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrPrKey, err)
+	}
+
+	baseOpts, err := s.getTransactOpts(ctx, prKey)
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrTxOpts, err)
+	}
+
+	receipt, err := s.txEscalator.SendWithEscalation(
+		ctx,
+		baseOpts,
+		func(opts *bind.TransactOpts) (*types.Transaction, error) {
+			if err := lib.GatewayAttempt(ctx, kind); err != nil {
+				return nil, err
+			}
+			tx, err := build(opts)
+			if opts.NoSend && err != nil && tx == nil {
+				lib.GatewayBuildFailure(ctx, kind)
+			}
+			lib.GatewayRecord(ctx, kind, tx)
+			return tx, err
+		},
+		s.legacyTx,
+	)
+	if err != nil {
+		s.handleTxError(ctx, baseOpts.From, err)
+		return common.Hash{}, lib.WrapError(ErrSendTx, err)
+	}
+
+	if receipt.Status != 1 {
+		return receipt.TxHash, lib.WrapError(ErrSendTx, fmt.Errorf("%s tx failed with status %d", kind, receipt.Status))
+	}
+
+	return receipt.TxHash, nil
+}
+
 func (s *BlockchainService) signTx(ctx context.Context, tx *types.Transaction, privKey lib.HexString) (*types.Transaction, error) {
 	privateKey, err := crypto.ToECDSA(privKey)
 	if err != nil {
@@ -2126,6 +2322,29 @@ func isExecutionReverted(err error) bool {
 	}
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "execution reverted") || strings.Contains(msg, "revert")
+}
+
+// contractErrorName is the name of the custom contract error err was decoded
+// to, or "" when err is not a decoded revert. A decoded revert's message says
+// "EVM error", so isExecutionReverted does not match it.
+func contractErrorName(err error) string {
+	evmErr := lib.EVMError{}
+	if errors.As(err, &evmErr) {
+		return evmErr.Abi.Name
+	}
+	return ""
+}
+
+// isPoolShortfall reports the reverts of a pool open whose stake the pool
+// cannot draw: getAvailablePoolStake is the smaller of its liquidity and its
+// funders' capacity, and openSessionFromPool checks both.
+func isPoolShortfall(err error) bool {
+	switch contractErrorName(err) {
+	case "DelegateStakingInsufficientLiquidity", "DelegateStakingInsufficientCapacity":
+		return true
+	default:
+		return false
+	}
 }
 
 func isInsufficientAllowance(err error) bool {
@@ -2189,8 +2408,11 @@ func classifyCloseSessionError(err error) error {
 	switch {
 	case isInsufficientETH(err):
 		return fmt.Errorf("close session failed: insufficient ETH for gas — add ETH to your wallet to cover the close transaction fee. Original: %w", err)
+	// A diamond with the Stage 1 cut records an unpaid provider reward as debt
+	// instead of reverting, so only a diamond without the cut gets here.
 	case isInsufficientAllowance(err):
-		return fmt.Errorf("close session failed: the protocol funding pool does not have enough MOR allowance to settle provider payment — "+
+		return fmt.Errorf("close session failed: the protocol funding account does not have enough MOR allowance to pay the provider, "+
+			"which only blocks a close on a diamond without the Stage 1 upgrade — "+
 			"this is a network-level issue, not a wallet issue. The auto-close will keep retrying. Original: %w", err)
 	case isGasCapExceeded(err):
 		return fmt.Errorf("close session failed: gas price needed exceeds the configured cap — the network is not including transactions at a sane price. The auto-close will retry once it recovers, or raise ETH_NODE_MAX_GAS_PRICE_GWEI. Original: %w", err)

@@ -10,6 +10,11 @@ type OpenSessionRequest struct {
 	ApprovalSig   lib.HexString `json:"approvalSig" binding:"required" validate:"hexadecimal" format:"hex" example:"0x1234" swaggertype:"string"`
 	Stake         *lib.BigInt   `json:"stake" binding:"required" validate:"number,gt=0" example:"123000000000" swaggertype:"integer"`
 	DirectPayment bool          `json:"directPayment" binding:"omitempty"`
+	// FromPool draws the stake from the delegate-staking pool of the
+	// proxy-router wallet instead of from its MOR, so the approval must name
+	// that wallet. Pool sessions are stake-only: it cannot be combined with
+	// directPayment.
+	FromPool bool `json:"fromPool" binding:"omitempty"`
 }
 
 type AmountReq struct {
@@ -83,6 +88,10 @@ type OpenSessionWithDurationRequest struct {
 	// stake, letting a companion gateway enforce a spending ceiling on behalf
 	// of the wallet it manages.
 	MaxStakeWei *lib.BigInt `json:"maxStakeWei" binding:"omitempty" swaggertype:"integer"`
+	// FromPool draws the stake from the delegate-staking pool of the
+	// proxy-router wallet instead of from its MOR. It cannot be combined with
+	// directPayment.
+	FromPool bool `json:"fromPool" binding:"omitempty"`
 }
 
 // QueryOpenSessionEstimate selects what to quote: a session length, a payment
@@ -91,6 +100,9 @@ type QueryOpenSessionEstimate struct {
 	SessionDuration *lib.BigInt `form:"sessionDuration" binding:"required" validate:"number,gt=0" swaggertype:"integer"`
 	DirectPayment   bool        `form:"directPayment" binding:"omitempty"`
 	BidID           string      `form:"bidId" binding:"omitempty" validate:"omitempty,hex32"`
+	// FromPool quotes an open from the delegate-staking pool of the
+	// proxy-router wallet.
+	FromPool bool `form:"fromPool" binding:"omitempty"`
 }
 
 type OpenSessionWithFailover struct {
@@ -105,6 +117,10 @@ type OpenSessionWithFailover struct {
 	// OmitProvider excludes a provider from bid selection, e.g. one whose
 	// backend just failed a prompt (impaired provider failover).
 	OmitProvider lib.Address `json:"omitProvider" binding:"omitempty" swaggertype:"string" example:"0x1234567890abcdef1234567890abcdef12345678"`
+	// FromPool draws the stake from the delegate-staking pool of the
+	// proxy-router wallet instead of from its MOR. It cannot be combined with
+	// directPayment.
+	FromPool bool `json:"fromPool" binding:"omitempty"`
 }
 
 type CreateBidRequest struct {

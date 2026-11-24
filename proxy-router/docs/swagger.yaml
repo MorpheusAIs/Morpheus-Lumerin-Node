@@ -1049,6 +1049,13 @@ definitions:
         type: string
       directPayment:
         type: boolean
+      fromPool:
+        description: |-
+          FromPool draws the stake from the delegate-staking pool of the
+          proxy-router wallet instead of from its MOR, so the approval must name
+          that wallet. Pool sessions are stake-only: it cannot be combined with
+          directPayment.
+        type: boolean
       stake:
         example: 123000000000
         type: integer
@@ -1077,7 +1084,14 @@ definitions:
         type: string
       explanation:
         type: string
+      from_pool:
+        description: |-
+          FromPool quotes an open from the wallet's delegate-staking pool.
+          PoolAvailableStakeWei, set only then, is the stake the pool can draw now.
+        type: boolean
       mor_supply_wei:
+        type: string
+      pool_available_stake_wei:
         type: string
       price_per_second_wei:
         type: string
@@ -1098,6 +1112,12 @@ definitions:
           session instead of out of the emissions pool. Opening against a chosen
           bid used to force staking, so a consumer picking their own provider had
           no way to pay directly.
+        type: boolean
+      fromPool:
+        description: |-
+          FromPool draws the stake from the delegate-staking pool of the
+          proxy-router wallet instead of from its MOR. It cannot be combined with
+          directPayment.
         type: boolean
       maxStakeWei:
         description: |-
@@ -1125,6 +1145,12 @@ definitions:
         type: boolean
       failover:
         type: boolean
+      fromPool:
+        description: |-
+          FromPool draws the stake from the delegate-staking pool of the
+          proxy-router wallet instead of from its MOR. It cannot be combined with
+          directPayment.
+        type: boolean
       omitProvider:
         description: |-
           OmitProvider excludes a provider from bid selection, e.g. one whose
@@ -1141,6 +1167,147 @@ definitions:
       sessionDuration:
         type: integer
     type: object
+  structs.PayoutTargetRequest:
+    properties:
+      target:
+        example: 0x1234567890abcdef1234567890abcdef12345678
+        type: string
+    required:
+    - target
+    type: object
+  structs.PoolBalances:
+    properties:
+      free:
+        type: string
+      inSession:
+        type: string
+      locked:
+        type: string
+      pendingTotal:
+        type: string
+    type: object
+  structs.PoolFunder:
+    properties:
+      allowance:
+        $ref: '#/definitions/structs.PoolFunderAllowance'
+      funder:
+        type: string
+      inActiveList:
+        type: boolean
+    type: object
+  structs.PoolFunderAllowance:
+    properties:
+      active:
+        type: boolean
+      approved:
+        type: boolean
+      cumulativeFundingCap:
+        type: string
+      currentPrincipal:
+        type: string
+      expiry:
+        type: string
+      exposure:
+        type: string
+      lifetimeFunded:
+        type: string
+      lockedExposure:
+        type: string
+      pending:
+        type: string
+      revoked:
+        type: boolean
+    type: object
+  structs.PoolFunderRequest:
+    properties:
+      funder:
+        example: 0x1234567890abcdef1234567890abcdef12345678
+        type: string
+    required:
+    - funder
+    type: object
+  structs.PoolFundersRes:
+    properties:
+      funders:
+        items:
+          $ref: '#/definitions/structs.PoolFunder'
+        type: array
+      total:
+        type: string
+    type: object
+  structs.PoolLimits:
+    properties:
+      maxActiveFunders:
+        type: string
+      maxAutoReleaseDays:
+        type: string
+      maxAutoService:
+        type: string
+      maxMinPrincipal:
+        type: string
+      maxSettlementGrace:
+        type: string
+    type: object
+  structs.PoolLockBucket:
+    properties:
+      amount:
+        type: string
+      releaseAt:
+        type: string
+    type: object
+  structs.PoolLocksRes:
+    properties:
+      locks:
+        items:
+          $ref: '#/definitions/structs.PoolLockBucket'
+        type: array
+      total:
+        type: string
+    type: object
+  structs.PoolParameters:
+    properties:
+      maxActiveFunders:
+        type: string
+      maxAutoReleaseDays:
+        type: string
+      maxAutoService:
+        type: string
+      minPrincipal:
+        type: string
+      settlementGrace:
+        type: string
+    type: object
+  structs.PoolRes:
+    properties:
+      availableStake:
+        type: string
+      balances:
+        $ref: '#/definitions/structs.PoolBalances'
+      hot:
+        type: string
+      limits:
+        $ref: '#/definitions/structs.PoolLimits'
+      parameters:
+        $ref: '#/definitions/structs.PoolParameters'
+    type: object
+  structs.PoolWithdrawal:
+    properties:
+      amount:
+        type: string
+      funder:
+        type: string
+    type: object
+  structs.PoolWithdrawalsRes:
+    properties:
+      nextCursor:
+        type: string
+      total:
+        type: string
+      withdrawals:
+        items:
+          $ref: '#/definitions/structs.PoolWithdrawal'
+        type: array
+    type: object
   structs.Provider:
     properties:
       address:
@@ -1154,6 +1321,21 @@ definitions:
       stake:
         type: integer
     type: object
+  structs.ProviderPayoutsRes:
+    properties:
+      lifetimeClaimed:
+        type: string
+      lifetimeClaimedSince:
+        type: string
+      owed:
+        type: string
+      payoutTarget:
+        type: string
+      pendingProviderClaims:
+        type: string
+      provider:
+        type: string
+    type: object
   structs.ProviderRes:
     properties:
       provider:
@@ -1165,6 +1347,17 @@ definitions:
         items:
           $ref: '#/definitions/structs.Provider'
         type: array
+    type: object
+  structs.ReleasePoolLocksRequest:
+    properties:
+      hot:
+        example: 0x1234567890abcdef1234567890abcdef12345678
+        type: string
+      maxBuckets:
+        example: 32
+        maximum: 32
+        minimum: 1
+        type: integer
     type: object
   structs.ScoredBid:
     properties:
@@ -1191,6 +1384,17 @@ definitions:
     required:
     - amount
     - to
+    type: object
+  structs.ServePoolWithdrawalsRequest:
+    properties:
+      hot:
+        example: 0x1234567890abcdef1234567890abcdef12345678
+        type: string
+      maxEntries:
+        example: 32
+        maximum: 32
+        minimum: 1
+        type: integer
     type: object
   structs.Session:
     properties:
@@ -2151,7 +2355,11 @@ paths:
     post:
       consumes:
       - application/json
-      description: Full flow to open a session by bidId
+      description: 'Full flow to open a session by bidId. 409 carries existingSessionID
+        when rejectExisting finds a live session. With fromPool the stake is drawn
+        from the delegate-staking pool of the proxy-router wallet: 400 together with
+        directPayment, 409 with an error when the pool cannot cover the stake, 501
+        on a diamond without the Stage 1 cut.'
       parameters:
       - description: Open session
         in: body
@@ -2171,10 +2379,22 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.OpenSessionRes'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
         "409":
           description: Conflict
           schema:
             $ref: '#/definitions/structs.ExistingSessionRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "501":
+          description: Not Implemented
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
       security:
       - BasicAuth: []
       summary: Open Session by bidId in blockchain
@@ -2308,6 +2528,44 @@ paths:
             $ref: '#/definitions/structs.BidsRes'
       security:
       - BasicAuth: []
+      summary: "Get Bids by\tModel Agent"
+      tags:
+      - bids
+  /blockchain/models/{id}/bids/active:
+    get:
+      description: Get bids from blockchain by model agent
+      parameters:
+      - description: ModelAgent ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - example: 10
+        in: query
+        minimum: 1
+        name: limit
+        type: integer
+      - example: 0
+        in: query
+        minimum: 0
+        name: offset
+        type: integer
+      - enum:
+        - asc
+        - desc
+        example: asc
+        in: query
+        name: order
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.BidsRes'
+      security:
+      - BasicAuth: []
       summary: Get Active Bids by Model
       tags:
       - bids
@@ -2336,7 +2594,11 @@ paths:
     post:
       consumes:
       - application/json
-      description: Full flow to open a session by modelId
+      description: 'Full flow to open a session by modelId. 409 carries existingSessionID
+        when rejectExisting finds a live session. With fromPool the stake is drawn
+        from the delegate-staking pool of the proxy-router wallet: 400 together with
+        directPayment, 409 with an error when the pool cannot cover the stake of any
+        provider tried, 501 on a diamond without the Stage 1 cut.'
       parameters:
       - description: Open session
         in: body
@@ -2356,10 +2618,22 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.OpenSessionRes'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
         "409":
           description: Conflict
           schema:
             $ref: '#/definitions/structs.ExistingSessionRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "501":
+          description: Not Implemented
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
       security:
       - BasicAuth: []
       summary: Open Session by ModelID in blockchain
@@ -2388,6 +2662,11 @@ paths:
         in: query
         name: bidId
         type: string
+      - description: Quote an open from the delegate-staking pool of the proxy-router
+          wallet
+        in: query
+        name: fromPool
+        type: boolean
       produces:
       - application/json
       responses:
@@ -2395,6 +2674,18 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.OpenSessionStakeEstimate'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "501":
+          description: Not Implemented
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
       security:
       - BasicAuth: []
       summary: Estimate what opening a session costs
@@ -2420,6 +2711,343 @@ paths:
       summary: Get price index for every model
       tags:
       - models
+  /blockchain/pool:
+    get:
+      description: 'Permission: get_pool. The balances of the pool, the stake its
+        next session can draw, and the delegate-staking parameters in effect with
+        their hard limits. 501 on a diamond without the Stage 1 cut, as for every
+        pool route.'
+      parameters:
+      - description: Hot wallet address; the proxy-router wallet when omitted
+        in: query
+        name: hot
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.PoolRes'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "501":
+          description: Not Implemented
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+      security:
+      - BasicAuth: []
+      summary: Get a delegate-staking pool
+      tags:
+      - pool
+  /blockchain/pool/funders:
+    get:
+      description: 'Permission: get_pool. Every funder that has funded the pool, active
+        or not, with its allowance.'
+      parameters:
+      - description: Hot wallet address; the proxy-router wallet when omitted
+        in: query
+        name: hot
+        type: string
+      - default: 0
+        description: Funders to skip
+        in: query
+        minimum: 0
+        name: offset
+        type: integer
+      - default: 10
+        description: Page size
+        in: query
+        maximum: 128
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.PoolFundersRes'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "501":
+          description: Not Implemented
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+      security:
+      - BasicAuth: []
+      summary: List the funders of a delegate-staking pool
+      tags:
+      - pool
+    post:
+      consumes:
+      - application/json
+      description: 'Permission: manage_pool_funders. Lets the funder fund the pool
+        of the proxy-router wallet. 400 for the proxy-router wallet itself, which
+        funds its own pool without an approval. Accepts X-Gateway-Operation.'
+      parameters:
+      - description: Funder
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/structs.PoolFunderRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.TxRes'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "501":
+          description: Not Implemented
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+      security:
+      - BasicAuth: []
+      summary: Approve a funder of the delegate-staking pool
+      tags:
+      - pool
+  /blockchain/pool/funders/{id}:
+    delete:
+      description: 'Permission: manage_pool_funders. Stops draws from and top-ups
+        by the funder in the pool of the proxy-router wallet at once. It never blocks
+        the funder''s withdrawal. 400 for the zero address and for the proxy-router
+        wallet itself, whose own escrow no approval controls. Accepts X-Gateway-Operation.'
+      parameters:
+      - description: Funder address
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.TxRes'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "501":
+          description: Not Implemented
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+      security:
+      - BasicAuth: []
+      summary: Revoke a funder of the delegate-staking pool
+      tags:
+      - pool
+  /blockchain/pool/locks:
+    get:
+      description: 'Permission: get_pool. The day-locked stake of the pool that is
+        not released yet, one bucket per release time.'
+      parameters:
+      - description: Hot wallet address; the proxy-router wallet when omitted
+        in: query
+        name: hot
+        type: string
+      - default: 0
+        description: Buckets to skip
+        in: query
+        minimum: 0
+        name: offset
+        type: integer
+      - default: 10
+        description: Page size
+        in: query
+        maximum: 32
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.PoolLocksRes'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "501":
+          description: Not Implemented
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+      security:
+      - BasicAuth: []
+      summary: List the locked stake of a delegate-staking pool
+      tags:
+      - pool
+  /blockchain/pool/locks/release:
+    post:
+      consumes:
+      - application/json
+      description: 'Permission: pool_maintenance. Frees up to maxBuckets lock buckets
+        whose release time has passed, then pays up to maxAutoService queued withdrawals
+        to their funders. maxBuckets defaults to 32 and accepts 1 through 32. Accepts
+        X-Gateway-Operation.'
+      parameters:
+      - description: Pool and batch size, both optional
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/structs.ReleasePoolLocksRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.TxRes'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "501":
+          description: Not Implemented
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+      security:
+      - BasicAuth: []
+      summary: Release matured locks of a delegate-staking pool
+      tags:
+      - pool
+  /blockchain/pool/withdrawals:
+    get:
+      description: 'Permission: get_pool. A page of the queued funder withdrawals
+        in FIFO order. nextCursor starts the next page and is the zero address once
+        the tail is reached.'
+      parameters:
+      - description: Hot wallet address; the proxy-router wallet when omitted
+        in: query
+        name: hot
+        type: string
+      - description: Entry to start from, the nextCursor of the previous page; the
+          head of the queue when omitted
+        in: query
+        name: cursor
+        type: string
+      - default: 10
+        description: Page size
+        in: query
+        maximum: 128
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.PoolWithdrawalsRes'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "501":
+          description: Not Implemented
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+      security:
+      - BasicAuth: []
+      summary: List the withdrawal queue of a delegate-staking pool
+      tags:
+      - pool
+  /blockchain/pool/withdrawals/serve:
+    post:
+      consumes:
+      - application/json
+      description: 'Permission: pool_maintenance. Pays up to maxEntries queued withdrawals
+        to their funders; the sender never receives funds. maxEntries defaults to
+        32 and accepts 1 through 32. Accepts X-Gateway-Operation.'
+      parameters:
+      - description: Pool and batch size, both optional
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/structs.ServePoolWithdrawalsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.TxRes'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "501":
+          description: Not Implemented
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+      security:
+      - BasicAuth: []
+      summary: Pay queued withdrawals of a delegate-staking pool
+      tags:
+      - pool
   /blockchain/providers:
     get:
       description: Get providers list from blokchain
@@ -2571,6 +3199,95 @@ paths:
       summary: Get Bids by Provider
       tags:
       - bids
+  /blockchain/providers/{id}/payouts:
+    get:
+      description: 'Permission: get_providers. The payout target of the provider,
+        the reward still owed to it, and what it was paid since the Stage 1 upgrade.
+        pendingProviderClaims is the debt to all providers together. 501 on a diamond
+        without the Stage 1 cut.'
+      parameters:
+      - description: Provider address
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.ProviderPayoutsRes'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "501":
+          description: Not Implemented
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+      security:
+      - BasicAuth: []
+      summary: Get where a provider is paid and what it is owed
+      tags:
+      - providers
+  /blockchain/providers/{id}/payouts/target:
+    post:
+      consumes:
+      - application/json
+      description: 'Permission: set_payout_target, and the caller must have full access
+        ("*"): the target receives the provider''s income, so other callers return
+        403. The zero address or the provider itself resets the target. The contract
+        accepts it only when the proxy-router wallet is the provider or a delegate
+        holding its payout right. Accepts X-Gateway-Operation.'
+      parameters:
+      - description: Provider address
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Payout target
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/structs.PayoutTargetRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.TxRes'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "501":
+          description: Not Implemented
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+      security:
+      - BasicAuth: []
+      summary: Set where a provider is paid
+      tags:
+      - providers
   /blockchain/send/eth:
     post:
       description: Send Eth to address
@@ -2619,7 +3336,10 @@ paths:
     post:
       consumes:
       - application/json
-      description: Sends transaction in blockchain to open a session
+      description: 'Sends transaction in blockchain to open a session. With fromPool
+        the stake is drawn from the delegate-staking pool of the proxy-router wallet:
+        400 together with directPayment, 409 when the pool cannot cover the stake,
+        501 on a diamond without the Stage 1 cut.'
       parameters:
       - description: Open session
         in: body
@@ -2634,6 +3354,22 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.OpenSessionRes'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "501":
+          description: Not Implemented
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
       security:
       - BasicAuth: []
       summary: Open Session with Provider in blockchain
@@ -2679,6 +3415,47 @@ paths:
       security:
       - BasicAuth: []
       summary: Close Session with Provider
+      tags:
+      - sessions
+  /blockchain/sessions/{id}/settle:
+    post:
+      description: 'Permission: pool_maintenance. Settles a pool session nobody closed
+        once endsAt + settlementGrace has passed on chain: the stake returns to the
+        pool and the provider reward becomes debt. Anyone may send it. 409 when the
+        session is not a pool session, is already closed or settled, or the grace
+        has not passed. Accepts X-Gateway-Operation.'
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.TxRes'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+        "501":
+          description: Not Implemented
+          schema:
+            $ref: '#/definitions/structs.ErrRes'
+      security:
+      - BasicAuth: []
+      summary: Settle an expired pool session
       tags:
       - sessions
   /blockchain/sessions/budget:
@@ -3445,7 +4222,9 @@ paths:
       - chat
   /proxy/sessions/{id}/providerClaim:
     post:
-      description: Claim provider balance from session
+      description: Claim provider balance from session. On a diamond with the Stage
+        1 cut anyone may send it, and the reward and any debt owed to the provider
+        go to the provider's payout target, never to the sender.
       parameters:
       - description: Session ID
         in: path

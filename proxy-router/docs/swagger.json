@@ -582,7 +582,7 @@
                         "BasicAuth": []
                     }
                 ],
-                "description": "Full flow to open a session by bidId",
+                "description": "Full flow to open a session by bidId. 409 carries existingSessionID when rejectExisting finds a live session. With fromPool the stake is drawn from the delegate-staking pool of the proxy-router wallet: 400 together with directPayment, 409 with an error when the pool cannot cover the stake, 501 on a diamond without the Stage 1 cut.",
                 "consumes": [
                     "application/json"
                 ],
@@ -618,10 +618,28 @@
                             "$ref": "#/definitions/structs.OpenSessionRes"
                         }
                     },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
                     "409": {
                         "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/structs.ExistingSessionRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "501": {
+                        "description": "Not Implemented",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
                         }
                     }
                 }
@@ -818,6 +836,64 @@
                 "tags": [
                     "bids"
                 ],
+                "summary": "Get Bids by\tModel Agent",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ModelAgent ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "example": 10,
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "example": 0,
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "example": "asc",
+                        "name": "order",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.BidsRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/models/{id}/bids/active": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Get bids from blockchain by model agent",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bids"
+                ],
                 "summary": "Get Active Bids by Model",
                 "parameters": [
                     {
@@ -903,7 +979,7 @@
                         "BasicAuth": []
                     }
                 ],
-                "description": "Full flow to open a session by modelId",
+                "description": "Full flow to open a session by modelId. 409 carries existingSessionID when rejectExisting finds a live session. With fromPool the stake is drawn from the delegate-staking pool of the proxy-router wallet: 400 together with directPayment, 409 with an error when the pool cannot cover the stake of any provider tried, 501 on a diamond without the Stage 1 cut.",
                 "consumes": [
                     "application/json"
                 ],
@@ -939,10 +1015,28 @@
                             "$ref": "#/definitions/structs.OpenSessionRes"
                         }
                     },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
                     "409": {
                         "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/structs.ExistingSessionRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "501": {
+                        "description": "Not Implemented",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
                         }
                     }
                 }
@@ -989,6 +1083,12 @@
                         "description": "Quote this bid instead of the top-scored one",
                         "name": "bidId",
                         "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Quote an open from the delegate-staking pool of the proxy-router wallet",
+                        "name": "fromPool",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -996,6 +1096,520 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/structs.OpenSessionStakeEstimate"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "501": {
+                        "description": "Not Implemented",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/pool": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Permission: get_pool. The balances of the pool, the stake its next session can draw, and the delegate-staking parameters in effect with their hard limits. 501 on a diamond without the Stage 1 cut, as for every pool route.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pool"
+                ],
+                "summary": "Get a delegate-staking pool",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Hot wallet address; the proxy-router wallet when omitted",
+                        "name": "hot",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.PoolRes"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "501": {
+                        "description": "Not Implemented",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/pool/funders": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Permission: get_pool. Every funder that has funded the pool, active or not, with its allowance.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pool"
+                ],
+                "summary": "List the funders of a delegate-staking pool",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Hot wallet address; the proxy-router wallet when omitted",
+                        "name": "hot",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "default": 0,
+                        "description": "Funders to skip",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 128,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Page size",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.PoolFundersRes"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "501": {
+                        "description": "Not Implemented",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Permission: manage_pool_funders. Lets the funder fund the pool of the proxy-router wallet. 400 for the proxy-router wallet itself, which funds its own pool without an approval. Accepts X-Gateway-Operation.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pool"
+                ],
+                "summary": "Approve a funder of the delegate-staking pool",
+                "parameters": [
+                    {
+                        "description": "Funder",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/structs.PoolFunderRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.TxRes"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "501": {
+                        "description": "Not Implemented",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/pool/funders/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Permission: manage_pool_funders. Stops draws from and top-ups by the funder in the pool of the proxy-router wallet at once. It never blocks the funder's withdrawal. 400 for the zero address and for the proxy-router wallet itself, whose own escrow no approval controls. Accepts X-Gateway-Operation.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pool"
+                ],
+                "summary": "Revoke a funder of the delegate-staking pool",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Funder address",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.TxRes"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "501": {
+                        "description": "Not Implemented",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/pool/locks": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Permission: get_pool. The day-locked stake of the pool that is not released yet, one bucket per release time.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pool"
+                ],
+                "summary": "List the locked stake of a delegate-staking pool",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Hot wallet address; the proxy-router wallet when omitted",
+                        "name": "hot",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "default": 0,
+                        "description": "Buckets to skip",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 32,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Page size",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.PoolLocksRes"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "501": {
+                        "description": "Not Implemented",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/pool/locks/release": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Permission: pool_maintenance. Frees up to maxBuckets lock buckets whose release time has passed, then pays up to maxAutoService queued withdrawals to their funders. maxBuckets defaults to 32 and accepts 1 through 32. Accepts X-Gateway-Operation.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pool"
+                ],
+                "summary": "Release matured locks of a delegate-staking pool",
+                "parameters": [
+                    {
+                        "description": "Pool and batch size, both optional",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ReleasePoolLocksRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.TxRes"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "501": {
+                        "description": "Not Implemented",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/pool/withdrawals": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Permission: get_pool. A page of the queued funder withdrawals in FIFO order. nextCursor starts the next page and is the zero address once the tail is reached.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pool"
+                ],
+                "summary": "List the withdrawal queue of a delegate-staking pool",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Hot wallet address; the proxy-router wallet when omitted",
+                        "name": "hot",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Entry to start from, the nextCursor of the previous page; the head of the queue when omitted",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 128,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Page size",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.PoolWithdrawalsRes"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "501": {
+                        "description": "Not Implemented",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/pool/withdrawals/serve": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Permission: pool_maintenance. Pays up to maxEntries queued withdrawals to their funders; the sender never receives funds. maxEntries defaults to 32 and accepts 1 through 32. Accepts X-Gateway-Operation.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pool"
+                ],
+                "summary": "Pay queued withdrawals of a delegate-staking pool",
+                "parameters": [
+                    {
+                        "description": "Pool and batch size, both optional",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ServePoolWithdrawalsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.TxRes"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "501": {
+                        "description": "Not Implemented",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
                         }
                     }
                 }
@@ -1237,6 +1851,134 @@
                 }
             }
         },
+        "/blockchain/providers/{id}/payouts": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Permission: get_providers. The payout target of the provider, the reward still owed to it, and what it was paid since the Stage 1 upgrade. pendingProviderClaims is the debt to all providers together. 501 on a diamond without the Stage 1 cut.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "providers"
+                ],
+                "summary": "Get where a provider is paid and what it is owed",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Provider address",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ProviderPayoutsRes"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "501": {
+                        "description": "Not Implemented",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/providers/{id}/payouts/target": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Permission: set_payout_target, and the caller must have full access (\"*\"): the target receives the provider's income, so other callers return 403. The zero address or the provider itself resets the target. The contract accepts it only when the proxy-router wallet is the provider or a delegate holding its payout right. Accepts X-Gateway-Operation.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "providers"
+                ],
+                "summary": "Set where a provider is paid",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Provider address",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Payout target",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/structs.PayoutTargetRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.TxRes"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "501": {
+                        "description": "Not Implemented",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    }
+                }
+            }
+        },
         "/blockchain/send/eth": {
             "post": {
                 "security": [
@@ -1316,7 +2058,7 @@
                         "BasicAuth": []
                     }
                 ],
-                "description": "Sends transaction in blockchain to open a session",
+                "description": "Sends transaction in blockchain to open a session. With fromPool the stake is drawn from the delegate-staking pool of the proxy-router wallet: 400 together with directPayment, 409 when the pool cannot cover the stake, 501 on a diamond without the Stage 1 cut.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1343,6 +2085,30 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/structs.OpenSessionRes"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "501": {
+                        "description": "Not Implemented",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
                         }
                     }
                 }
@@ -1635,6 +2401,64 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/structs.TxRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/sessions/{id}/settle": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Permission: pool_maintenance. Settles a pool session nobody closed once endsAt + settlementGrace has passed on chain: the stake returns to the pool and the provider reward becomes debt. Anyone may send it. 409 when the session is not a pool session, is already closed or settled, or the grace has not passed. Accepts X-Gateway-Operation.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sessions"
+                ],
+                "summary": "Settle an expired pool session",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Session ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.TxRes"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
+                        }
+                    },
+                    "501": {
+                        "description": "Not Implemented",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ErrRes"
                         }
                     }
                 }
@@ -2684,7 +3508,7 @@
                         "BasicAuth": []
                     }
                 ],
-                "description": "Claim provider balance from session",
+                "description": "Claim provider balance from session. On a diamond with the Stage 1 cut anyone may send it, and the reward and any debt owed to the provider go to the provider's payout target, never to the sender.",
                 "produces": [
                     "application/json"
                 ],
@@ -5222,6 +6046,10 @@
                 "directPayment": {
                     "type": "boolean"
                 },
+                "fromPool": {
+                    "description": "FromPool draws the stake from the delegate-staking pool of the\nproxy-router wallet instead of from its MOR, so the approval must name\nthat wallet. Pool sessions are stake-only: it cannot be combined with\ndirectPayment.",
+                    "type": "boolean"
+                },
                 "stake": {
                     "type": "integer",
                     "example": 123000000000
@@ -5258,7 +6086,14 @@
                 "explanation": {
                     "type": "string"
                 },
+                "from_pool": {
+                    "description": "FromPool quotes an open from the wallet's delegate-staking pool.\nPoolAvailableStakeWei, set only then, is the stake the pool can draw now.",
+                    "type": "boolean"
+                },
                 "mor_supply_wei": {
+                    "type": "string"
+                },
+                "pool_available_stake_wei": {
                     "type": "string"
                 },
                 "price_per_second_wei": {
@@ -5285,6 +6120,10 @@
                     "description": "DirectPayment pays the provider out of the amount escrowed for this\nsession instead of out of the emissions pool. Opening against a chosen\nbid used to force staking, so a consumer picking their own provider had\nno way to pay directly.",
                     "type": "boolean"
                 },
+                "fromPool": {
+                    "description": "FromPool draws the stake from the delegate-staking pool of the\nproxy-router wallet instead of from its MOR. It cannot be combined with\ndirectPayment.",
+                    "type": "boolean"
+                },
                 "maxStakeWei": {
                     "description": "MaxStakeWei caps how much MOR a gateway-managed session is allowed to\nstake, letting a companion gateway enforce a spending ceiling on behalf\nof the wallet it manages.",
                     "type": "integer"
@@ -5307,6 +6146,10 @@
                 "failover": {
                     "type": "boolean"
                 },
+                "fromPool": {
+                    "description": "FromPool draws the stake from the delegate-staking pool of the\nproxy-router wallet instead of from its MOR. It cannot be combined with\ndirectPayment.",
+                    "type": "boolean"
+                },
                 "omitProvider": {
                     "description": "OmitProvider excludes a provider from bid selection, e.g. one whose\nbackend just failed a prompt (impaired provider failover).",
                     "type": "string",
@@ -5318,6 +6161,223 @@
                 },
                 "sessionDuration": {
                     "type": "integer"
+                }
+            }
+        },
+        "structs.PayoutTargetRequest": {
+            "type": "object",
+            "required": [
+                "target"
+            ],
+            "properties": {
+                "target": {
+                    "type": "string",
+                    "example": "0x1234567890abcdef1234567890abcdef12345678"
+                }
+            }
+        },
+        "structs.PoolBalances": {
+            "type": "object",
+            "properties": {
+                "free": {
+                    "type": "string"
+                },
+                "inSession": {
+                    "type": "string"
+                },
+                "locked": {
+                    "type": "string"
+                },
+                "pendingTotal": {
+                    "type": "string"
+                }
+            }
+        },
+        "structs.PoolFunder": {
+            "type": "object",
+            "properties": {
+                "allowance": {
+                    "$ref": "#/definitions/structs.PoolFunderAllowance"
+                },
+                "funder": {
+                    "type": "string"
+                },
+                "inActiveList": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "structs.PoolFunderAllowance": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "boolean"
+                },
+                "approved": {
+                    "type": "boolean"
+                },
+                "cumulativeFundingCap": {
+                    "type": "string"
+                },
+                "currentPrincipal": {
+                    "type": "string"
+                },
+                "expiry": {
+                    "type": "string"
+                },
+                "exposure": {
+                    "type": "string"
+                },
+                "lifetimeFunded": {
+                    "type": "string"
+                },
+                "lockedExposure": {
+                    "type": "string"
+                },
+                "pending": {
+                    "type": "string"
+                },
+                "revoked": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "structs.PoolFunderRequest": {
+            "type": "object",
+            "required": [
+                "funder"
+            ],
+            "properties": {
+                "funder": {
+                    "type": "string",
+                    "example": "0x1234567890abcdef1234567890abcdef12345678"
+                }
+            }
+        },
+        "structs.PoolFundersRes": {
+            "type": "object",
+            "properties": {
+                "funders": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/structs.PoolFunder"
+                    }
+                },
+                "total": {
+                    "type": "string"
+                }
+            }
+        },
+        "structs.PoolLimits": {
+            "type": "object",
+            "properties": {
+                "maxActiveFunders": {
+                    "type": "string"
+                },
+                "maxAutoReleaseDays": {
+                    "type": "string"
+                },
+                "maxAutoService": {
+                    "type": "string"
+                },
+                "maxMinPrincipal": {
+                    "type": "string"
+                },
+                "maxSettlementGrace": {
+                    "type": "string"
+                }
+            }
+        },
+        "structs.PoolLockBucket": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "string"
+                },
+                "releaseAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "structs.PoolLocksRes": {
+            "type": "object",
+            "properties": {
+                "locks": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/structs.PoolLockBucket"
+                    }
+                },
+                "total": {
+                    "type": "string"
+                }
+            }
+        },
+        "structs.PoolParameters": {
+            "type": "object",
+            "properties": {
+                "maxActiveFunders": {
+                    "type": "string"
+                },
+                "maxAutoReleaseDays": {
+                    "type": "string"
+                },
+                "maxAutoService": {
+                    "type": "string"
+                },
+                "minPrincipal": {
+                    "type": "string"
+                },
+                "settlementGrace": {
+                    "type": "string"
+                }
+            }
+        },
+        "structs.PoolRes": {
+            "type": "object",
+            "properties": {
+                "availableStake": {
+                    "type": "string"
+                },
+                "balances": {
+                    "$ref": "#/definitions/structs.PoolBalances"
+                },
+                "hot": {
+                    "type": "string"
+                },
+                "limits": {
+                    "$ref": "#/definitions/structs.PoolLimits"
+                },
+                "parameters": {
+                    "$ref": "#/definitions/structs.PoolParameters"
+                }
+            }
+        },
+        "structs.PoolWithdrawal": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "string"
+                },
+                "funder": {
+                    "type": "string"
+                }
+            }
+        },
+        "structs.PoolWithdrawalsRes": {
+            "type": "object",
+            "properties": {
+                "nextCursor": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "string"
+                },
+                "withdrawals": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/structs.PoolWithdrawal"
+                    }
                 }
             }
         },
@@ -5341,6 +6401,29 @@
                 }
             }
         },
+        "structs.ProviderPayoutsRes": {
+            "type": "object",
+            "properties": {
+                "lifetimeClaimed": {
+                    "type": "string"
+                },
+                "lifetimeClaimedSince": {
+                    "type": "string"
+                },
+                "owed": {
+                    "type": "string"
+                },
+                "payoutTarget": {
+                    "type": "string"
+                },
+                "pendingProviderClaims": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                }
+            }
+        },
         "structs.ProviderRes": {
             "type": "object",
             "properties": {
@@ -5357,6 +6440,21 @@
                     "items": {
                         "$ref": "#/definitions/structs.Provider"
                     }
+                }
+            }
+        },
+        "structs.ReleasePoolLocksRequest": {
+            "type": "object",
+            "properties": {
+                "hot": {
+                    "type": "string",
+                    "example": "0x1234567890abcdef1234567890abcdef12345678"
+                },
+                "maxBuckets": {
+                    "type": "integer",
+                    "maximum": 32,
+                    "minimum": 1,
+                    "example": 32
                 }
             }
         },
@@ -5397,6 +6495,21 @@
                 },
                 "to": {
                     "type": "string"
+                }
+            }
+        },
+        "structs.ServePoolWithdrawalsRequest": {
+            "type": "object",
+            "properties": {
+                "hot": {
+                    "type": "string",
+                    "example": "0x1234567890abcdef1234567890abcdef12345678"
+                },
+                "maxEntries": {
+                    "type": "integer",
+                    "maximum": 32,
+                    "minimum": 1,
+                    "example": 32
                 }
             }
         },

@@ -3,7 +3,7 @@ title: "API endpoints (selected)"
 description: "Hand-picked, prose-explained endpoints of the proxy-router HTTP API. Full schema lives in the repo at proxy-router/docs/swagger.yaml."
 audience: ["developer", "prosumer", "provider-full", "provider-resale"]
 product: ["proxy-router"]
-last_verified: "2026-09-25"
+last_verified: "2026-11-24"
 source: "docs/proxy-router-api-endpoints.md"
 ---
 
@@ -235,9 +235,9 @@ Reads `MIN_SESSION_DURATION` and `getMaxSessionDuration()` from the deployed con
 
 ## Estimate a session before opening
 
-`GET /blockchain/models/:id/session/estimate?sessionDuration=3600[&directPayment=false][&bidId=0x…]` — permission `get_bids`
+`GET /blockchain/models/:id/session/estimate?sessionDuration=3600[&directPayment=false][&bidId=0x…][&fromPool=false]` — permission `get_bids`
 
-Returns the MOR amount `openSession` will pull from the wallet and every input it was derived from. Without `bidId` it quotes the **top-scored** bid — the one an unattended open tries first. With `bidId` it quotes that bid (must be one of the model's rated bids, `400` if the value is not 32 bytes).
+Returns the MOR amount `openSession` will pull from the wallet and every input it was derived from. Without `bidId` it quotes the **top-scored** bid — the one an unattended open tries first. With `bidId` it quotes that bid (must be one of the model's rated bids, `400` if the value is not 32 bytes). With `fromPool=true` it quotes an [open from the pool](#open-a-session-from-the-pool): `from_pool` is `true` and `pool_available_stake_wei` is the stake the pool can draw now.
 
 ```json
 {
@@ -251,7 +251,8 @@ Returns the MOR amount `openSession` will pull from the wallet and every input i
   "bid_id": "0x…",
   "top_bid_provider": "0x…",
   "top_bid_score": 0.98,
-  "explanation": "…"
+  "explanation": "…",
+  "from_pool": false
 }
 ```
 
@@ -270,6 +271,7 @@ Returns the MOR amount `openSession` will pull from the wallet and every input i
 | `failover` | optional | Try the next rated provider if the first handshake fails. |
 | `rejectExisting` | optional | Refuse to open when this wallet already has a live session for the same model and return **`409 { "existingSessionID": "0x…" }`** instead. Off by default so callers that intentionally run parallel sessions keep working. |
 | `omitProvider` | optional | Exclude one provider address from bid selection. |
+| `fromPool` | optional | Draw the stake from the node wallet's delegate-staking pool instead of its MOR. See [Open a session from the pool](#open-a-session-from-the-pool). |
 
 ```bash
 curl --location 'http://localhost:8084/blockchain/models/0xe086adc275c99e32bb10b0aff5e8bfc391aad18cbb184727a75b2569149425c6/session' \
@@ -292,8 +294,9 @@ Same as above but targets one specific bid instead of running the failover loop.
 | `directPayment` | optional | Same meaning as above. Earlier releases forced staking on this route; a consumer picking their own provider can now pay directly. |
 | `rejectExisting` | optional | Same `409` behaviour as above, keyed on the bid's model. |
 | `maxStakeWei` | optional | Reject the open before anything is broadcast if the computed stake exceeds this cap. Also switches this open onto the gateway stake formula — see [Companion gateway mode](/prosumers/companion-gateway-mode#stake-cap-on-open-by-bid-maxstakewei). |
+| `fromPool` | optional | Same meaning as above. |
 
-Open-by-bid, close, and withdraw also accept an optional `X-Gateway-Operation` idempotency header on nodes running with `GATEWAY_JOURNAL_PATH`; when sent, responses gain a `progress` object. Nodes without the env, and calls without the header, return the same bodies as before. Details in [Companion gateway mode](/prosumers/companion-gateway-mode#operation-journal-x-gateway-operation).
+Open-by-bid, close, withdraw and the [pool and payout write routes](#delegate-staking-pool-and-provider-payouts) also accept an optional `X-Gateway-Operation` idempotency header on nodes running with `GATEWAY_JOURNAL_PATH`; when sent, responses gain a `progress` object. Nodes without the env, and calls without the header, return the same bodies as before. Details in [Companion gateway mode](/prosumers/companion-gateway-mode#operation-journal-x-gateway-operation).
 
 ---
 
@@ -358,6 +361,74 @@ Function selector: `0xa98a7c6b`. The caller must be the delegatee allowed for th
 
 ---
 
+## Delegate-staking pool and provider payouts
+
+These routes need a Diamond with the **Stage 1** facets (`DelegateStaking`, `DelegateStakingFunding`, `ProviderPayouts`). On a Diamond without them, every route in this section, and an open or estimate with `fromPool`, answers **`501`** with `Stage 1 contracts are not deployed on this diamond` instead of a raw revert. Everything else keeps working there, and every session closes the regular way. A node that serves these routes lists `delegate-staking-pool-v1` in the `GatewayCapabilities` of `GET /config` ([capability discovery](/prosumers/companion-gateway-mode#capability-discovery)).
+
+Amounts are decimal wei strings. `hot` names the hot wallet whose pool is read or serviced; it defaults to the node's own wallet. Write routes return `{"tx":"0x…"}` and accept `X-Gateway-Operation`; their journal entries use the kinds `approve_pool_funder`, `revoke_pool_funder`, `serve_pool_withdrawals`, `release_pool_locks`, `settle` and `set_payout_target`. They go out like a close: the signed transaction is journaled before it is broadcast, and a stuck one is re-sent at a higher gas price.
+
+A write route answers `409` when the contract refuses the call for the chain state or the node wallet's rights at that moment: a `DelegateStaking…` error, `ProviderPayoutTargetInvalid`, `InsufficientRightsForOperation` or `SessionAlreadyClosed`. A route with a funder or provider address in the path answers `400` for the zero address.
+
+### Pool
+
+A pool holds MOR that funders (cold wallets) put up for a hot wallet's sessions. The node manages the pool of its own wallet. Funders grant, fund and withdraw from their own wallets; the node has no routes for that.
+
+| Route | Permission | Notes |
+|-------|------------|-------|
+| `GET /blockchain/pool?hot=` | `get_pool` | `balances` (`free`, `inSession`, `locked`, `pendingTotal`), `availableStake` (what the next pool session can draw), the `parameters` in effect and their hard `limits`. |
+| `GET /blockchain/pool/funders?hot=&offset=0&limit=10` | `get_pool` | Every funder that has funded the pool, active or not, with its allowance. `limit` 1–128. |
+| `POST /blockchain/pool/funders` | `manage_pool_funders` | `{"funder":"0x…"}`. Lets that funder fund the node wallet's pool. |
+| `DELETE /blockchain/pool/funders/:id` | `manage_pool_funders` | Stops draws from and top-ups by that funder at once. It never blocks the funder's withdrawal. |
+| `GET /blockchain/pool/withdrawals?hot=&cursor=&limit=10` | `get_pool` | Queued funder withdrawals, oldest first. Pass `nextCursor` as `cursor` for the next page; it is the zero address after the last entry. `limit` 1–128. |
+| `POST /blockchain/pool/withdrawals/serve` | `pool_maintenance` | Optional `{"hot":"0x…","maxEntries":32}`. Pays up to `maxEntries` (1–32, default 32) queued withdrawals to their funders; the sender never receives funds. |
+| `GET /blockchain/pool/locks?hot=&offset=0&limit=10` | `get_pool` | Day-locked stake not released yet, one bucket per `releaseAt`. `limit` 1–32. |
+| `POST /blockchain/pool/locks/release` | `pool_maintenance` | Optional `{"hot":"0x…","maxBuckets":32}`. Frees up to `maxBuckets` (1–32, default 32) buckets whose `releaseAt` has passed, then pays up to `maxAutoService` queued withdrawals to their funders, so the freed stake can leave the pool in the same transaction. |
+
+Serving withdrawals and releasing locks are open to anyone on chain, so a node can service any hot wallet's pool; approving and revoking funders act on the node wallet's own pool. The day-locked part of a pool session's stake goes to these lock buckets, not to [`GET /blockchain/stakes/onhold`](#inspect-and-claim-day-locked-on-hold-balance).
+
+Both funder routes answer `400` for the node wallet itself. The contract counts a hot wallet as approved for its own pool and draws its own escrow without looking at an approval, so neither route would change anything. To stop drawing its own escrow, the node wallet sends `revokeStakingAllowance` for its pool; the node has no route for that.
+
+```bash
+curl -u 'admin:admin' 'http://localhost:8082/blockchain/pool'
+```
+
+### Open a session from the pool
+
+Send `"fromPool": true` in the body of `POST /blockchain/models/:id/session`, `POST /blockchain/bids/:id/session` or `POST /blockchain/sessions`. The stake comes from the pool of the node wallet instead of from its MOR, so the node sends no MOR allowance transaction. Bid rating, `failover`, `rejectExisting` and `maxStakeWei` work as for any open.
+
+- Look for `delegate-staking-pool-v1` in the `GatewayCapabilities` of `GET /config` before you send `fromPool`. An older router ignores the field it does not know and opens the session from the wallet's own MOR.
+- Pool sessions are stake-only: `fromPool` together with `directPayment` returns `400` (`pool sessions are stake-only`).
+- An agent user's pool open still debits its MOR allowance by the stake. See [Agent spending allowances](/reference/api-auth#agent-spending-allowances).
+- The node checks the pool before it asks a provider for an approval, so a stake the pool cannot cover costs no approval. The first shortfall of an open is read again after 3 and then 6 seconds, because the RPC node may not have seen a close or top-up that just landed. The stake follows each bid's price, so an open by model then tries the next provider. When the pool covers none of the providers tried, or not the one bid of an open by bid, the open fails with `409` and a message that gives both amounts.
+- On `POST /blockchain/sessions` the provider approval must name the node wallet as the user. A pool that cannot cover the stake there shows as the contract's revert, which the node retries the same way before it answers `409`.
+
+```bash
+curl -u 'admin:admin' -X POST 'http://localhost:8082/blockchain/models/0x…/session' \
+  -H 'Content-Type: application/json' \
+  -d '{"sessionDuration": 600, "fromPool": true}'
+```
+
+Closing needs nothing new. `POST /blockchain/sessions/:id/close`, the expiry auto-close and a failover close look up on chain whether the session came from a pool and send the matching close. When the lookup fails, or the RPC node has not seen the open yet, the node sends the regular close, and the contract's `SessionPoolSessionCannotBeClosed` revert switches it to the pool close. A failover reopens from the pool exactly when the close the chain accepted was the pool close.
+
+### Settle an expired pool session
+
+`POST /blockchain/sessions/:id/settle` — permission `pool_maintenance`
+
+Anyone may settle a pool session that nobody closed once `endsAt + settlementGrace` has passed on chain (`settlementGrace` is under `parameters` in `GET /blockchain/pool`). The stake returns to the pool and the provider's reward is recorded as debt. The node checks first and answers `409` when the session is not a pool session, is already closed or settled, or the grace has not passed; in the last case the message says from when it can be settled. The node compares against the latest block's timestamp, not its own clock. A session closed between the check and the transaction is a `409` as well.
+
+### Provider payouts
+
+| Route | Permission | Notes |
+|-------|------------|-------|
+| `GET /blockchain/providers/:id/payouts` | `get_providers` | `payoutTarget`, `owed` (reward recorded as debt), `lifetimeClaimed` since `lifetimeClaimedSince` (the upgrade), and `pendingProviderClaims`, the debt to all providers together. All of them are read at one block, as are the figures of `GET /blockchain/pool`. |
+| `POST /blockchain/providers/:id/payouts/target` | `set_payout_target` **and** `*` | `{"target":"0x…"}`. Sends the provider's future payouts to `target`; the zero address or the provider itself resets it. `target` is required, so a body without it is a `400`, never a reset. The node wallet must be the provider or a delegate holding its payout right. A caller without `*` gets `403`, because this redirects income. |
+
+With the Stage 1 cut, anyone may send `POST /proxy/sessions/:id/providerClaim`, and the reward plus any debt of the provider go to its payout target, never to the sender.
+
+`GET /proxy/sessions/:id/providerClaimableBalance` is an upper bound, worked out by the node as before: (`closedAt`, or `endsAt` while the session is open, minus `openedAt`) × `pricePerSecond`, minus what the session already paid out or recorded as debt. A claim can pay less. The contract ends the reward at the earlier of `closedAt` and `endsAt`, holds back the reward of the closing day until that day ends (the dispute hold), and caps a provider's reward per period at its stake (the limiter); the node's figure ignores all three. Reward that accrued as debt is not in it; it is in `owed` above.
+
+---
+
 ## Wallet and HD accounts
 
 `GET /wallet` — permission `get_wallet`
@@ -392,7 +463,7 @@ curl -s -X POST -u 'admin:yourpassword' http://localhost:8082/config/models/relo
 
 `404` on releases that predate the endpoint — restart instead. Full notes: [models-config.json → Reload without a restart](/reference/models-config#reload-without-a-restart).
 
-`GET /config` (same permission) returns the sanitised running config plus a `GatewayCapabilities` array (`stake-limit-v1`, `operation-journal-v1`, `transaction-progress-v1`) that companion gateways feature-detect against — see [Companion gateway mode](/prosumers/companion-gateway-mode#capability-discovery).
+`GET /config` (same permission) returns the sanitised running config plus a `GatewayCapabilities` array (`stake-limit-v1`, `operation-journal-v1`, `transaction-progress-v1`, `delegate-staking-pool-v1`) that companion gateways feature-detect against — see [Companion gateway mode](/prosumers/companion-gateway-mode#capability-discovery).
 
 ---
 

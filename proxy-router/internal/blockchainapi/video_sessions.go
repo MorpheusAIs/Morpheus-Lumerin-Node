@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi/structs"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/videojob"
@@ -37,19 +38,15 @@ func (s *BlockchainService) VideoSessionBounds(ctx context.Context) (int64, int6
 	var minSeconds, maxSeconds int64 = videoDefaultMinSessionSeconds, 0
 	if v, err := s.sessionRouter.GetMinSessionDuration(ctx); err == nil {
 		minSeconds = v.Int64()
-	} else if !selectorNotRegistered(err) {
+	} else if !lib.IsSelectorNotRegistered(err) {
 		return 0, 0, err
 	}
 	if v, err := s.sessionRouter.GetMaxSessionDuration(ctx); err == nil {
 		maxSeconds = v.Int64()
-	} else if !selectorNotRegistered(err) {
+	} else if !lib.IsSelectorNotRegistered(err) {
 		return 0, 0, err
 	}
 	return minSeconds, maxSeconds, nil
-}
-
-func selectorNotRegistered(err error) bool {
-	return strings.Contains(err.Error(), "selector is not registered")
 }
 
 // VideoGuides reads the guide every provider bidding on modelID advertises,

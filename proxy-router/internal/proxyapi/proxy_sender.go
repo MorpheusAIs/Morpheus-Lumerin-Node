@@ -919,8 +919,11 @@ func (p *ProxyServiceSender) prepareRequest(ctx context.Context, sessionID commo
 
 // handleFailover manages the failover process when a request fails
 func (p *ProxyServiceSender) handleFailover(ctx context.Context, session sessionrepo.SessionModel, cb gcs.CompletionCallback) (common.Hash, error) {
-	// Close current session
-	_, err := p.sessionService.CloseSession(ctx, session.ID())
+	// Close current session. A pool session is reopened from the pool; the
+	// session cache does not keep the funding source, so the close reports
+	// which close the chain accepted. Only a failed close stops the failover,
+	// so a diamond without the Stage 1 cut fails over as before.
+	_, fromPool, err := p.sessionService.CloseSessionReportingPool(ctx, session.ID())
 	if err != nil {
 		return common.Hash{}, err
 	}
@@ -938,6 +941,7 @@ func (p *ProxyServiceSender) handleFailover(ctx context.Context, session session
 		session.ModelID(),
 		big.NewInt(duration),
 		session.DirectPayment(),
+		fromPool,
 		session.FailoverEnabled(),
 		session.ProviderAddr(),
 		session.AgentUsername(),
