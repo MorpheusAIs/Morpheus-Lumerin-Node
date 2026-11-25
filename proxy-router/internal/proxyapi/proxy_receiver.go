@@ -58,6 +58,7 @@ type ProxyReceiver struct {
 	modelTagsProvider ModelTagsProvider
 	modelHealth       ModelHealthTracker
 	video             videoProviderState
+	sessionChain      SessionChainReader
 }
 
 func NewProxyReceiver(privateKeyHex, publicKeyHex lib.HexString, sessionStorage *storages.SessionStorage, aiEngine *aiengine.AiEngine, chainID *big.Int, modelConfigLoader *config.ModelConfigLoader, blockchainService BidGetter, sessionRepo *sessionrepo.SessionRepositoryCached) *ProxyReceiver {
@@ -84,6 +85,12 @@ func (s *ProxyReceiver) SetModelTagsProvider(p ModelTagsProvider) {
 
 func (s *ProxyReceiver) SetModelHealthTracker(t ModelHealthTracker) {
 	s.modelHealth = t
+}
+
+// SetSessionChainReader lets the capacity check confirm on chain that a
+// session still holding a slot locally has not already been closed.
+func (s *ProxyReceiver) SetSessionChainReader(r SessionChainReader) {
+	s.sessionChain = r
 }
 
 // isBackendFaultStatus reports whether an upstream error status indicates a
@@ -542,9 +549,9 @@ func (s *ProxyReceiver) SessionRequest(ctx context.Context, msgID string, reqID 
 	}
 
 	modelConfig := s.modelConfigLoader.ModelConfigFromID(modelID)
-	capacityManager := CreateCapacityManager(modelConfig, s.sessionStorage, log)
+	capacityManager := CreateCapacityManager(modelConfig, s.sessionStorage, s.sessionChain, log)
 
-	hasCapacity := capacityManager.HasCapacity(modelID)
+	hasCapacity := capacityManager.HasCapacity(ctx, modelID)
 	if !hasCapacity {
 		err := fmt.Errorf("no capacity")
 		log.Error(err)
