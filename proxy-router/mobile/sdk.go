@@ -200,7 +200,7 @@ func NewSDK(cfg Config) (*SDK, error) {
 		DefaultCNodePNodeTimeout, DefaultCNodePNodeMaxRetries, DefaultCNodeAudioMaxRetries, log,
 	)
 	// Authenticate contract providers (e.g. custody contracts) by their on-chain
-	// owner(), matching SessionRouter._isValidProviderReceipt's contract-owner branch.
+	// owner(), matching SessionSettlement._isValidProviderReceipt's contract-owner branch.
 	proxySender.SetProviderAuthResolver(proxyapi.NewProviderAuthResolver(ethClient))
 
 	explorer := blockchainapi.NewBlockscoutApiV2Client(cfg.BlockscoutURL, log.Named("INDEXER"))

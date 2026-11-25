@@ -2,6 +2,7 @@ package proxyapi
 
 import (
 	"context"
+	"errors"
 	"math/big"
 	"testing"
 
@@ -17,6 +18,7 @@ type mockCaller struct {
 	code      []byte
 	owner     common.Address
 	rawReturn []byte // if set, returned verbatim from CallContract (overrides owner padding)
+	callErr   error  // if set, CallContract fails with it (a revert or out of gas)
 	codeCalls int
 	callCalls int
 }
@@ -28,6 +30,9 @@ func (m *mockCaller) CodeAt(_ context.Context, _ common.Address, _ *big.Int) ([]
 
 func (m *mockCaller) CallContract(_ context.Context, _ ethereum.CallMsg, _ *big.Int) ([]byte, error) {
 	m.callCalls++
+	if m.callErr != nil {
+		return nil, m.callErr
+	}
 	if m.rawReturn != nil {
 		return m.rawReturn, nil
 	}
@@ -69,29 +74,35 @@ func TestAuthorizedSigner_ContractReturnsOwner(t *testing.T) {
 	}
 }
 
-// A non-standard owner() returning >32 bytes must decode the FIRST word (the
-// real owner), never trailing bytes of a later word.
-func TestAuthorizedSigner_DecodesFirstWord(t *testing.T) {
+// owner() names the signer only when SessionSettlement._isValidProviderReceipt
+// would accept it: exactly one 32-byte word holding a clean, non-zero address.
+func TestAuthorizedSigner_OwnerReturnData(t *testing.T) {
 	custody := common.HexToAddress("0x2222222222222222222222222222222222222222")
-	realOwner := common.HexToAddress("0x4444444444444444444444444444444444444444")
-	attacker := common.HexToAddress("0x5555555555555555555555555555555555555555")
-	raw := append(common.LeftPadBytes(realOwner.Bytes(), 32), common.LeftPadBytes(attacker.Bytes(), 32)...)
-	r := NewProviderAuthResolver(&mockCaller{code: []byte{0x60}, rawReturn: raw})
+	owner := common.HexToAddress("0x4444444444444444444444444444444444444444")
+	word := common.LeftPadBytes(owner.Bytes(), 32)
+	dirty := common.LeftPadBytes(owner.Bytes(), 32)
+	dirty[0] = 0x01
 
-	got, err := r.AuthorizedSigner(context.Background(), custody)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != realOwner {
-		t.Fatalf("want first-word owner %s, got %s", realOwner.Hex(), got.Hex())
-	}
-}
-
-func TestAuthorizedSigner_ZeroOwnerRejected(t *testing.T) {
-	custody := common.HexToAddress("0x2222222222222222222222222222222222222222")
-	r := NewProviderAuthResolver(&mockCaller{code: []byte{0x60}, owner: common.Address{}})
-	if _, err := r.AuthorizedSigner(context.Background(), custody); err == nil {
-		t.Fatal("expected error for zero owner(), got nil")
+	for _, tc := range []struct {
+		name    string
+		ret     []byte
+		callErr error
+		want    common.Address // zero = rejected
+	}{
+		{"one clean word", word, nil, owner},
+		{"longer than one word", append(common.CopyBytes(word), word...), nil, common.Address{}},
+		{"shorter than one word", word[1:], nil, common.Address{}},
+		{"dirty upper bytes", dirty, nil, common.Address{}},
+		{"zero address", make([]byte, 32), nil, common.Address{}},
+		{"call failed", nil, errors.New("out of gas"), common.Address{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := NewProviderAuthResolver(&mockCaller{code: []byte{0x60}, rawReturn: tc.ret, callErr: tc.callErr})
+			got, err := r.AuthorizedSigner(context.Background(), custody)
+			if got != tc.want || (err == nil) != (tc.want != common.Address{}) {
+				t.Fatalf("got %s, err %v; want %s", got.Hex(), err, tc.want.Hex())
+			}
+		})
 	}
 }
 

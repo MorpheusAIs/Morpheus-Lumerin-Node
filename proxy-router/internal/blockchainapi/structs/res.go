@@ -111,6 +111,10 @@ type OpenSessionStakeEstimate struct {
 	TopBidProvider     string  `json:"top_bid_provider"`
 	TopBidScore        float64 `json:"top_bid_score"`
 	Explanation        string  `json:"explanation"`
+	// FromPool quotes an open from the wallet's delegate-staking pool.
+	// PoolAvailableStakeWei, set only then, is the stake the pool can draw now.
+	FromPool              bool   `json:"from_pool"`
+	PoolAvailableStakeWei string `json:"pool_available_stake_wei,omitempty"`
 }
 
 // SessionDurationBounds is the session length range the deployed contract

@@ -289,7 +289,7 @@ func start() error {
 	sessionRepo := sessionrepo.NewSessionRepositoryCached(sessionStorage, sessionRouter, marketplace, appLog)
 	proxyRouterApi := proxyapi.NewProxySender(chainID, wallet, contractLogStorage, sessionStorage, sessionRepo, cfg.Proxy.CNodePNodeTimeout, cfg.Proxy.CNodePNodeMaxRetries, cfg.Proxy.CNodePNodeAudioMaxRetries, appLog)
 	// Authenticate contract providers (e.g. custody contracts) by their on-chain
-	// owner(), matching SessionRouter._isValidProviderReceipt's contract-owner branch.
+	// owner(), matching SessionSettlement._isValidProviderReceipt's contract-owner branch.
 	providerAuthResolver := proxyapi.NewProviderAuthResolver(ethClient)
 	proxyRouterApi.SetProviderAuthResolver(providerAuthResolver)
 	explorer := blockchainapi.NewBlockscoutApiV2Client(cfg.Blockchain.BlockscoutApiUrl, log.Named("INDEXER"))

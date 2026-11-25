@@ -8,6 +8,7 @@ import (
 
 	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/providerpayouts"
 	src "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/sessionrouter"
 	mc "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/multicall"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -24,11 +25,12 @@ type SessionRouter struct {
 	nonce uint64
 
 	// deps
-	client        i.ContractBackend
-	sessionRouter *src.SessionRouter
-	multicall     mc.MulticallBackend
-	srABI         *abi.ABI
-	log           lib.ILogger
+	client          i.ContractBackend
+	sessionRouter   *src.SessionRouter
+	providerPayouts *providerpayouts.ProviderPayouts
+	multicall       mc.MulticallBackend
+	srABI           *abi.ABI
+	log             lib.ILogger
 }
 
 var closeReportAbi = []lib.AbiParameter{
@@ -42,6 +44,13 @@ func NewSessionRouter(sessionRouterAddr common.Address, client i.ContractBackend
 	if err != nil {
 		panic("invalid marketplace ABI")
 	}
+	// Stage 1 moved the stake and emission views to the ProviderPayouts facet
+	// with unchanged selectors, so they are read at the same diamond address
+	// whether or not the diamond has the cut.
+	pp, err := providerpayouts.NewProviderPayouts(sessionRouterAddr, client)
+	if err != nil {
+		panic("invalid provider payouts ABI")
+	}
 	srABI, err := src.SessionRouterMetaData.GetAbi()
 	if err != nil {
 		panic("invalid marketplace ABI: " + err.Error())
@@ -49,6 +58,7 @@ func NewSessionRouter(sessionRouterAddr common.Address, client i.ContractBackend
 
 	return &SessionRouter{
 		sessionRouter:     sr,
+		providerPayouts:   pp,
 		sessionRouterAddr: sessionRouterAddr,
 		client:            client,
 		srABI:             srABI,
@@ -110,7 +120,12 @@ func (g *SessionRouter) parseOpenSessionReceipt(ctx context.Context, receipt *ty
 }
 
 func (g *SessionRouter) GetSession(ctx context.Context, sessionID common.Hash) (*src.ISessionStorageSession, error) {
-	session, err := g.sessionRouter.GetSession(&bind.CallOpts{Context: ctx}, sessionID)
+	return g.GetSessionAt(ctx, sessionID, nil)
+}
+
+// GetSessionAt reads the session at block, or at the latest block when block is nil.
+func (g *SessionRouter) GetSessionAt(ctx context.Context, sessionID common.Hash, block *big.Int) (*src.ISessionStorageSession, error) {
+	session, err := g.sessionRouter.GetSession(&bind.CallOpts{Context: ctx, BlockNumber: block}, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -208,35 +223,6 @@ func (g *SessionRouter) CloseSessionTx(opts *bind.TransactOpts, report []byte, s
 	return tx, nil
 }
 
-func (g *SessionRouter) GetProviderClaimableBalance(ctx context.Context, sessionId [32]byte) (*big.Int, error) {
-	session, err := g.sessionRouter.GetSession(&bind.CallOpts{Context: ctx}, sessionId)
-	if err != nil {
-		return nil, lib.TryConvertGethError(err)
-	}
-
-	bid, err := g.sessionRouter.GetBid(&bind.CallOpts{Context: ctx}, session.BidId)
-	if err != nil {
-		return nil, lib.TryConvertGethError(err)
-	}
-
-	var sessionEnd *big.Int
-	if session.ClosedAt.Cmp(big.NewInt(0)) == 0 {
-		sessionEnd = session.EndsAt
-	} else {
-		sessionEnd = session.ClosedAt
-	}
-
-	if sessionEnd.Cmp(big.NewInt(time.Now().Unix())) > 0 {
-		return nil, fmt.Errorf("session not ended or does not exist")
-	}
-
-	duration := new(big.Int).Sub(sessionEnd, session.OpenedAt)
-	amount := new(big.Int).Mul(duration, bid.PricePerSecond)
-	amount.Sub(amount, session.ProviderWithdrawnAmount)
-
-	return amount, nil
-}
-
 func (g *SessionRouter) ClaimProviderBalance(opts *bind.TransactOpts, sessionId [32]byte) (common.Hash, error) {
 	tx, err := g.sessionRouter.ClaimForProvider(opts, sessionId)
 	if err != nil {
@@ -244,16 +230,19 @@ func (g *SessionRouter) ClaimProviderBalance(opts *bind.TransactOpts, sessionId 
 	}
 
 	// Wait for the transaction receipt with timeout
-	_, err = lib.WaitMinedWithTimeout(opts.Context, g.client, tx, lib.DefaultTxMineTimeout)
+	receipt, err := lib.WaitMinedWithTimeout(opts.Context, g.client, tx, lib.DefaultTxMineTimeout)
 	if err != nil {
 		return common.Hash{}, err
+	}
+	if receipt.Status != 1 {
+		return receipt.TxHash, fmt.Errorf("Transaction failed with status %d", receipt.Status)
 	}
 
 	return tx.Hash(), nil
 }
 
 func (g *SessionRouter) GetUserStakesOnHold(ctx context.Context, user common.Address, iterations uint8) (available, hold *big.Int, err error) {
-	stakes, err := g.sessionRouter.GetUserStakesOnHold(&bind.CallOpts{Context: ctx}, user, iterations)
+	stakes, err := g.providerPayouts.GetUserStakesOnHold(&bind.CallOpts{Context: ctx}, user, iterations)
 	if err != nil {
 		return nil, nil, lib.TryConvertGethError(err)
 	}
@@ -283,7 +272,7 @@ func (g *SessionRouter) WithdrawUserStakes(opts *bind.TransactOpts, user common.
 }
 
 func (g *SessionRouter) GetTodaysBudget(ctx context.Context, timestamp *big.Int) (*big.Int, error) {
-	budget, err := g.sessionRouter.GetTodaysBudget(&bind.CallOpts{Context: ctx}, timestamp)
+	budget, err := g.providerPayouts.GetTodaysBudget(&bind.CallOpts{Context: ctx}, timestamp)
 	if err != nil {
 		return nil, lib.TryConvertGethError(err)
 	}
@@ -335,7 +324,7 @@ func (g *SessionRouter) GetABI() *abi.ABI {
 }
 
 func (g *SessionRouter) GetTotalMORSupply(ctx context.Context, timestamp *big.Int) (*big.Int, error) {
-	return g.sessionRouter.TotalMORSupply(&bind.CallOpts{Context: ctx}, timestamp)
+	return g.providerPayouts.TotalMORSupply(&bind.CallOpts{Context: ctx}, timestamp)
 }
 
 func (g *SessionRouter) getMultipleSessions(ctx context.Context, IDs [][32]byte) ([][32]byte, []src.ISessionStorageSession, error) {

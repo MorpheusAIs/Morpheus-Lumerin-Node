@@ -205,6 +205,7 @@ func (s *BlockchainService) OpenSessionByModelIdRejectExisting(
 	modelID common.Hash,
 	duration *big.Int,
 	directPayment bool,
+	fromPool bool,
 	isFailoverEnabled bool,
 	omitProvider common.Address,
 	agentUsername string,
@@ -225,6 +226,7 @@ func (s *BlockchainService) OpenSessionByModelIdRejectExisting(
 		modelID,
 		duration,
 		directPayment,
+		fromPool,
 		isFailoverEnabled,
 		omitProvider,
 		agentUsername,
@@ -262,6 +264,7 @@ func (s *BlockchainService) OpenSessionByBidIdRejectExisting(
 	bidID common.Hash,
 	duration *big.Int,
 	directPayment bool,
+	fromPool bool,
 	agentUsername string,
 ) (common.Hash, error) {
 	user, err := s.GetMyAddress(ctx)
@@ -286,6 +289,7 @@ func (s *BlockchainService) OpenSessionByBidIdRejectExisting(
 		bidID,
 		duration,
 		directPayment,
+		fromPool,
 		agentUsername,
 		func(ctx context.Context, openingUser common.Address, openingModel common.Hash) error {
 			if openingUser != user {

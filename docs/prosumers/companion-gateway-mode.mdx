@@ -3,7 +3,7 @@ title: "Companion gateway mode"
 description: "Optional proxy-router features for a gateway that manages sessions on your behalf: stake caps, a durable operation journal with progress reporting, a process-local wallet lock, and capability discovery."
 audience: ["prosumer", "developer"]
 product: ["proxy-router"]
-last_verified: "2026-09-22"
+last_verified: "2026-11-24"
 ---
 
 A **companion gateway** is a service that sits in front of your consumer proxy-router (C-Node) and opens, reuses, and closes sessions so the clients behind it never see a `session_id`. [Uplink](https://github.com/absgrafx/Morpheus-Uplink) is one such gateway; the hosted API at [api.mor.org](https://api.mor.org) is another (different product, same shape). The proxy-router exposes a small set of **opt-in** features for that companion. Every one of them is inert until you switch it on.
@@ -19,7 +19,7 @@ A **companion gateway** is a service that sits in front of your consumer proxy-r
 ```json
 {
   "Version": "…",
-  "GatewayCapabilities": ["stake-limit-v1", "operation-journal-v1", "transaction-progress-v1"],
+  "GatewayCapabilities": ["stake-limit-v1", "operation-journal-v1", "transaction-progress-v1", "delegate-staking-pool-v1"],
   "…": "…"
 }
 ```
@@ -29,6 +29,7 @@ A **companion gateway** is a service that sits in front of your consumer proxy-r
 | `stake-limit-v1` | `maxStakeWei` is honoured on `POST /blockchain/bids/{id}/session` |
 | `operation-journal-v1` | `X-Gateway-Operation` + `GATEWAY_JOURNAL_PATH` are supported |
 | `transaction-progress-v1` | Open / close / withdraw responses carry a `progress` object when an operation was journaled |
+| `delegate-staking-pool-v1` | `fromPool` is honoured on the open routes and the estimate, and the [pool, settle and payout routes](/reference/api-endpoints#delegate-staking-pool-and-provider-payouts) exist. Check for it before sending `fromPool`: an older router ignores the field and opens from the wallet's own MOR. The routes still answer `501` on a Diamond without the Stage 1 cut. |
 
 ## Stake cap on open-by-bid (`maxStakeWei`)
 
@@ -73,6 +74,7 @@ Send `X-Gateway-Operation: <32 lowercase hex chars>` on:
 - `POST /blockchain/bids/{id}/session`
 - `POST /blockchain/sessions/{id}/close`
 - `POST /blockchain/stakes/withdraw`
+- the [delegate-staking pool and payout](/reference/api-endpoints#delegate-staking-pool-and-provider-payouts) write routes: `POST /blockchain/pool/funders`, `DELETE /blockchain/pool/funders/{id}`, `POST /blockchain/pool/withdrawals/serve`, `POST /blockchain/pool/locks/release`, `POST /blockchain/sessions/{id}/settle` and `POST /blockchain/providers/{id}/payouts/target`
 
 Rules:
 
@@ -81,7 +83,7 @@ Rules:
 
 ### Progress in responses
 
-When an operation was journaled, success **and** error bodies on those three endpoints include a `progress` object:
+When an operation was journaled, success **and** error bodies on those endpoints include a `progress` object:
 
 ```json
 {
@@ -102,7 +104,7 @@ When an operation was journaled, success **and** error bodies on those three end
 
 | Field | Meaning |
 |-------|---------|
-| `stage` | `not_submitted` → `submitting_<kind>` → `submitted_<kind>`; or `needs_reconcile` (below). `kind` is `approval`, `open`, `close`, or `withdraw`. |
+| `stage` | `not_submitted` → `submitting_<kind>` → `submitted_<kind>`; or `needs_reconcile` (below). `kind` is `approval`, `open`, `close` or `withdraw`, and on the pool and payout routes `approve_pool_funder`, `revoke_pool_funder`, `serve_pool_withdrawals`, `release_pool_locks`, `settle` or `set_payout_target`. |
 | `transactions` | Every transaction hash the node produced for this operation, in order. Present even when the HTTP call ultimately failed. |
 | `sessionID` | Filled once the open receipt is parsed. |
 | `completed` / `http_status` | **Always pre-completion in the HTTP body** (`false` / `0`). They are finalised in the journal file after the response is written. Read the file under `GATEWAY_JOURNAL_PATH/<id>.json` for the final state. |
@@ -118,7 +120,7 @@ The journal contains stage, status, session ID, and transaction hashes only — 
 
 ## Wallet lock (managed mode)
 
-While `GATEWAY_JOURNAL_PATH` is set, `OpenSession`, `CloseSession`, and `WithdrawUserStakes` are serialised through a **process-local** lock so two concurrent gateway calls cannot race the same nonce. A call that is still waiting when its request context is cancelled returns the context error and never touches the chain.
+While `GATEWAY_JOURNAL_PATH` is set, `OpenSession`, `CloseSession`, `WithdrawUserStakes` and the six pool and payout write routes listed above are serialised through a **process-local** lock so two concurrent gateway calls cannot race the same nonce. A call waiting for the lock is not cancelled when its HTTP client disconnects: it runs once the lock is free and can still send its transaction. A journal that shows `not_submitted` after a dropped call therefore does not prove that nothing will be sent; wait until the journal file shows `completed` before retrying under a new operation ID.
 
 <Warning>
 The lock is per process. **Running more than one wallet-bearing proxy-router replica against the same wallet in managed mode is unsupported.** Run a single replica, or accept that cross-replica nonce collisions are your problem.

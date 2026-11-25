@@ -7,6 +7,7 @@ import (
 	"io"
 	"math/big"
 	"net/http"
+	"strings"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi/structs"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
@@ -31,6 +32,8 @@ func gatewaySessionIDPtr(progress *lib.GatewayProgress) *common.Hash {
 type BlockchainController struct {
 	service    *BlockchainService
 	userStakes userStakesService
+	pool       poolService
+	payouts    providerPayoutsService
 	log        lib.ILogger
 	authConf   system.HTTPAuthConfig
 }
@@ -40,10 +43,32 @@ type userStakesService interface {
 	WithdrawUserStakes(ctx context.Context, iterations uint8) (common.Hash, error)
 }
 
+// poolService covers the delegate-staking pool of a hot wallet, which is the
+// node wallet when hot is the zero address. On a diamond without the Stage 1
+// cut every call fails with registries.ErrStage1NotDeployed.
+type poolService interface {
+	GetPool(ctx context.Context, hot common.Address) (*structs.PoolRes, error)
+	GetPoolFunders(ctx context.Context, hot common.Address, offset *big.Int, limit uint8) (*structs.PoolFundersRes, error)
+	GetPoolWithdrawals(ctx context.Context, hot common.Address, cursor common.Address, limit uint8) (*structs.PoolWithdrawalsRes, error)
+	GetPoolLocks(ctx context.Context, hot common.Address, offset *big.Int, limit uint8) (*structs.PoolLocksRes, error)
+	ApprovePoolFunder(ctx context.Context, funder common.Address) (common.Hash, error)
+	RevokePoolFunder(ctx context.Context, funder common.Address) (common.Hash, error)
+	ServePoolWithdrawals(ctx context.Context, hot common.Address, maxEntries uint8) (common.Hash, error)
+	ReleasePoolLocks(ctx context.Context, hot common.Address, maxBuckets uint8) (common.Hash, error)
+	SettleExpiredSession(ctx context.Context, sessionID common.Hash) (common.Hash, error)
+}
+
+type providerPayoutsService interface {
+	GetProviderPayouts(ctx context.Context, provider common.Address) (*structs.ProviderPayoutsRes, error)
+	SetPayoutTarget(ctx context.Context, provider common.Address, target common.Address) (common.Hash, error)
+}
+
 func NewBlockchainController(service *BlockchainService, authConf system.HTTPAuthConfig, log lib.ILogger) *BlockchainController {
 	c := &BlockchainController{
 		service:    service,
 		userStakes: service,
+		pool:       service,
+		payouts:    service,
 		log:        log,
 		authConf:   authConf,
 	}
@@ -67,6 +92,8 @@ func (c *BlockchainController) RegisterRoutes(r interfaces.Router) {
 	r.GET("/blockchain/providers", c.authConf.CheckAuth("get_providers"), c.getAllProviders)
 	r.POST("/blockchain/providers", c.authConf.CheckAuth("create_provider"), c.createProvider)
 	r.DELETE("/blockchain/providers/:id", c.authConf.CheckAuth("delete_provider"), c.deregisterProvider)
+	r.GET("/blockchain/providers/:id/payouts", c.authConf.CheckAuth("get_providers"), c.getProviderPayouts)
+	r.POST("/blockchain/providers/:id/payouts/target", c.authConf.CheckAuth("set_payout_target"), c.setPayoutTarget)
 
 	// models
 	r.GET("/blockchain/models", c.authConf.CheckAuth("get_models"), c.getAllModels)
@@ -98,9 +125,21 @@ func (c *BlockchainController) RegisterRoutes(r interfaces.Router) {
 	r.POST("/blockchain/models/:id/session", c.authConf.CheckAuth("open_session"), c.openSessionByModelId)
 	r.GET("/blockchain/models/:id/session/estimate", c.authConf.CheckAuth("get_bids"), c.estimateOpenSession)
 	r.POST("/blockchain/sessions/:id/close", c.authConf.CheckAuth("close_session"), c.closeSession)
+	r.POST("/blockchain/sessions/:id/settle", c.authConf.CheckAuth("pool_maintenance"), c.settleExpiredSession)
 	r.GET("/blockchain/sessions/duration", c.authConf.CheckAuth("get_sessions"), c.getSessionDurationBounds)
 	r.GET("/blockchain/sessions/budget", c.authConf.CheckAuth("get_budget"), c.getBudget)
 	r.GET("/blockchain/token/supply", c.authConf.CheckAuth("get_supply"), c.getSupply)
+
+	// delegate-staking pool of a hot wallet, the proxy-router wallet unless the
+	// request names another one
+	r.GET("/blockchain/pool", c.authConf.CheckAuth("get_pool"), c.getPool)
+	r.GET("/blockchain/pool/funders", c.authConf.CheckAuth("get_pool"), c.getPoolFunders)
+	r.POST("/blockchain/pool/funders", c.authConf.CheckAuth("manage_pool_funders"), c.approvePoolFunder)
+	r.DELETE("/blockchain/pool/funders/:id", c.authConf.CheckAuth("manage_pool_funders"), c.revokePoolFunder)
+	r.GET("/blockchain/pool/withdrawals", c.authConf.CheckAuth("get_pool"), c.getPoolWithdrawals)
+	r.POST("/blockchain/pool/withdrawals/serve", c.authConf.CheckAuth("pool_maintenance"), c.servePoolWithdrawals)
+	r.GET("/blockchain/pool/locks", c.authConf.CheckAuth("get_pool"), c.getPoolLocks)
+	r.POST("/blockchain/pool/locks/release", c.authConf.CheckAuth("pool_maintenance"), c.releasePoolLocks)
 }
 
 // GetUserStakesOnHold godoc
@@ -174,11 +213,13 @@ func (c *BlockchainController) withdrawUserStakes(ctx *gin.Context) {
 // GetProviderClaimableBalance godoc
 //
 //	@Summary		Get Provider Claimable Balance
-//	@Description	Get provider claimable balance from session
+//	@Description	What a claim for the session would accrue now, worked out like the contract: the reward ends at the earlier of closedAt and endsAt, what the session already paid out or recorded as debt is left out, the closing day's share is held back until that UTC day ends, and the provider's reward limiter caps the rest. A claim pays it to the payout target when the funding account covers it (always for direct-payment sessions) and otherwise adds it to the provider's debt, which GET /blockchain/providers/{id}/payouts reports. Answers 500 for an unknown session and until the session has ended on the node's clock.
 //	@Tags			sessions
 //	@Produce		json
 //	@Param			id	path		string	true	"Session ID"
 //	@Success		200	{object}	structs.BalanceRes
+//	@Failure		400	{object}	structs.ErrRes
+//	@Failure		500	{object}	structs.ErrRes
 //	@Security		BasicAuth
 //	@Router			/proxy/sessions/{id}/providerClaimableBalance [get]
 func (c *BlockchainController) getProviderClaimableBalance(ctx *gin.Context) {
@@ -203,7 +244,7 @@ func (c *BlockchainController) getProviderClaimableBalance(ctx *gin.Context) {
 // ClaimProviderBalance godoc
 //
 //	@Summary		Claim Provider Balance
-//	@Description	Claim provider balance from session
+//	@Description	Claim provider balance from session. On a diamond with the Stage 1 cut anyone may send it, and the reward and any debt owed to the provider go to the provider's payout target, never to the sender.
 //	@Tags			sessions
 //	@Produce		json
 //	@Param			id	path		string	true	"Session ID"
@@ -527,7 +568,7 @@ func (c *BlockchainController) getBidsByModelAgent(ctx *gin.Context) {
 //	@Param			request	query		structs.QueryOffsetLimitOrder	true	"Query Params"
 //	@Success		200		{object}	structs.BidsRes
 //	@Security		BasicAuth
-//	@Router			/blockchain/models/{id}/bids [get]
+//	@Router			/blockchain/models/{id}/bids/active [get]
 func (c *BlockchainController) getActiveBidsByModel(ctx *gin.Context) {
 	var params structs.PathHex32ID
 	err := ctx.ShouldBindUri(&params)
@@ -673,12 +714,16 @@ func (c *BlockchainController) approve(ctx *gin.Context) {
 // OpenSession godoc
 //
 //	@Summary		Open Session with Provider in blockchain
-//	@Description	Sends transaction in blockchain to open a session
+//	@Description	Sends transaction in blockchain to open a session. With fromPool the stake is drawn from the delegate-staking pool of the proxy-router wallet: 400 together with directPayment, 409 when the pool cannot cover the stake, 501 on a diamond without the Stage 1 cut.
 //	@Tags			sessions
 //	@Produce		json
 //	@Accept			json
 //	@Param			opensession	body		structs.OpenSessionRequest	true	"Open session"
 //	@Success		200			{object}	structs.OpenSessionRes
+//	@Failure		400			{object}	structs.ErrRes
+//	@Failure		409			{object}	structs.ErrRes
+//	@Failure		500			{object}	structs.ErrRes
+//	@Failure		501			{object}	structs.ErrRes
 //	@Router			/blockchain/sessions [post]
 //	@Security		BasicAuth
 func (c *BlockchainController) openSession(ctx *gin.Context) {
@@ -697,10 +742,10 @@ func (c *BlockchainController) openSession(ctx *gin.Context) {
 	}
 	usernameStr := username.(string)
 
-	sessionId, err := c.service.OpenSession(ctx, reqPayload.Approval, reqPayload.ApprovalSig, reqPayload.Stake.Unpack(), reqPayload.DirectPayment, usernameStr, false)
+	sessionId, err := c.service.OpenSession(ctx, reqPayload.Approval, reqPayload.ApprovalSig, reqPayload.Stake.Unpack(), reqPayload.DirectPayment, reqPayload.FromPool, usernameStr, false)
 	if err != nil {
 		c.log.Error(err)
-		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
+		ctx.JSON(stage1ErrorStatus(err), structs.ErrRes{Error: err.Error()})
 		return
 	}
 
@@ -711,14 +756,17 @@ func (c *BlockchainController) openSession(ctx *gin.Context) {
 // OpenSessionByBidId godoc
 //
 //	@Summary		Open Session by bidId in blockchain
-//	@Description	Full flow to open a session by bidId
+//	@Description	Full flow to open a session by bidId. 409 carries existingSessionID when rejectExisting finds a live session. With fromPool the stake is drawn from the delegate-staking pool of the proxy-router wallet: 400 together with directPayment, 409 with an error when the pool cannot cover the stake, 501 on a diamond without the Stage 1 cut.
 //	@Tags			sessions
 //	@Produce		json
 //	@Accept			json
 //	@Param			opensession	body		structs.OpenSessionWithDurationRequest	true	"Open session"
 //	@Param			id			path		string									true	"Bid ID"
 //	@Success		200			{object}	structs.OpenSessionRes
+//	@Failure		400			{object}	structs.ErrRes
 //	@Failure		409			{object}	structs.ExistingSessionRes
+//	@Failure		500			{object}	structs.ErrRes
+//	@Failure		501			{object}	structs.ErrRes
 //	@Router			/blockchain/bids/{id}/session [post]
 //	@Security		BasicAuth
 func (s *BlockchainController) openSessionByBid(ctx *gin.Context) {
@@ -757,9 +805,9 @@ func (s *BlockchainController) openSessionByBid(ctx *gin.Context) {
 
 	var sessionId common.Hash
 	if reqPayload.RejectExisting {
-		sessionId, err = s.service.OpenSessionByBidIdRejectExisting(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), reqPayload.DirectPayment, usernameStr)
+		sessionId, err = s.service.OpenSessionByBidIdRejectExisting(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), reqPayload.DirectPayment, reqPayload.FromPool, usernameStr)
 	} else {
-		sessionId, err = s.service.openSessionByBid(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), reqPayload.DirectPayment, usernameStr, nil)
+		sessionId, err = s.service.openSessionByBid(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), reqPayload.DirectPayment, reqPayload.FromPool, usernameStr, nil)
 	}
 	if err != nil {
 		s.log.Error(err)
@@ -768,7 +816,7 @@ func (s *BlockchainController) openSessionByBid(ctx *gin.Context) {
 			ctx.JSON(http.StatusConflict, structs.ExistingSessionRes{ExistingSessionID: existing.SessionID})
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error(), SessionID: gatewaySessionIDPtr(progress), Progress: progress})
+		ctx.JSON(stage1ErrorStatus(err), structs.ErrRes{Error: err.Error(), SessionID: gatewaySessionIDPtr(progress), Progress: progress})
 		return
 	}
 
@@ -786,7 +834,11 @@ func (s *BlockchainController) openSessionByBid(ctx *gin.Context) {
 //	@Param			sessionDuration	query		int		true	"Session length in seconds"
 //	@Param			directPayment	query		bool	false	"Pay the provider from the escrowed amount instead of staking"
 //	@Param			bidId			query		string	false	"Quote this bid instead of the top-scored one"
+//	@Param			fromPool		query		bool	false	"Quote an open from the delegate-staking pool of the proxy-router wallet"
 //	@Success		200				{object}	structs.OpenSessionStakeEstimate
+//	@Failure		400				{object}	structs.ErrRes
+//	@Failure		500				{object}	structs.ErrRes
+//	@Failure		501				{object}	structs.ErrRes
 //	@Router			/blockchain/models/{id}/session/estimate [get]
 //	@Security		BasicAuth
 func (c *BlockchainController) estimateOpenSession(ctx *gin.Context) {
@@ -815,10 +867,10 @@ func (c *BlockchainController) estimateOpenSession(ctx *gin.Context) {
 		bidID = common.HexToHash(query.BidID)
 	}
 
-	estimate, err := c.service.EstimateOpenSessionStake(ctx, params.ID.Hash, bidID, query.SessionDuration.Unpack(), query.DirectPayment)
+	estimate, err := c.service.EstimateOpenSessionStake(ctx, params.ID.Hash, bidID, query.SessionDuration.Unpack(), query.DirectPayment, query.FromPool)
 	if err != nil {
 		c.log.Error(err)
-		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
+		ctx.JSON(stage1ErrorStatus(err), structs.ErrRes{Error: err.Error()})
 		return
 	}
 
@@ -848,14 +900,17 @@ func (c *BlockchainController) getSessionDurationBounds(ctx *gin.Context) {
 // OpenSessionByModelId godoc
 //
 //	@Summary		Open Session by ModelID in blockchain
-//	@Description	Full flow to open a session by modelId
+//	@Description	Full flow to open a session by modelId. 409 carries existingSessionID when rejectExisting finds a live session. With fromPool the stake is drawn from the delegate-staking pool of the proxy-router wallet: 400 together with directPayment, 409 with an error when the pool cannot cover the stake of any provider tried, 501 on a diamond without the Stage 1 cut.
 //	@Tags			sessions
 //	@Produce		json
 //	@Accept			json
 //	@Param			opensession	body		structs.OpenSessionWithFailover	true	"Open session"
 //	@Param			id			path		string							true	"Model ID"
 //	@Success		200			{object}	structs.OpenSessionRes
+//	@Failure		400			{object}	structs.ErrRes
 //	@Failure		409			{object}	structs.ExistingSessionRes
+//	@Failure		500			{object}	structs.ErrRes
+//	@Failure		501			{object}	structs.ErrRes
 //	@Router			/blockchain/models/{id}/session [post]
 //	@Security		BasicAuth
 func (s *BlockchainController) openSessionByModelId(ctx *gin.Context) {
@@ -885,9 +940,9 @@ func (s *BlockchainController) openSessionByModelId(ctx *gin.Context) {
 	isFailoverEnabled := reqPayload.Failover
 	var sessionId common.Hash
 	if reqPayload.RejectExisting {
-		sessionId, err = s.service.OpenSessionByModelIdRejectExisting(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), reqPayload.DirectPayment, isFailoverEnabled, reqPayload.OmitProvider.Address, usernameStr)
+		sessionId, err = s.service.OpenSessionByModelIdRejectExisting(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), reqPayload.DirectPayment, reqPayload.FromPool, isFailoverEnabled, reqPayload.OmitProvider.Address, usernameStr)
 	} else {
-		sessionId, err = s.service.OpenSessionByModelId(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), reqPayload.DirectPayment, isFailoverEnabled, reqPayload.OmitProvider.Address, usernameStr)
+		sessionId, err = s.service.OpenSessionByModelId(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), reqPayload.DirectPayment, reqPayload.FromPool, isFailoverEnabled, reqPayload.OmitProvider.Address, usernameStr)
 	}
 	if err != nil {
 		s.log.Error(err)
@@ -909,7 +964,50 @@ func writeOpenSessionError(ctx *gin.Context, err error) {
 		})
 		return
 	}
-	ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
+	ctx.JSON(stage1ErrorStatus(err), structs.ErrRes{Error: err.Error()})
+}
+
+// stage1ErrorStatus is the status of a failed call that can reach the Stage 1
+// facets: 400 for a request no chain state would accept, 409 for one the
+// chain does not accept now, and 501 on a diamond without the Stage 1 cut, so
+// a client can tell an older diamond from a failed chain call.
+func stage1ErrorStatus(err error) int {
+	switch {
+	case errors.Is(err, ErrPoolStakeOnly), errors.Is(err, ErrPoolSelfFunder):
+		return http.StatusBadRequest
+	case errors.Is(err, ErrNotSettleable), errors.Is(err, ErrPoolCapacity), isStage1PreconditionRevert(err):
+		return http.StatusConflict
+	case errors.Is(err, registries.ErrStage1NotDeployed):
+		return http.StatusNotImplemented
+	default:
+		return http.StatusInternalServerError
+	}
+}
+
+// isStage1PreconditionRevert reports a Stage 1 call the contract rejected for
+// the chain state or the sender's rights at that moment, such as a pool that
+// cannot cover a stake, a session closed in the meantime, or a payout target
+// the contract refuses.
+func isStage1PreconditionRevert(err error) bool {
+	name := contractErrorName(err)
+	switch {
+	case strings.HasPrefix(name, "DelegateStaking"):
+		return true
+	case name == "ProviderPayoutTargetInvalid", name == "InsufficientRightsForOperation", name == "SessionAlreadyClosed":
+		return true
+	default:
+		return false
+	}
+}
+
+// rejectZeroAddress answers 400 when a path address is the zero address,
+// which no funder or provider can be, and reports whether it did.
+func rejectZeroAddress(ctx *gin.Context, addr common.Address, what string, progress *lib.GatewayProgress) bool {
+	if addr != (common.Address{}) {
+		return false
+	}
+	ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: what + " must not be the zero address", Progress: progress})
+	return true
 }
 
 // CloseSession godoc
@@ -1405,6 +1503,444 @@ func (c *BlockchainController) deleteBid(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, structs.TxRes{Tx: txHash})
 	return
+}
+
+// SettleExpiredSession godoc
+//
+//	@Summary		Settle an expired pool session
+//	@Description	Permission: pool_maintenance. Settles a pool session nobody closed once endsAt + settlementGrace has passed on chain: the stake returns to the pool and the provider reward becomes debt. Anyone may send it. 409 when the session is not a pool session, is already closed or settled, or the grace has not passed. Accepts X-Gateway-Operation.
+//	@Tags			sessions
+//	@Produce		json
+//	@Param			id	path		string	true	"Session ID"
+//	@Success		200	{object}	structs.TxRes
+//	@Failure		400	{object}	structs.ErrRes
+//	@Failure		409	{object}	structs.ErrRes
+//	@Failure		500	{object}	structs.ErrRes
+//	@Failure		501	{object}	structs.ErrRes
+//	@Security		BasicAuth
+//	@Router			/blockchain/sessions/{id}/settle [post]
+func (c *BlockchainController) settleExpiredSession(ctx *gin.Context) {
+	progress, progressErr := lib.BeginGatewayOperation(ctx.GetHeader("X-Gateway-Operation"))
+	if progressErr != nil {
+		ctx.JSON(http.StatusConflict, structs.ErrRes{Error: "operation exists or journal unavailable"})
+		return
+	}
+	ctx.Set(lib.GatewayProgressKey, progress)
+	defer func() { progress.Finish(ctx.Writer.Status()) }()
+
+	var params structs.PathHex32ID
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error(), Progress: progress})
+		return
+	}
+
+	txHash, err := c.pool.SettleExpiredSession(ctx, params.ID.Hash)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(stage1ErrorStatus(err), structs.ErrRes{Error: err.Error(), Progress: progress})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, structs.TxRes{Tx: txHash, Progress: progress})
+}
+
+// GetPool godoc
+//
+//	@Summary		Get a delegate-staking pool
+//	@Description	Permission: get_pool. The balances of the pool, the stake its next session can draw, and the delegate-staking parameters in effect with their hard limits. 501 on a diamond without the Stage 1 cut, as for every pool route.
+//	@Tags			pool
+//	@Produce		json
+//	@Param			hot	query		string	false	"Hot wallet address; the proxy-router wallet when omitted"
+//	@Success		200	{object}	structs.PoolRes
+//	@Failure		400	{object}	structs.ErrRes
+//	@Failure		500	{object}	structs.ErrRes
+//	@Failure		501	{object}	structs.ErrRes
+//	@Security		BasicAuth
+//	@Router			/blockchain/pool [get]
+func (c *BlockchainController) getPool(ctx *gin.Context) {
+	var query structs.QueryPoolHot
+	if err := ctx.ShouldBindQuery(&query); err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	pool, err := c.pool.GetPool(ctx, query.Hot.Address)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(stage1ErrorStatus(err), structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, pool)
+}
+
+// GetPoolFunders godoc
+//
+//	@Summary		List the funders of a delegate-staking pool
+//	@Description	Permission: get_pool. Every funder that has funded the pool, active or not, with its allowance.
+//	@Tags			pool
+//	@Produce		json
+//	@Param			hot		query		string	false	"Hot wallet address; the proxy-router wallet when omitted"
+//	@Param			offset	query		int		false	"Funders to skip"	default(0)	minimum(0)
+//	@Param			limit	query		int		false	"Page size"			default(10)	minimum(1)	maximum(128)
+//	@Success		200		{object}	structs.PoolFundersRes
+//	@Failure		400		{object}	structs.ErrRes
+//	@Failure		500		{object}	structs.ErrRes
+//	@Failure		501		{object}	structs.ErrRes
+//	@Security		BasicAuth
+//	@Router			/blockchain/pool/funders [get]
+func (c *BlockchainController) getPoolFunders(ctx *gin.Context) {
+	var query structs.QueryPoolFunders
+	if err := ctx.ShouldBindQuery(&query); err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	funders, err := c.pool.GetPoolFunders(ctx, query.Hot.Address, query.Offset.Unpack(), query.Limit)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(stage1ErrorStatus(err), structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, funders)
+}
+
+// ApprovePoolFunder godoc
+//
+//	@Summary		Approve a funder of the delegate-staking pool
+//	@Description	Permission: manage_pool_funders. Lets the funder fund the pool of the proxy-router wallet. 400 for the proxy-router wallet itself, which funds its own pool without an approval. Accepts X-Gateway-Operation.
+//	@Tags			pool
+//	@Accept			json
+//	@Produce		json
+//	@Param			request	body		structs.PoolFunderRequest	true	"Funder"
+//	@Success		200		{object}	structs.TxRes
+//	@Failure		400		{object}	structs.ErrRes
+//	@Failure		409		{object}	structs.ErrRes
+//	@Failure		500		{object}	structs.ErrRes
+//	@Failure		501		{object}	structs.ErrRes
+//	@Security		BasicAuth
+//	@Router			/blockchain/pool/funders [post]
+func (c *BlockchainController) approvePoolFunder(ctx *gin.Context) {
+	progress, progressErr := lib.BeginGatewayOperation(ctx.GetHeader("X-Gateway-Operation"))
+	if progressErr != nil {
+		ctx.JSON(http.StatusConflict, structs.ErrRes{Error: "operation exists or journal unavailable"})
+		return
+	}
+	ctx.Set(lib.GatewayProgressKey, progress)
+	defer func() { progress.Finish(ctx.Writer.Status()) }()
+
+	var request structs.PoolFunderRequest
+	if err := ctx.ShouldBindJSON(&request); err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error(), Progress: progress})
+		return
+	}
+
+	txHash, err := c.pool.ApprovePoolFunder(ctx, request.Funder)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(stage1ErrorStatus(err), structs.ErrRes{Error: err.Error(), Progress: progress})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, structs.TxRes{Tx: txHash, Progress: progress})
+}
+
+// RevokePoolFunder godoc
+//
+//	@Summary		Revoke a funder of the delegate-staking pool
+//	@Description	Permission: manage_pool_funders. Stops draws from and top-ups by the funder in the pool of the proxy-router wallet at once. It never blocks the funder's withdrawal. 400 for the zero address and for the proxy-router wallet itself, whose own escrow no approval controls. Accepts X-Gateway-Operation.
+//	@Tags			pool
+//	@Produce		json
+//	@Param			id	path		string	true	"Funder address"
+//	@Success		200	{object}	structs.TxRes
+//	@Failure		400	{object}	structs.ErrRes
+//	@Failure		409	{object}	structs.ErrRes
+//	@Failure		500	{object}	structs.ErrRes
+//	@Failure		501	{object}	structs.ErrRes
+//	@Security		BasicAuth
+//	@Router			/blockchain/pool/funders/{id} [delete]
+func (c *BlockchainController) revokePoolFunder(ctx *gin.Context) {
+	progress, progressErr := lib.BeginGatewayOperation(ctx.GetHeader("X-Gateway-Operation"))
+	if progressErr != nil {
+		ctx.JSON(http.StatusConflict, structs.ErrRes{Error: "operation exists or journal unavailable"})
+		return
+	}
+	ctx.Set(lib.GatewayProgressKey, progress)
+	defer func() { progress.Finish(ctx.Writer.Status()) }()
+
+	var params structs.PathEthAddrID
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error(), Progress: progress})
+		return
+	}
+	if rejectZeroAddress(ctx, params.ID.Address, "funder", progress) {
+		return
+	}
+
+	txHash, err := c.pool.RevokePoolFunder(ctx, params.ID.Address)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(stage1ErrorStatus(err), structs.ErrRes{Error: err.Error(), Progress: progress})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, structs.TxRes{Tx: txHash, Progress: progress})
+}
+
+// GetPoolWithdrawals godoc
+//
+//	@Summary		List the withdrawal queue of a delegate-staking pool
+//	@Description	Permission: get_pool. A page of the queued funder withdrawals in FIFO order. nextCursor starts the next page and is the zero address once the tail is reached.
+//	@Tags			pool
+//	@Produce		json
+//	@Param			hot		query		string	false	"Hot wallet address; the proxy-router wallet when omitted"
+//	@Param			cursor	query		string	false	"Entry to start from, the nextCursor of the previous page; the head of the queue when omitted"
+//	@Param			limit	query		int		false	"Page size"	default(10)	minimum(1)	maximum(128)
+//	@Success		200		{object}	structs.PoolWithdrawalsRes
+//	@Failure		400		{object}	structs.ErrRes
+//	@Failure		500		{object}	structs.ErrRes
+//	@Failure		501		{object}	structs.ErrRes
+//	@Security		BasicAuth
+//	@Router			/blockchain/pool/withdrawals [get]
+func (c *BlockchainController) getPoolWithdrawals(ctx *gin.Context) {
+	var query structs.QueryPoolWithdrawals
+	if err := ctx.ShouldBindQuery(&query); err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	withdrawals, err := c.pool.GetPoolWithdrawals(ctx, query.Hot.Address, query.Cursor.Address, query.Limit)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(stage1ErrorStatus(err), structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, withdrawals)
+}
+
+// ServePoolWithdrawals godoc
+//
+//	@Summary		Pay queued withdrawals of a delegate-staking pool
+//	@Description	Permission: pool_maintenance. Pays up to maxEntries queued withdrawals to their funders; the sender never receives funds. maxEntries defaults to 32 and accepts 1 through 32. Accepts X-Gateway-Operation.
+//	@Tags			pool
+//	@Accept			json
+//	@Produce		json
+//	@Param			request	body		structs.ServePoolWithdrawalsRequest	false	"Pool and batch size, both optional"
+//	@Success		200		{object}	structs.TxRes
+//	@Failure		400		{object}	structs.ErrRes
+//	@Failure		409		{object}	structs.ErrRes
+//	@Failure		500		{object}	structs.ErrRes
+//	@Failure		501		{object}	structs.ErrRes
+//	@Security		BasicAuth
+//	@Router			/blockchain/pool/withdrawals/serve [post]
+func (c *BlockchainController) servePoolWithdrawals(ctx *gin.Context) {
+	progress, progressErr := lib.BeginGatewayOperation(ctx.GetHeader("X-Gateway-Operation"))
+	if progressErr != nil {
+		ctx.JSON(http.StatusConflict, structs.ErrRes{Error: "operation exists or journal unavailable"})
+		return
+	}
+	ctx.Set(lib.GatewayProgressKey, progress)
+	defer func() { progress.Finish(ctx.Writer.Status()) }()
+
+	var request structs.ServePoolWithdrawalsRequest
+	if err := ctx.ShouldBindJSON(&request); err != nil && !errors.Is(err, io.EOF) {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error(), Progress: progress})
+		return
+	}
+
+	var hot common.Address
+	if request.Hot != nil {
+		hot = *request.Hot
+	}
+	txHash, err := c.pool.ServePoolWithdrawals(ctx, hot, structs.PoolBatchSizeOrDefault(request.MaxEntries))
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(stage1ErrorStatus(err), structs.ErrRes{Error: err.Error(), Progress: progress})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, structs.TxRes{Tx: txHash, Progress: progress})
+}
+
+// GetPoolLocks godoc
+//
+//	@Summary		List the locked stake of a delegate-staking pool
+//	@Description	Permission: get_pool. The day-locked stake of the pool that is not released yet, one bucket per release time.
+//	@Tags			pool
+//	@Produce		json
+//	@Param			hot		query		string	false	"Hot wallet address; the proxy-router wallet when omitted"
+//	@Param			offset	query		int		false	"Buckets to skip"	default(0)	minimum(0)
+//	@Param			limit	query		int		false	"Page size"			default(10)	minimum(1)	maximum(32)
+//	@Success		200		{object}	structs.PoolLocksRes
+//	@Failure		400		{object}	structs.ErrRes
+//	@Failure		500		{object}	structs.ErrRes
+//	@Failure		501		{object}	structs.ErrRes
+//	@Security		BasicAuth
+//	@Router			/blockchain/pool/locks [get]
+func (c *BlockchainController) getPoolLocks(ctx *gin.Context) {
+	var query structs.QueryPoolLocks
+	if err := ctx.ShouldBindQuery(&query); err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	locks, err := c.pool.GetPoolLocks(ctx, query.Hot.Address, query.Offset.Unpack(), query.Limit)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(stage1ErrorStatus(err), structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, locks)
+}
+
+// ReleasePoolLocks godoc
+//
+//	@Summary		Release matured locks of a delegate-staking pool
+//	@Description	Permission: pool_maintenance. Frees up to maxBuckets lock buckets whose release time has passed, then pays up to maxAutoService queued withdrawals to their funders. maxBuckets defaults to 32 and accepts 1 through 32. Accepts X-Gateway-Operation.
+//	@Tags			pool
+//	@Accept			json
+//	@Produce		json
+//	@Param			request	body		structs.ReleasePoolLocksRequest	false	"Pool and batch size, both optional"
+//	@Success		200		{object}	structs.TxRes
+//	@Failure		400		{object}	structs.ErrRes
+//	@Failure		409		{object}	structs.ErrRes
+//	@Failure		500		{object}	structs.ErrRes
+//	@Failure		501		{object}	structs.ErrRes
+//	@Security		BasicAuth
+//	@Router			/blockchain/pool/locks/release [post]
+func (c *BlockchainController) releasePoolLocks(ctx *gin.Context) {
+	progress, progressErr := lib.BeginGatewayOperation(ctx.GetHeader("X-Gateway-Operation"))
+	if progressErr != nil {
+		ctx.JSON(http.StatusConflict, structs.ErrRes{Error: "operation exists or journal unavailable"})
+		return
+	}
+	ctx.Set(lib.GatewayProgressKey, progress)
+	defer func() { progress.Finish(ctx.Writer.Status()) }()
+
+	var request structs.ReleasePoolLocksRequest
+	if err := ctx.ShouldBindJSON(&request); err != nil && !errors.Is(err, io.EOF) {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error(), Progress: progress})
+		return
+	}
+
+	var hot common.Address
+	if request.Hot != nil {
+		hot = *request.Hot
+	}
+	txHash, err := c.pool.ReleasePoolLocks(ctx, hot, structs.PoolBatchSizeOrDefault(request.MaxBuckets))
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(stage1ErrorStatus(err), structs.ErrRes{Error: err.Error(), Progress: progress})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, structs.TxRes{Tx: txHash, Progress: progress})
+}
+
+// GetProviderPayouts godoc
+//
+//	@Summary		Get where a provider is paid and what it is owed
+//	@Description	Permission: get_providers. The payout target of the provider, the reward still owed to it, and what it was paid since the Stage 1 upgrade. pendingProviderClaims is the debt to all providers together. 501 on a diamond without the Stage 1 cut.
+//	@Tags			providers
+//	@Produce		json
+//	@Param			id	path		string	true	"Provider address"
+//	@Success		200	{object}	structs.ProviderPayoutsRes
+//	@Failure		400	{object}	structs.ErrRes
+//	@Failure		500	{object}	structs.ErrRes
+//	@Failure		501	{object}	structs.ErrRes
+//	@Security		BasicAuth
+//	@Router			/blockchain/providers/{id}/payouts [get]
+func (c *BlockchainController) getProviderPayouts(ctx *gin.Context) {
+	var params structs.PathEthAddrID
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
+		return
+	}
+	if rejectZeroAddress(ctx, params.ID.Address, "provider", nil) {
+		return
+	}
+
+	payouts, err := c.payouts.GetProviderPayouts(ctx, params.ID.Address)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(stage1ErrorStatus(err), structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, payouts)
+}
+
+// SetPayoutTarget godoc
+//
+//	@Summary		Set where a provider is paid
+//	@Description	Permission: set_payout_target, and the caller must have full access ("*"): the target receives the provider's income, so other callers return 403. The zero address or the provider itself resets the target. The contract accepts it only when the proxy-router wallet is the provider or a delegate holding its payout right. Accepts X-Gateway-Operation.
+//	@Tags			providers
+//	@Accept			json
+//	@Produce		json
+//	@Param			id		path		string						true	"Provider address"
+//	@Param			request	body		structs.PayoutTargetRequest	true	"Payout target"
+//	@Success		200		{object}	structs.TxRes
+//	@Failure		400		{object}	structs.ErrRes
+//	@Failure		403		{object}	structs.ErrRes
+//	@Failure		409		{object}	structs.ErrRes
+//	@Failure		500		{object}	structs.ErrRes
+//	@Failure		501		{object}	structs.ErrRes
+//	@Security		BasicAuth
+//	@Router			/blockchain/providers/{id}/payouts/target [post]
+func (c *BlockchainController) setPayoutTarget(ctx *gin.Context) {
+	progress, progressErr := lib.BeginGatewayOperation(ctx.GetHeader("X-Gateway-Operation"))
+	if progressErr != nil {
+		ctx.JSON(http.StatusConflict, structs.ErrRes{Error: "operation exists or journal unavailable"})
+		return
+	}
+	ctx.Set(lib.GatewayProgressKey, progress)
+	defer func() { progress.Finish(ctx.Writer.Status()) }()
+
+	var params structs.PathEthAddrID
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error(), Progress: progress})
+		return
+	}
+	if rejectZeroAddress(ctx, params.ID.Address, "provider", progress) {
+		return
+	}
+
+	var request structs.PayoutTargetRequest
+	if err := ctx.ShouldBindJSON(&request); err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error(), Progress: progress})
+		return
+	}
+
+	// The permission alone is not enough: the target receives the provider's
+	// income, so only the operator redirects it, as with spending allowances.
+	if !c.authConf.HasFullAccess(ctx.GetString("username")) {
+		ctx.JSON(http.StatusForbidden, structs.ErrRes{Error: "only a full-access user may change a provider's payout target", Progress: progress})
+		return
+	}
+
+	txHash, err := c.payouts.SetPayoutTarget(ctx, params.ID.Address, *request.Target)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(stage1ErrorStatus(err), structs.ErrRes{Error: err.Error(), Progress: progress})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, structs.TxRes{Tx: txHash, Progress: progress})
 }
 
 // helpers

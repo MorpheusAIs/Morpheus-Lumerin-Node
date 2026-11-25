@@ -1,15 +1,20 @@
 package lib
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/delegatestaking"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/delegatestakingfunding"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/delegation"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/lumerintoken"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/marketplace"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/modelregistry"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/morpheustoken"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/multicall3"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/providerpayouts"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/providerregistry"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/sessionrouter"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -29,6 +34,9 @@ var allContractsMeta = []Meta{
 	lumerintoken.LumerinTokenMetaData,
 	multicall3.Multicall3MetaData,
 	delegation.DelegationMetaData,
+	providerpayouts.ProviderPayoutsMetaData,
+	delegatestaking.DelegateStakingMetaData,
+	delegatestakingfunding.DelegateStakingFundingMetaData,
 }
 
 type EVMError struct {
@@ -65,6 +73,33 @@ func TryConvertGethError(err error) error {
 		return err
 	}
 	return evmErr
+}
+
+// diamondSelectorNotRegistered is the reason the diamond reverts with when no
+// facet serves the called function.
+const diamondSelectorNotRegistered = "Diamond: selector is not registered"
+
+// IsSelectorNotRegistered reports whether err is the diamond's revert for a
+// function no facet serves: a getter this diamond does not route, or a Stage 1
+// function on a diamond without the Stage 1 cut. The revert data is decoded
+// when the node returns it, because not every node repeats the reason in the
+// error message.
+func IsSelectorNotRegistered(err error) bool {
+	if err == nil {
+		return false
+	}
+	var dataErr interface {
+		error
+		ErrorData() interface{}
+	}
+	if errors.As(err, &dataErr) {
+		if data, ok := ExtractGETHErrorData(dataErr); ok {
+			if reason, unpackErr := abi.UnpackRevert(data); unpackErr == nil {
+				return reason == diamondSelectorNotRegistered
+			}
+		}
+	}
+	return strings.Contains(err.Error(), "selector is not registered")
 }
 
 // ConvertGethError converts a geth error to an EVMError with exposed error signature and arguments

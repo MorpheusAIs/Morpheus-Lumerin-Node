@@ -90,6 +90,11 @@ func TestShouldRetryRPCError(t *testing.T) {
 			expected: false,
 		},
 		{
+			name:     "endpoint behind a pinned block",
+			err:      fmt.Errorf("header not found"),
+			expected: true,
+		},
+		{
 			name:     "usage limit",
 			err:      fmt.Errorf("usage limit"),
 			expected: true,
